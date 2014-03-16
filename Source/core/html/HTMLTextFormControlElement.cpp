@@ -37,10 +37,10 @@
 #include "core/editing/TextIterator.h"
 #include "core/events/Event.h"
 #include "core/events/ThreadLocalEventNames.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/shadow/ShadowElementNames.h"
-#include "core/frame/Frame.h"
-#include "core/frame/UseCounter.h"
 #include "core/rendering/RenderBlock.h"
 #include "core/rendering/RenderTheme.h"
 #include "wtf/text/StringBuilder.h"
@@ -209,6 +209,8 @@ void HTMLTextFormControlElement::setRangeText(const String& replacement, unsigne
         exceptionState.throwDOMException(IndexSizeError, "The provided start value (" + String::number(start) + ") is larger than the provided end value (" + String::number(end) + ").");
         return;
     }
+    if (hasAuthorShadowRoot())
+        return;
 
     String text = innerTextValue();
     unsigned textLength = text.length();
@@ -302,7 +304,7 @@ void HTMLTextFormControlElement::setSelectionRange(int start, int end, TextField
         newSelection = VisibleSelection(startPosition, endPosition);
     newSelection.setIsDirectional(direction != SelectionHasNoDirection);
 
-    if (Frame* frame = document().frame())
+    if (LocalFrame* frame = document().frame())
         frame->selection().setSelection(newSelection);
 }
 
@@ -342,11 +344,11 @@ int HTMLTextFormControlElement::selectionStart() const
 int HTMLTextFormControlElement::computeSelectionStart() const
 {
     ASSERT(isTextFormControl());
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     if (!frame)
         return 0;
 
-    return indexForVisiblePosition(frame->selection().start());
+    return indexForVisiblePosition(VisiblePosition(frame->selection().start()));
 }
 
 int HTMLTextFormControlElement::selectionEnd() const
@@ -361,11 +363,11 @@ int HTMLTextFormControlElement::selectionEnd() const
 int HTMLTextFormControlElement::computeSelectionEnd() const
 {
     ASSERT(isTextFormControl());
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     if (!frame)
         return 0;
 
-    return indexForVisiblePosition(frame->selection().end());
+    return indexForVisiblePosition(VisiblePosition(frame->selection().end()));
 }
 
 static const AtomicString& directionString(TextFieldSelectionDirection direction)
@@ -400,7 +402,7 @@ const AtomicString& HTMLTextFormControlElement::selectionDirection() const
 TextFieldSelectionDirection HTMLTextFormControlElement::computeSelectionDirection() const
 {
     ASSERT(isTextFormControl());
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     if (!frame)
         return SelectionHasNoDirection;
 
@@ -440,7 +442,7 @@ PassRefPtr<Range> HTMLTextFormControlElement::selection() const
     Node* endNode = 0;
     for (Node* node = innerText->firstChild(); node; node = NodeTraversal::next(*node, innerText)) {
         ASSERT(!node->firstChild());
-        ASSERT(node->isTextNode() || node->hasTagName(brTag));
+        ASSERT(node->isTextNode() || isHTMLBRElement(*node));
         int length = node->isTextNode() ? lastOffsetInNode(node) : 1;
 
         if (offset <= start && start <= offset + length)
@@ -473,7 +475,7 @@ void HTMLTextFormControlElement::selectionChanged(bool userTriggered)
     // selectionStart() or selectionEnd() will return cached selection when this node doesn't have focus
     cacheSelection(computeSelectionStart(), computeSelectionEnd(), computeSelectionDirection());
 
-    if (Frame* frame = document().frame()) {
+    if (LocalFrame* frame = document().frame()) {
         if (frame->selection().isRange() && userTriggered)
             dispatchEvent(Event::createBubble(EventTypeNames::select));
     }
@@ -497,11 +499,12 @@ bool HTMLTextFormControlElement::lastChangeWasUserEdit() const
 
 void HTMLTextFormControlElement::setInnerTextValue(const String& value)
 {
-    if (!isTextFormControl())
+    ASSERT(!hasAuthorShadowRoot());
+    if (!isTextFormControl() || hasAuthorShadowRoot())
         return;
 
     bool textIsChanged = value != innerTextValue();
-    if (textIsChanged || !innerTextElement()->hasChildNodes()) {
+    if (textIsChanged || !innerTextElement()->hasChildren()) {
         if (textIsChanged && renderer()) {
             if (AXObjectCache* cache = document().existingAXObjectCache())
                 cache->postNotification(this, AXObjectCache::AXValueChanged, false);
@@ -526,13 +529,14 @@ static String finishText(StringBuilder& result)
 
 String HTMLTextFormControlElement::innerTextValue() const
 {
+    ASSERT(!hasAuthorShadowRoot());
     HTMLElement* innerText = innerTextElement();
     if (!innerText || !isTextFormControl())
         return emptyString();
 
     StringBuilder result;
     for (Node* node = innerText; node; node = NodeTraversal::next(*node, innerText)) {
-        if (node->hasTagName(brTag))
+        if (isHTMLBRElement(*node))
             result.append(newlineCharacter);
         else if (node->isTextNode())
             result.append(toText(node)->data());
@@ -579,7 +583,7 @@ String HTMLTextFormControlElement::valueWithHardLineBreaks() const
 
     StringBuilder result;
     for (Node* node = innerText->firstChild(); node; node = NodeTraversal::next(*node, innerText)) {
-        if (node->hasTagName(brTag))
+        if (isHTMLBRElement(*node))
             result.append(newlineCharacter);
         else if (node->isTextNode()) {
             String data = toText(node)->data();
@@ -611,7 +615,7 @@ HTMLTextFormControlElement* enclosingTextFormControl(const Position& position)
     if (!container)
         return 0;
     Element* ancestor = container->shadowHost();
-    return ancestor && isHTMLTextFormControlElement(*ancestor) ? toHTMLTextFormControlElement(ancestor) : 0;
+    return ancestor && isHTMLTextFormControlElement(*ancestor) && container->containingShadowRoot()->type() == ShadowRoot::UserAgentShadowRoot ? toHTMLTextFormControlElement(ancestor) : 0;
 }
 
 static const HTMLElement* parentHTMLElement(const Element* element)

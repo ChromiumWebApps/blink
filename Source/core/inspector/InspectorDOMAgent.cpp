@@ -31,7 +31,6 @@
 #include "config.h"
 #include "core/inspector/InspectorDOMAgent.h"
 
-#include "HTMLNames.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ScriptEventListener.h"
 #include "core/dom/Attr.h"
@@ -54,6 +53,7 @@
 #include "core/editing/markup.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileList.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
@@ -68,7 +68,6 @@
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/frame/Frame.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/rendering/HitTestResult.h"
@@ -147,7 +146,7 @@ static bool parseQuad(const RefPtr<JSONArray>& quadArray, FloatQuad* quad)
     return true;
 }
 
-static Node* hoveredNodeForPoint(Frame* frame, const IntPoint& point, bool ignorePointerEventsNone)
+static Node* hoveredNodeForPoint(LocalFrame* frame, const IntPoint& point, bool ignorePointerEventsNone)
 {
     HitTestRequest::HitTestRequestType hitType = HitTestRequest::Move | HitTestRequest::ReadOnly | HitTestRequest::AllowChildFrameContent;
     if (ignorePointerEventsNone)
@@ -161,17 +160,17 @@ static Node* hoveredNodeForPoint(Frame* frame, const IntPoint& point, bool ignor
     return node;
 }
 
-static Node* hoveredNodeForEvent(Frame* frame, const PlatformGestureEvent& event, bool ignorePointerEventsNone)
+static Node* hoveredNodeForEvent(LocalFrame* frame, const PlatformGestureEvent& event, bool ignorePointerEventsNone)
 {
     return hoveredNodeForPoint(frame, event.position(), ignorePointerEventsNone);
 }
 
-static Node* hoveredNodeForEvent(Frame* frame, const PlatformMouseEvent& event, bool ignorePointerEventsNone)
+static Node* hoveredNodeForEvent(LocalFrame* frame, const PlatformMouseEvent& event, bool ignorePointerEventsNone)
 {
     return hoveredNodeForPoint(frame, event.position(), ignorePointerEventsNone);
 }
 
-static Node* hoveredNodeForEvent(Frame* frame, const PlatformTouchEvent& event, bool ignorePointerEventsNone)
+static Node* hoveredNodeForEvent(LocalFrame* frame, const PlatformTouchEvent& event, bool ignorePointerEventsNone)
 {
     const Vector<PlatformTouchPoint>& points = event.touchPoints();
     if (!points.size())
@@ -203,7 +202,7 @@ void RevalidateStyleAttributeTask::scheduleFor(Element* element)
 {
     m_elements.add(element);
     if (!m_timer.isActive())
-        m_timer.startOneShot(0);
+        m_timer.startOneShot(0, FROM_HERE);
 }
 
 void RevalidateStyleAttributeTask::onTimer(Timer<RevalidateStyleAttributeTask>*)
@@ -220,7 +219,7 @@ void RevalidateStyleAttributeTask::onTimer(Timer<RevalidateStyleAttributeTask>*)
 String InspectorDOMAgent::toErrorString(ExceptionState& exceptionState)
 {
     if (exceptionState.hadException())
-        return DOMException::getErrorName(exceptionState.code());
+        return DOMException::getErrorName(exceptionState.code()) + " " + exceptionState.message();
     return "";
 }
 
@@ -282,7 +281,7 @@ void InspectorDOMAgent::restore()
 Vector<Document*> InspectorDOMAgent::documents()
 {
     Vector<Document*> result;
-    for (Frame* frame = m_document->frame(); frame; frame = frame->tree().traverseNext()) {
+    for (LocalFrame* frame = m_document->frame(); frame; frame = frame->tree().traverseNext()) {
         Document* document = frame->document();
         if (!document)
             continue;
@@ -363,10 +362,10 @@ void InspectorDOMAgent::unbind(Node* node, NodeToIdMap* nodesMap)
         if (element->pseudoElement(AFTER))
             unbind(element->pseudoElement(AFTER), nodesMap);
 
-        if (element->hasTagName(HTMLNames::linkTag)) {
-            HTMLLinkElement* linkElement = toHTMLLinkElement(element);
-            if (linkElement->isImport() && linkElement->import())
-                unbind(linkElement->import(), nodesMap);
+        if (isHTMLLinkElement(*element)) {
+            HTMLLinkElement& linkElement = toHTMLLinkElement(*element);
+            if (linkElement.isImport() && linkElement.import())
+                unbind(linkElement.import(), nodesMap);
         }
     }
 
@@ -384,6 +383,8 @@ void InspectorDOMAgent::unbind(Node* node, NodeToIdMap* nodesMap)
             child = innerNextSibling(child);
         }
     }
+    if (nodesMap == &m_documentNodeToIdMap)
+        m_cachedChildCount.remove(id);
 }
 
 Node* InspectorDOMAgent::assertNode(ErrorString* errorString, int nodeId)
@@ -429,8 +430,17 @@ Node* InspectorDOMAgent::assertEditableNode(ErrorString* errorString, int nodeId
         return 0;
 
     if (node->isInShadowTree()) {
-        *errorString = "Cannot edit nodes from shadow trees";
-        return 0;
+        if (node->isShadowRoot()) {
+            *errorString = "Cannot edit shadow roots";
+            return 0;
+        }
+        Node* candidate = node;
+        while (candidate && !candidate->isShadowRoot())
+            candidate = candidate->parentElementOrShadowRoot();
+        if (!candidate || (candidate->isShadowRoot() && toShadowRoot(candidate)->type() == ShadowRoot::UserAgentShadowRoot)) {
+            *errorString = "Cannot edit nodes from user-agent shadow trees";
+            return 0;
+        }
     }
 
     if (node->isPseudoElement()) {
@@ -510,6 +520,7 @@ void InspectorDOMAgent::discardFrontendBindings()
     m_idToNode.clear();
     releaseDanglingNodes();
     m_childrenRequested.clear();
+    m_cachedChildCount.clear();
     if (m_revalidateStyleAttrTask)
         m_revalidateStyleAttrTask->reset();
 }
@@ -724,12 +735,12 @@ void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elemen
     unsigned numAttrs = parsedElement->attributeCount();
     for (unsigned i = 0; i < numAttrs; ++i) {
         // Add attribute pair
-        const Attribute* attribute = parsedElement->attributeItem(i);
-        String attributeName = attribute->name().toString();
+        const Attribute& attribute = parsedElement->attributeItem(i);
+        String attributeName = attribute.name().toString();
         if (shouldIgnoreCase)
             attributeName = attributeName.lower();
         foundOriginalAttribute |= name && attributeName == caseAdjustedName;
-        if (!m_domEditor->setAttribute(element, attributeName, attribute->value(), errorString))
+        if (!m_domEditor->setAttribute(element, attributeName, attribute.value(), errorString))
             return;
     }
 
@@ -984,14 +995,14 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
                 unsigned numAttrs = element->attributeCount();
                 for (unsigned i = 0; i < numAttrs; ++i) {
                     // Add attribute pair
-                    const Attribute* attribute = element->attributeItem(i);
-                    if (attribute->localName().find(whitespaceTrimmedQuery, 0, false) != kNotFound) {
+                    const Attribute& attribute = element->attributeItem(i);
+                    if (attribute.localName().find(whitespaceTrimmedQuery, 0, false) != kNotFound) {
                         resultCollector.add(node);
                         break;
                     }
-                    size_t foundPosition = attribute->value().find(attributeQuery, 0, false);
+                    size_t foundPosition = attribute.value().find(attributeQuery, 0, false);
                     if (foundPosition != kNotFound) {
-                        if (!exactAttributeMatch || (!foundPosition && attribute->value().length() == attributeQuery.length())) {
+                        if (!exactAttributeMatch || (!foundPosition && attribute.value().length() == attributeQuery.length())) {
                             resultCollector.add(node);
                             break;
                         }
@@ -1084,7 +1095,7 @@ bool InspectorDOMAgent::handleMousePress()
     return false;
 }
 
-bool InspectorDOMAgent::handleGestureEvent(Frame* frame, const PlatformGestureEvent& event)
+bool InspectorDOMAgent::handleGestureEvent(LocalFrame* frame, const PlatformGestureEvent& event)
 {
     if (m_searchingForNode == NotSearching || event.type() != PlatformEvent::GestureTap)
         return false;
@@ -1097,7 +1108,7 @@ bool InspectorDOMAgent::handleGestureEvent(Frame* frame, const PlatformGestureEv
     return false;
 }
 
-bool InspectorDOMAgent::handleTouchEvent(Frame* frame, const PlatformTouchEvent& event)
+bool InspectorDOMAgent::handleTouchEvent(LocalFrame* frame, const PlatformTouchEvent& event)
 {
     if (m_searchingForNode == NotSearching)
         return false;
@@ -1124,7 +1135,7 @@ void InspectorDOMAgent::inspect(Node* inspectedNode)
         m_frontend->inspectNodeRequested(nodeId);
 }
 
-void InspectorDOMAgent::handleMouseMove(Frame* frame, const PlatformMouseEvent& event)
+void InspectorDOMAgent::handleMouseMove(LocalFrame* frame, const PlatformMouseEvent& event)
 {
     if (m_searchingForNode == NotSearching)
         return;
@@ -1243,7 +1254,7 @@ void InspectorDOMAgent::highlightFrame(
     const RefPtr<JSONObject>* color,
     const RefPtr<JSONObject>* outlineColor)
 {
-    Frame* frame = m_pageAgent->frameForId(frameId);
+    LocalFrame* frame = m_pageAgent->frameForId(frameId);
     if (frame && frame->ownerElement()) {
         OwnPtr<HighlightConfig> highlightConfig = adoptPtr(new HighlightConfig());
         highlightConfig->showInfo = true; // Always show tooltips for frames.
@@ -1323,12 +1334,12 @@ void InspectorDOMAgent::setFileInputFiles(ErrorString* errorString, int nodeId, 
     Node* node = assertNode(errorString, nodeId);
     if (!node)
         return;
-    if (!node->hasTagName(inputTag) || !toHTMLInputElement(node)->isFileUpload()) {
+    if (!isHTMLInputElement(*node) || !toHTMLInputElement(*node).isFileUpload()) {
         *errorString = "Node is not a file input element";
         return;
     }
 
-    RefPtr<FileList> fileList = FileList::create();
+    RefPtrWillBeRawPtr<FileList> fileList = FileList::create();
     for (JSONArray::const_iterator iter = files->begin(); iter != files->end(); ++iter) {
         String path;
         if (!(*iter)->asString(&path)) {
@@ -1368,7 +1379,7 @@ void InspectorDOMAgent::getBoxModel(ErrorString* errorString, int nodeId, RefPtr
     }
 
     RenderObject* renderer = node->renderer();
-    Frame* frame = node->document().frame();
+    LocalFrame* frame = node->document().frame();
     FrameView* view = frame->view();
 
     IntRect boundingBox = pixelSnappedIntRect(view->contentsToRootView(renderer->absoluteBoundingBoxRect()));
@@ -1497,7 +1508,7 @@ PassRefPtr<TypeBuilder::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* n
 
         if (node->isFrameOwnerElement()) {
             HTMLFrameOwnerElement* frameOwner = toHTMLFrameOwnerElement(node);
-            if (Frame* frame = frameOwner->contentFrame())
+            if (LocalFrame* frame = frameOwner->contentFrame())
                 value->setFrameId(m_pageAgent->frameId(frame));
             if (Document* doc = frameOwner->contentDocument())
                 value->setContentDocument(buildObjectForNode(doc, 0, nodesMap));
@@ -1512,15 +1523,15 @@ PassRefPtr<TypeBuilder::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* n
             forcePushChildren = true;
         }
 
-        if (element->hasTagName(linkTag)) {
-            HTMLLinkElement* linkElement = toHTMLLinkElement(element);
-            if (linkElement->isImport() && linkElement->import() && innerParentNode(linkElement->import()) == linkElement)
-                value->setImportedDocument(buildObjectForNode(linkElement->import(), 0, nodesMap));
+        if (isHTMLLinkElement(*element)) {
+            HTMLLinkElement& linkElement = toHTMLLinkElement(*element);
+            if (linkElement.isImport() && linkElement.import() && innerParentNode(linkElement.import()) == linkElement)
+                value->setImportedDocument(buildObjectForNode(linkElement.import(), 0, nodesMap));
             forcePushChildren = true;
         }
 
-        if (element->hasTagName(templateTag)) {
-            value->setTemplateContent(buildObjectForNode(toHTMLTemplateElement(element)->content(), 0, nodesMap));
+        if (isHTMLTemplateElement(*element)) {
+            value->setTemplateContent(buildObjectForNode(toHTMLTemplateElement(*element).content(), 0, nodesMap));
             forcePushChildren = true;
         }
 
@@ -1561,6 +1572,8 @@ PassRefPtr<TypeBuilder::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* n
     if (node->isContainerNode()) {
         int nodeCount = innerChildNodeCount(node);
         value->setChildNodeCount(nodeCount);
+        if (nodesMap == &m_documentNodeToIdMap)
+            m_cachedChildCount.set(id, nodeCount);
         if (forcePushChildren && !depth)
             depth = 1;
         RefPtr<TypeBuilder::Array<TypeBuilder::DOM::Node> > children = buildArrayForContainerChildren(node, depth, nodesMap);
@@ -1580,9 +1593,9 @@ PassRefPtr<TypeBuilder::Array<String> > InspectorDOMAgent::buildArrayForElementA
     unsigned numAttrs = element->attributeCount();
     for (unsigned i = 0; i < numAttrs; ++i) {
         // Add attribute pair
-        const Attribute* attribute = element->attributeItem(i);
-        attributesValue->addItem(attribute->name().toString());
-        attributesValue->addItem(attribute->value());
+        const Attribute& attribute = element->attributeItem(i);
+        attributesValue->addItem(attribute.name().toString());
+        attributesValue->addItem(attribute.value());
     }
     return attributesValue.release();
 }
@@ -1634,7 +1647,7 @@ PassRefPtr<TypeBuilder::DOM::EventListener> InspectorDOMAgent::buildObjectForEve
     if (objectGroupId) {
         ScriptValue functionValue = eventListenerHandler(&document, eventListener.get());
         if (!functionValue.hasNoValue()) {
-            Frame* frame = document.frame();
+            LocalFrame* frame = document.frame();
             if (frame) {
                 ScriptState* scriptState = eventListenerHandlerScriptState(frame, eventListener.get());
                 if (scriptState) {
@@ -1718,7 +1731,7 @@ bool InspectorDOMAgent::isWhitespace(Node* node)
     return node && node->nodeType() == Node::TEXT_NODE && node->nodeValue().stripWhiteSpace().length() == 0;
 }
 
-void InspectorDOMAgent::domContentLoadedEventFired(Frame* frame)
+void InspectorDOMAgent::domContentLoadedEventFired(LocalFrame* frame)
 {
     if (!frame->isMainFrame())
         return;
@@ -1729,7 +1742,7 @@ void InspectorDOMAgent::domContentLoadedEventFired(Frame* frame)
         m_frontend->documentUpdated();
 }
 
-void InspectorDOMAgent::invalidateFrameOwnerElement(Frame* frame)
+void InspectorDOMAgent::invalidateFrameOwnerElement(LocalFrame* frame)
 {
     Element* frameOwner = frame->document()->ownerElement();
     if (!frameOwner)
@@ -1750,12 +1763,12 @@ void InspectorDOMAgent::invalidateFrameOwnerElement(Frame* frame)
     m_frontend->childNodeInserted(parentId, prevId, value.release());
 }
 
-void InspectorDOMAgent::didCommitLoad(Frame* frame, DocumentLoader* loader)
+void InspectorDOMAgent::didCommitLoad(LocalFrame* frame, DocumentLoader* loader)
 {
     // FIXME: If "frame" is always guarenteed to be in the same Page as loader->frame()
     // then all we need to check here is loader->frame()->isMainFrame()
     // and we don't need "frame" at all.
-    Frame* mainFrame = frame->page()->mainFrame();
+    LocalFrame* mainFrame = frame->page()->mainFrame();
     if (loader->frame() != mainFrame) {
         invalidateFrameOwnerElement(loader->frame());
         return;
@@ -1775,15 +1788,16 @@ void InspectorDOMAgent::didInsertDOMNode(Node* node)
     ContainerNode* parent = node->parentNode();
     if (!parent)
         return;
-
     int parentId = m_documentNodeToIdMap.get(parent);
     // Return if parent is not mapped yet.
     if (!parentId)
         return;
 
     if (!m_childrenRequested.contains(parentId)) {
-        // No children are mapped yet -> only notify on changes of hasChildren.
-        m_frontend->childNodeCountUpdated(parentId, innerChildNodeCount(parent));
+        // No children are mapped yet -> only notify on changes of child count.
+        int count = m_cachedChildCount.get(parentId) + 1;
+        m_cachedChildCount.set(parentId, count);
+        m_frontend->childNodeCountUpdated(parentId, count);
     } else {
         // Children have been requested -> return value of a new child.
         Node* prevSibling = innerPreviousSibling(node);
@@ -1807,11 +1821,13 @@ void InspectorDOMAgent::willRemoveDOMNode(Node* node)
     int parentId = m_documentNodeToIdMap.get(parent);
 
     if (!m_childrenRequested.contains(parentId)) {
-        // No children are mapped yet -> only notify on changes of hasChildren.
-        if (innerChildNodeCount(parent) == 1)
-            m_frontend->childNodeCountUpdated(parentId, 0);
-    } else
+        // No children are mapped yet -> only notify on changes of child count.
+        int count = m_cachedChildCount.get(parentId) - 1;
+        m_cachedChildCount.set(parentId, count);
+        m_frontend->childNodeCountUpdated(parentId, count);
+    } else {
         m_frontend->childNodeRemoved(parentId, m_documentNodeToIdMap.get(node));
+    }
     unbind(node, &m_documentNodeToIdMap);
 }
 
@@ -1915,7 +1931,7 @@ void InspectorDOMAgent::willPopShadowRoot(Element* host, ShadowRoot* root)
         m_frontend->shadowRootPopped(hostId, rootId);
 }
 
-void InspectorDOMAgent::frameDocumentUpdated(Frame* frame)
+void InspectorDOMAgent::frameDocumentUpdated(LocalFrame* frame)
 {
     Document* document = frame->document();
     if (!document)
@@ -1999,20 +2015,25 @@ void InspectorDOMAgent::pushNodeByPathToFrontend(ErrorString* errorString, const
         *errorString = "No node with given path found";
 }
 
-void InspectorDOMAgent::pushNodeByBackendIdToFrontend(ErrorString* errorString, BackendNodeId backendNodeId, int* nodeId)
+void InspectorDOMAgent::pushNodesByBackendIdsToFrontend(ErrorString* errorString, const RefPtr<JSONArray>& backendNodeIds, RefPtr<TypeBuilder::Array<int> >& result)
 {
-    if (!m_backendIdToNode.contains(backendNodeId)) {
-        *errorString = "No node with given backend id found";
-        return;
-    }
+    result = TypeBuilder::Array<int>::create();
+    for (JSONArray::const_iterator it = backendNodeIds->begin(); it != backendNodeIds->end(); ++it) {
+        BackendNodeId backendNodeId;
 
-    Node* node = m_backendIdToNode.get(backendNodeId).first;
-    String nodeGroup = m_backendIdToNode.get(backendNodeId).second;
-    *nodeId = pushNodePathToFrontend(node);
+        if (!(*it)->asNumber(&backendNodeId)) {
+            *errorString = "Invalid argument type";
+            return;
+        }
 
-    if (nodeGroup == "") {
-        m_backendIdToNode.remove(backendNodeId);
-        m_nodeGroupToBackendIdMap.find(nodeGroup)->value.remove(node);
+        BackendIdToNodeMap::iterator backendIdToNodeIterator = m_backendIdToNode.find(backendNodeId);
+        if (backendIdToNodeIterator == m_backendIdToNode.end()) {
+            *errorString = "Node not found";
+            return;
+        }
+
+        Node* node = backendIdToNodeIterator->value.first;
+        result->addItem(pushNodePathToFrontend(node));
     }
 }
 
@@ -2035,7 +2056,7 @@ void InspectorDOMAgent::getRelayoutBoundary(ErrorString* errorString, int nodeId
 PassRefPtr<TypeBuilder::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String& objectGroup)
 {
     Document* document = node->isDocumentNode() ? &node->document() : node->ownerDocument();
-    Frame* frame = document ? document->frame() : 0;
+    LocalFrame* frame = document ? document->frame() : 0;
     if (!frame)
         return nullptr;
 

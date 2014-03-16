@@ -31,11 +31,11 @@
 #include "HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/editing/htmlediting.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
@@ -48,11 +48,11 @@
 #include "core/rendering/RenderGrid.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderListMarker.h"
 #include "core/rendering/RenderTableCell.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/TransformState.h"
@@ -105,7 +105,7 @@ void RenderBox::willBeDestroyed()
 
     RenderBlock::removePercentHeightDescendantIfNeeded(this);
 
-    ShapeOutsideInfo::removeInfo(this);
+    ShapeOutsideInfo::removeInfo(*this);
 
     RenderBoxModelObject::willBeDestroyed();
 }
@@ -238,9 +238,9 @@ void RenderBox::updateShapeOutsideInfoAfterStyleChange(const RenderStyle& style,
         return;
 
     if (!shapeOutside)
-        ShapeOutsideInfo::removeInfo(this);
+        ShapeOutsideInfo::removeInfo(*this);
     else
-        ShapeOutsideInfo::ensureInfo(this)->dirtyShapeSize();
+        ShapeOutsideInfo::ensureInfo(*this).markShapeAsDirty();
 
     if (shapeOutside || shapeOutside != oldShapeOutside)
         markShapeOutsideDependentsForLayout();
@@ -308,7 +308,7 @@ void RenderBox::layout()
         return;
     }
 
-    LayoutStateMaintainer statePusher(this, locationOffset());
+    LayoutStateMaintainer statePusher(*this, locationOffset());
     while (child) {
         child->layoutIfNeeded();
         ASSERT(!child->needsLayout());
@@ -427,12 +427,19 @@ int RenderBox::scrollTop() const
 
 void RenderBox::setScrollLeft(int newLeft)
 {
+    // This doesn't hit in any tests, but since the equivalent code in setScrollTop
+    // does, presumably this code does as well.
+    DisableCompositingQueryAsserts disabler;
+
     if (hasOverflowClip())
         layer()->scrollableArea()->scrollToXOffset(newLeft, ScrollOffsetClamped);
 }
 
 void RenderBox::setScrollTop(int newTop)
 {
+    // Hits in compositing/overflow/do-not-assert-on-invisible-composited-layers.html
+    DisableCompositingQueryAsserts disabler;
+
     if (hasOverflowClip())
         layer()->scrollableArea()->scrollToYOffset(newTop, ScrollOffsetClamped);
 }
@@ -440,6 +447,10 @@ void RenderBox::setScrollTop(int newTop)
 void RenderBox::scrollToOffset(const IntSize& offset)
 {
     ASSERT(hasOverflowClip());
+
+    // This doesn't hit in any tests, but since the equivalent code in setScrollTop
+    // does, presumably this code does as well.
+    DisableCompositingQueryAsserts disabler;
     layer()->scrollableArea()->scrollToOffset(offset, ScrollOffsetClamped);
 }
 
@@ -463,6 +474,9 @@ static inline bool frameElementAndViewPermitScroll(HTMLFrameElementBase* frameEl
 
 void RenderBox::scrollRectToVisible(const LayoutRect& rect, const ScrollAlignment& alignX, const ScrollAlignment& alignY)
 {
+    // Presumably the same issue as in setScrollTop. See crbug.com/343132.
+    DisableCompositingQueryAsserts disabler;
+
     RenderBox* parentBox = 0;
     LayoutRect newRect = rect;
 
@@ -529,7 +543,7 @@ void RenderBox::absoluteRects(Vector<IntRect>& rects, const LayoutPoint& accumul
 
 void RenderBox::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
 {
-    quads.append(localToAbsoluteQuad(FloatRect(0, 0, width(), height()), 0 /* mode */, wasFixed));
+    quads.append(localToAbsoluteQuad(FloatRect(0, 0, width().toFloat(), height().toFloat()), 0 /* mode */, wasFixed));
 }
 
 void RenderBox::updateLayerTransform()
@@ -587,7 +601,7 @@ FloatQuad RenderBox::absoluteContentQuad() const
 LayoutRect RenderBox::outlineBoundsForRepaint(const RenderLayerModelObject* repaintContainer, const RenderGeometryMap* geometryMap) const
 {
     LayoutRect box = borderBoundingBox();
-    adjustRectForOutlineAndShadow(box);
+    adjustRectForOutline(box);
 
     if (repaintContainer != this) {
         FloatQuad containerRelativeQuad;
@@ -727,6 +741,9 @@ int RenderBox::instrinsicScrollbarLogicalWidth() const
 
 bool RenderBox::scroll(ScrollDirection direction, ScrollGranularity granularity, float delta)
 {
+    // Presumably the same issue as in setScrollTop. See crbug.com/343132.
+    DisableCompositingQueryAsserts disabler;
+
     // Logical scroll is a higher level concept, all directions by here must be physical
     ASSERT(!isLogical(direction));
 
@@ -764,7 +781,7 @@ bool RenderBox::usesCompositedScrolling() const
 
 void RenderBox::autoscroll(const IntPoint& position)
 {
-    Frame* frame = this->frame();
+    LocalFrame* frame = this->frame();
     if (!frame)
         return;
 
@@ -855,7 +872,7 @@ static inline IntSize adjustedScrollDelta(const IntSize& delta)
 
 void RenderBox::panScroll(const IntPoint& sourcePoint)
 {
-    Frame* frame = this->frame();
+    LocalFrame* frame = this->frame();
     if (!frame)
         return;
 
@@ -897,7 +914,7 @@ void RenderBox::scrollByRecursively(const IntSize& delta, ScrollOffsetClamping c
             if (RenderBox* scrollableBox = enclosingScrollableBox())
                 scrollableBox->scrollByRecursively(remainingScrollOffset, clamp);
 
-            Frame* frame = this->frame();
+            LocalFrame* frame = this->frame();
             if (frame && frame->page())
                 frame->page()->autoscrollController().updateAutoscrollRenderer();
         }
@@ -1193,7 +1210,7 @@ BackgroundBleedAvoidance RenderBox::determineBackgroundBleedAvoidance(GraphicsCo
     if (!style->hasAppearance() && borderObscuresBackground() && backgroundHasOpaqueTopLayer())
         return BackgroundBleedBackgroundOverBorder;
 
-    return BackgroundBleedUseTransparencyLayer;
+    return BackgroundBleedClipBackground;
 }
 
 void RenderBox::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -1216,20 +1233,13 @@ void RenderBox::paintBoxDecorationsWithRect(PaintInfo& paintInfo, const LayoutPo
         paintBoxShadow(paintInfo, paintRect, style(), Normal);
 
     GraphicsContextStateSaver stateSaver(*paintInfo.context, false);
-    if (bleedAvoidance == BackgroundBleedUseTransparencyLayer) {
-        // To avoid the background color bleeding out behind the border, we'll render background and border
-        // into a transparency layer, and then clip that in one go (which requires setting up the clip before
-        // beginning the layer).
-        RoundedRect border = style()->getRoundedBorderFor(paintRect);
+    if (bleedAvoidance == BackgroundBleedClipBackground) {
         stateSaver.save();
+        RoundedRect border = style()->getRoundedBorderFor(paintRect);
         paintInfo.context->clipRoundedRect(border);
-        paintInfo.context->beginTransparencyLayer(1);
     }
 
     paintBackgroundWithBorderAndBoxShadow(paintInfo, paintRect, bleedAvoidance);
-
-    if (bleedAvoidance == BackgroundBleedUseTransparencyLayer)
-        paintInfo.context->endLayer();
 }
 
 void RenderBox::paintBackgroundWithBorderAndBoxShadow(PaintInfo& paintInfo, const LayoutRect& paintRect, BackgroundBleedAvoidance bleedAvoidance)
@@ -1568,7 +1578,7 @@ void RenderBox::imageChanged(WrappedImagePtr image, const IntRect*)
 
     ShapeValue* shapeOutsideValue = style()->shapeOutside();
     if (!frameView()->isInPerformLayout() && isFloating() && shapeOutsideValue && shapeOutsideValue->image() && shapeOutsideValue->image()->data() == image) {
-        ShapeOutsideInfo::ensureInfo(this)->dirtyShapeSize();
+        ShapeOutsideInfo::ensureInfo(*this).markShapeAsDirty();
         markShapeOutsideDependentsForLayout();
     }
 
@@ -1917,7 +1927,7 @@ LayoutSize RenderBox::offsetFromContainer(RenderObject* o, const LayoutPoint& po
         offset -= toRenderBox(o)->scrolledContentOffset();
 
     if (style()->position() == AbsolutePosition && o->isInFlowPositioned() && o->isRenderInline())
-        offset += toRenderInline(o)->offsetForInFlowPositionedInline(this);
+        offset += toRenderInline(o)->offsetForInFlowPositionedInline(*this);
 
     if (offsetDependsOnPoint)
         *offsetDependsOnPoint |= o->isRenderFlowThread();
@@ -1927,7 +1937,7 @@ LayoutSize RenderBox::offsetFromContainer(RenderObject* o, const LayoutPoint& po
 
 InlineBox* RenderBox::createInlineBox()
 {
-    return new InlineBox(this);
+    return new InlineBox(*this);
 }
 
 void RenderBox::dirtyLineBoxes(bool fullLayout)
@@ -1952,8 +1962,8 @@ void RenderBox::positionLineBox(InlineBox* box)
             // The value is cached in the xPos of the box.  We only need this value if
             // our object was inline originally, since otherwise it would have ended up underneath
             // the inlines.
-            RootInlineBox* root = box->root();
-            root->block()->setStaticInlinePositionForChild(this, root->lineTopWithLeading(), LayoutUnit::fromFloatRound(box->logicalLeft()));
+            RootInlineBox& root = box->root();
+            root.block().setStaticInlinePositionForChild(this, root.lineTopWithLeading(), LayoutUnit::fromFloatRound(box->logicalLeft()));
             if (style()->hasStaticInlinePosition(box->isHorizontal()))
                 setChildNeedsLayout(MarkOnlyThis); // Just go ahead and mark the positioned object as needing layout, so it will update its position properly.
         } else {
@@ -2077,7 +2087,7 @@ void RenderBox::computeRectForRepaint(const RenderLayerModelObject* repaintConta
         fixed = true;
 
     if (position == AbsolutePosition && o->isInFlowPositioned() && o->isRenderInline()) {
-        topLeft += toRenderInline(o)->offsetForInFlowPositionedInline(this);
+        topLeft += toRenderInline(o)->offsetForInFlowPositionedInline(*this);
     } else if (styleToUse->hasInFlowPosition() && layer()) {
         // Apply the relative position offset when invalidating a rectangle.  The layer
         // is translated, but the render box isn't, so we need to do this to get the
@@ -2240,11 +2250,8 @@ void RenderBox::computeLogicalWidth(LogicalExtentComputedValues& computedValues)
         computedValues.m_margins.m_start = minimumValueForLength(styleToUse->marginStart(), containerLogicalWidth);
         computedValues.m_margins.m_end = minimumValueForLength(styleToUse->marginEnd(), containerLogicalWidth);
     } else {
-        LayoutUnit containerLogicalWidthForAutoMargins = containerLogicalWidth;
-        if (avoidsFloats() && cb->containsFloats())
-            containerLogicalWidthForAutoMargins = containingBlockAvailableLineWidth();
         bool hasInvertedDirection = cb->style()->isLeftToRightDirection() != style()->isLeftToRightDirection();
-        computeInlineDirectionMargins(cb, containerLogicalWidthForAutoMargins, computedValues.m_extent,
+        computeInlineDirectionMargins(cb, containerLogicalWidth, computedValues.m_extent,
             hasInvertedDirection ? computedValues.m_margins.m_end : computedValues.m_margins.m_start,
             hasInvertedDirection ? computedValues.m_margins.m_start : computedValues.m_margins.m_end);
     }
@@ -2441,31 +2448,35 @@ void RenderBox::computeInlineDirectionMargins(RenderBlock* containingBlock, Layo
             marginEndLength.setValue(0);
     }
 
+    LayoutUnit availableWidth = containerWidth;
+    if (avoidsFloats() && containingBlock->containsFloats())
+        availableWidth = containingBlockAvailableLineWidth();
+
     // Case One: The object is being centered in the containing block's available logical width.
-    if ((marginStartLength.isAuto() && marginEndLength.isAuto() && childWidth < containerWidth)
+    if ((marginStartLength.isAuto() && marginEndLength.isAuto() && childWidth < availableWidth)
         || (!marginStartLength.isAuto() && !marginEndLength.isAuto() && containingBlock->style()->textAlign() == WEBKIT_CENTER)) {
         // Other browsers center the margin box for align=center elements so we match them here.
         LayoutUnit marginStartWidth = minimumValueForLength(marginStartLength, containerWidth);
         LayoutUnit marginEndWidth = minimumValueForLength(marginEndLength, containerWidth);
-        LayoutUnit centeredMarginBoxStart = max<LayoutUnit>(0, (containerWidth - childWidth - marginStartWidth - marginEndWidth) / 2);
+        LayoutUnit centeredMarginBoxStart = max<LayoutUnit>(0, (availableWidth - childWidth - marginStartWidth - marginEndWidth) / 2);
         marginStart = centeredMarginBoxStart + marginStartWidth;
-        marginEnd = containerWidth - childWidth - marginStart + marginEndWidth;
+        marginEnd = availableWidth - childWidth - marginStart + marginEndWidth;
         return;
     }
 
     // Case Two: The object is being pushed to the start of the containing block's available logical width.
-    if (marginEndLength.isAuto() && childWidth < containerWidth) {
+    if (marginEndLength.isAuto() && childWidth < availableWidth) {
         marginStart = valueForLength(marginStartLength, containerWidth);
-        marginEnd = containerWidth - childWidth - marginStart;
+        marginEnd = availableWidth - childWidth - marginStart;
         return;
     }
 
     // Case Three: The object is being pushed to the end of the containing block's available logical width.
     bool pushToEndFromTextAlign = !marginEndLength.isAuto() && ((!containingBlockStyle->isLeftToRightDirection() && containingBlockStyle->textAlign() == WEBKIT_LEFT)
         || (containingBlockStyle->isLeftToRightDirection() && containingBlockStyle->textAlign() == WEBKIT_RIGHT));
-    if ((marginStartLength.isAuto() && childWidth < containerWidth) || pushToEndFromTextAlign) {
+    if ((marginStartLength.isAuto() && childWidth < availableWidth) || pushToEndFromTextAlign) {
         marginEnd = valueForLength(marginEndLength, containerWidth);
-        marginStart = containerWidth - childWidth - marginEnd;
+        marginStart = availableWidth - childWidth - marginEnd;
         return;
     }
 
@@ -2677,6 +2688,11 @@ LayoutUnit RenderBox::computeContentAndScrollbarLogicalHeightUsing(const Length&
 
 bool RenderBox::skipContainingBlockForPercentHeightCalculation(const RenderBox* containingBlock) const
 {
+    // Flow threads for multicol or paged overflow should be skipped. They are invisible to the DOM,
+    // and percent heights of children should be resolved against the multicol or paged container.
+    if (containingBlock->isRenderFlowThread())
+        return true;
+
     // For quirks mode and anonymous blocks, we skip auto-height containingBlocks when computing percentages.
     // For standards mode, we treat the percentage as auto if it has an auto-height containing block.
     if (!document().inQuirksMode() && !containingBlock->isAnonymousBlock())
@@ -3229,8 +3245,9 @@ static void computeLogicalLeftPositionedOffset(LayoutUnit& logicalLeftPos, const
     if (containerBlock->isHorizontalWritingMode() != child->isHorizontalWritingMode() && containerBlock->style()->isFlippedBlocksWritingMode()) {
         logicalLeftPos = containerLogicalWidth - logicalWidthValue - logicalLeftPos;
         logicalLeftPos += (child->isHorizontalWritingMode() ? containerBlock->borderRight() : containerBlock->borderBottom());
-    } else
+    } else {
         logicalLeftPos += (child->isHorizontalWritingMode() ? containerBlock->borderLeft() : containerBlock->borderTop());
+    }
 }
 
 void RenderBox::shrinkToFitWidth(const LayoutUnit availableSpace, const LayoutUnit logicalLeftValue, const LayoutUnit bordersPlusPadding, LogicalExtentComputedValues& computedValues) const
@@ -3996,10 +4013,10 @@ LayoutRect RenderBox::localCaretRect(InlineBox* box, int caretOffset, LayoutUnit
         rect.move(LayoutSize(width() - caretWidth, 0));
 
     if (box) {
-        RootInlineBox* rootBox = box->root();
-        LayoutUnit top = rootBox->lineTop();
+        RootInlineBox& rootBox = box->root();
+        LayoutUnit top = rootBox.lineTop();
         rect.setY(top);
-        rect.setHeight(rootBox->lineBottom() - top);
+        rect.setHeight(rootBox.lineBottom() - top);
     }
 
     // If height of box is smaller than font height, use the latter one,
@@ -4130,6 +4147,15 @@ bool RenderBox::shrinkToAvoidFloats() const
 bool RenderBox::avoidsFloats() const
 {
     return isReplaced() || hasOverflowClip() || isHR() || isLegend() || isWritingModeRoot() || isFlexItemIncludingDeprecated();
+}
+
+void RenderBox::markForPaginationRelayoutIfNeeded(SubtreeLayoutScope& layoutScope)
+{
+    ASSERT(!needsLayout());
+    // If fragmentation height has changed, we need to lay out. No need to enter the renderer if it
+    // is childless, though.
+    if (view()->layoutState()->pageLogicalHeightChanged() && firstChild())
+        layoutScope.setChildNeedsLayout(this);
 }
 
 void RenderBox::addVisualEffectOverflow()
@@ -4270,8 +4296,12 @@ void RenderBox::addContentsVisualOverflow(const LayoutRect& rect)
         return;
     }
 
-    if (!m_overflow)
-        m_overflow = adoptPtr(new RenderOverflow(clientBoxRect(), borderBoxRect()));
+    if (!m_overflow) {
+        LayoutRect clientBox = clientBoxRect();
+        if (style()->shouldPlaceBlockDirectionScrollbarOnLogicalLeft())
+            clientBox.move(-verticalScrollbarWidth(), 0);
+        m_overflow = adoptPtr(new RenderOverflow(clientBox, borderBoxRect()));
+    }
     m_overflow->addContentsVisualOverflow(rect);
 }
 

@@ -33,7 +33,7 @@ namespace WebCore {
 
 class ChildNodeList FINAL : public NodeList {
 public:
-    static PassRefPtr<ChildNodeList> create(PassRefPtr<ContainerNode> rootNode)
+    static PassRefPtr<ChildNodeList> create(ContainerNode& rootNode)
     {
         return adoptRef(new ChildNodeList(rootNode));
     }
@@ -46,17 +46,17 @@ public:
 
     // Non-DOM API.
     void invalidateCache() { m_collectionIndexCache.invalidate(); }
-    ContainerNode* ownerNode() const { return m_parent.get(); }
+    ContainerNode& ownerNode() const { return *m_parent; }
 
     // CollectionIndexCache API.
-    ContainerNode& rootNode() const { return *m_parent; }
+    ContainerNode& rootNode() const { return ownerNode(); }
     bool canTraverseBackward() const { return true; }
     Node* itemBefore(const Node* previousItem) const;
     Node* traverseToFirstElement(const ContainerNode& root) const { return root.firstChild(); }
     Node* traverseForwardToOffset(unsigned offset, Node& currentNode, unsigned& currentOffset, const ContainerNode& root) const;
 
 private:
-    explicit ChildNodeList(PassRefPtr<ContainerNode> rootNode);
+    explicit ChildNodeList(ContainerNode& rootNode);
 
     virtual bool isChildNodeList() const OVERRIDE { return true; }
     virtual Node* virtualOwnerNode() const OVERRIDE;

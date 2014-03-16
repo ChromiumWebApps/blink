@@ -47,11 +47,11 @@
 #include "core/dom/Element.h"
 #include "core/dom/NodeFilter.h"
 #include "core/dom/QualifiedName.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/inspector/BindingVisitors.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/frame/Frame.h"
-#include "core/frame/Settings.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/xml/XPathNSResolver.h"
 #include "wtf/ArrayBufferContents.h"
@@ -473,11 +473,7 @@ DOMWindow* toDOMWindow(v8::Handle<v8::Value> value, v8::Isolate* isolate)
     if (value.IsEmpty() || !value->IsObject())
         return 0;
 
-    v8::Handle<v8::Object> global = v8::Handle<v8::Object>::Cast(value);
-    v8::Handle<v8::Object> windowWrapper = global->FindInstanceInPrototypeChain(V8Window::domTemplate(isolate, MainWorld));
-    if (!windowWrapper.IsEmpty())
-        return V8Window::toNative(windowWrapper);
-    windowWrapper = global->FindInstanceInPrototypeChain(V8Window::domTemplate(isolate, IsolatedWorld));
+    v8::Handle<v8::Object> windowWrapper = V8Window::findInstanceInPrototypeChain(v8::Handle<v8::Object>::Cast(value), isolate);
     if (!windowWrapper.IsEmpty())
         return V8Window::toNative(windowWrapper);
     return 0;
@@ -485,23 +481,19 @@ DOMWindow* toDOMWindow(v8::Handle<v8::Value> value, v8::Isolate* isolate)
 
 DOMWindow* toDOMWindow(v8::Handle<v8::Context> context)
 {
+    if (context.IsEmpty())
+        return 0;
     return toDOMWindow(context->Global(), context->GetIsolate());
 }
 
-ExecutionContext* toExecutionContext(v8::Handle<v8::Context> context)
+DOMWindow* enteredDOMWindow(v8::Isolate* isolate)
 {
-    v8::Handle<v8::Object> global = context->Global();
-    v8::Handle<v8::Object> windowWrapper = global->FindInstanceInPrototypeChain(V8Window::domTemplate(context->GetIsolate(), MainWorld));
-    if (!windowWrapper.IsEmpty())
-        return V8Window::toNative(windowWrapper)->executionContext();
-    windowWrapper = global->FindInstanceInPrototypeChain(V8Window::domTemplate(context->GetIsolate(), IsolatedWorld));
-    if (!windowWrapper.IsEmpty())
-        return V8Window::toNative(windowWrapper)->executionContext();
-    v8::Handle<v8::Object> workerWrapper = global->FindInstanceInPrototypeChain(V8WorkerGlobalScope::domTemplate(context->GetIsolate(), WorkerWorld));
-    if (!workerWrapper.IsEmpty())
-        return V8WorkerGlobalScope::toNative(workerWrapper)->executionContext();
-    // FIXME: Is this line of code reachable?
-    return 0;
+    return toDOMWindow(isolate->GetEnteredContext());
+}
+
+DOMWindow* currentDOMWindow(v8::Isolate* isolate)
+{
+    return toDOMWindow(isolate->GetCurrentContext());
 }
 
 DOMWindow* callingDOMWindow(v8::Isolate* isolate)
@@ -516,6 +508,24 @@ DOMWindow* callingDOMWindow(v8::Isolate* isolate)
     return toDOMWindow(context);
 }
 
+ExecutionContext* toExecutionContext(v8::Handle<v8::Context> context)
+{
+    v8::Handle<v8::Object> global = context->Global();
+    v8::Handle<v8::Object> windowWrapper = V8Window::findInstanceInPrototypeChain(global, context->GetIsolate());
+    if (!windowWrapper.IsEmpty())
+        return V8Window::toNative(windowWrapper)->executionContext();
+    v8::Handle<v8::Object> workerWrapper = V8WorkerGlobalScope::findInstanceInPrototypeChain(global, context->GetIsolate());
+    if (!workerWrapper.IsEmpty())
+        return V8WorkerGlobalScope::toNative(workerWrapper)->executionContext();
+    // FIXME: Is this line of code reachable?
+    return 0;
+}
+
+ExecutionContext* currentExecutionContext(v8::Isolate* isolate)
+{
+    return toExecutionContext(isolate->GetCurrentContext());
+}
+
 ExecutionContext* callingExecutionContext(v8::Isolate* isolate)
 {
     v8::Handle<v8::Context> context = isolate->GetCallingContext();
@@ -528,29 +538,12 @@ ExecutionContext* callingExecutionContext(v8::Isolate* isolate)
     return toExecutionContext(context);
 }
 
-DOMWindow* enteredDOMWindow(v8::Isolate* isolate)
-{
-    return toDOMWindow(isolate->GetEnteredContext());
-}
-
-Document* currentDocument(v8::Isolate* isolate)
-{
-    return toDOMWindow(isolate->GetCurrentContext())->document();
-}
-
-ExecutionContext* currentExecutionContext(v8::Isolate* isolate)
-{
-    if (WorkerScriptController* controller = WorkerScriptController::controllerForContext(isolate))
-        return &controller->workerGlobalScope();
-    return currentDocument(isolate);
-}
-
-Frame* toFrameIfNotDetached(v8::Handle<v8::Context> context)
+LocalFrame* toFrameIfNotDetached(v8::Handle<v8::Context> context)
 {
     DOMWindow* window = toDOMWindow(context);
     if (window && window->isCurrentlyDisplayedInFrame())
         return window->frame();
-    // We return 0 here because |context| is detached from the Frame. If we
+    // We return 0 here because |context| is detached from the LocalFrame. If we
     // did return |frame| we could get in trouble because the frame could be
     // navigated to another security origin.
     return 0;
@@ -560,47 +553,24 @@ v8::Local<v8::Context> toV8Context(ExecutionContext* context, DOMWrapperWorld* w
 {
     ASSERT(context);
     if (context->isDocument()) {
-        ASSERT(world);
-        if (Frame* frame = toDocument(context)->frame())
+        if (LocalFrame* frame = toDocument(context)->frame())
             return frame->script().windowShell(world)->context();
     } else if (context->isWorkerGlobalScope()) {
-        ASSERT(!world);
         if (WorkerScriptController* script = toWorkerGlobalScope(context)->script())
             return script->context();
     }
     return v8::Local<v8::Context>();
 }
 
-v8::Local<v8::Context> toV8Context(v8::Isolate* isolate, Frame* frame, DOMWrapperWorld* world)
+v8::Local<v8::Context> toV8Context(v8::Isolate* isolate, LocalFrame* frame, DOMWrapperWorld* world)
 {
     if (!frame)
         return v8::Local<v8::Context>();
     v8::Local<v8::Context> context = frame->script().windowShell(world)->context();
     if (context.IsEmpty())
         return v8::Local<v8::Context>();
-    Frame* attachedFrame= toFrameIfNotDetached(context);
+    LocalFrame* attachedFrame= toFrameIfNotDetached(context);
     return frame == attachedFrame ? context : v8::Local<v8::Context>();
-}
-
-bool handleOutOfMemory()
-{
-    v8::Local<v8::Context> context = v8::Isolate::GetCurrent()->GetCurrentContext();
-
-    if (!context->HasOutOfMemoryException())
-        return false;
-
-    // Warning, error, disable JS for this frame?
-    Frame* frame = toFrameIfNotDetached(context);
-    if (!frame)
-        return true;
-
-    frame->script().clearForOutOfMemory();
-    frame->loader().client()->didExhaustMemoryAvailableForScript();
-
-    if (Settings* settings = frame->settings())
-        settings->setScriptEnabled(false);
-
-    return true;
 }
 
 v8::Local<v8::Value> handleMaxRecursionDepthExceeded(v8::Isolate* isolate)
@@ -618,70 +588,10 @@ void crashIfV8IsDead()
     }
 }
 
-WrapperWorldType worldType(v8::Isolate* isolate)
-{
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    if (data->isMainThread())
-        return worldTypeInMainThread(isolate);
-    return WorkerWorld;
-}
-
-WrapperWorldType worldTypeInMainThread(v8::Isolate* isolate)
-{
-    if (!DOMWrapperWorld::isolatedWorldsExist())
-        return MainWorld;
-    ASSERT(!isolate->GetEnteredContext().IsEmpty());
-    DOMWrapperWorld* world = DOMWrapperWorld::world(isolate->GetEnteredContext());
-    if (world->isMainWorld())
-        return MainWorld;
-    return IsolatedWorld;
-}
-
 v8::Handle<v8::Function> getBoundFunction(v8::Handle<v8::Function> function)
 {
     v8::Handle<v8::Value> boundFunction = function->GetBoundFunction();
     return boundFunction->IsFunction() ? v8::Handle<v8::Function>::Cast(boundFunction) : function;
-}
-
-v8::Local<v8::Value> getHiddenValue(v8::Isolate* isolate, v8::Handle<v8::Object> object, const char* key)
-{
-    return getHiddenValue(isolate, object, v8AtomicString(isolate, key));
-}
-
-v8::Local<v8::Value> getHiddenValue(v8::Isolate* isolate, v8::Handle<v8::Object> object, v8::Handle<v8::String> key)
-{
-    return object->GetHiddenValue(key);
-}
-
-bool setHiddenValue(v8::Isolate* isolate, v8::Handle<v8::Object> object, const char* key, v8::Handle<v8::Value> value)
-{
-    return setHiddenValue(isolate, object, v8AtomicString(isolate, key), value);
-}
-
-bool setHiddenValue(v8::Isolate* isolate, v8::Handle<v8::Object> object, v8::Handle<v8::String> key, v8::Handle<v8::Value> value)
-{
-    return object->SetHiddenValue(key, value);
-}
-
-bool deleteHiddenValue(v8::Isolate* isolate, v8::Handle<v8::Object> object, const char* key)
-{
-    return deleteHiddenValue(isolate, object, v8AtomicString(isolate, key));
-}
-
-bool deleteHiddenValue(v8::Isolate* isolate, v8::Handle<v8::Object> object, v8::Handle<v8::String> key)
-{
-    return object->DeleteHiddenValue(key);
-}
-
-v8::Local<v8::Value> getHiddenValueFromMainWorldWrapper(v8::Isolate* isolate, ScriptWrappable* wrappable, const char* key)
-{
-    return getHiddenValueFromMainWorldWrapper(isolate, wrappable, v8AtomicString(isolate, key));
-}
-
-v8::Local<v8::Value> getHiddenValueFromMainWorldWrapper(v8::Isolate* isolate, ScriptWrappable* wrappable, v8::Handle<v8::String> key)
-{
-    v8::Local<v8::Object> wrapper = wrappable->newLocalWrapper(isolate);
-    return wrapper.IsEmpty() ? v8::Local<v8::Value>() : getHiddenValue(isolate, wrapper, key);
 }
 
 void addHiddenValueToArray(v8::Handle<v8::Object> object, v8::Local<v8::Value> value, int arrayIndex, v8::Isolate* isolate)
@@ -733,10 +643,24 @@ v8::Isolate* toIsolate(ExecutionContext* context)
     return v8::Isolate::GetCurrent();
 }
 
-v8::Isolate* toIsolate(Frame* frame)
+v8::Isolate* toIsolate(LocalFrame* frame)
 {
     ASSERT(frame);
     return frame->script().isolate();
+}
+
+PassOwnPtr<V8ExecutionScope> V8ExecutionScope::create(v8::Isolate* isolate)
+{
+    return adoptPtr(new V8ExecutionScope(isolate));
+}
+
+V8ExecutionScope::V8ExecutionScope(v8::Isolate* isolate)
+    : m_handleScope(isolate)
+    , m_context(v8::Context::New(isolate))
+    , m_contextScope(m_context)
+    , m_world(DOMWrapperWorld::create())
+    , m_perContextData(V8PerContextData::create(m_context, m_world))
+{
 }
 
 } // namespace WebCore

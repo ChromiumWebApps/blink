@@ -71,7 +71,7 @@ public:
     // position:static elements that are not flex-items get their z-index coerced to auto.
     virtual LayerType layerTypeRequired() const OVERRIDE
     {
-        if (isRoot() || isPositioned() || createsGroup() || hasClipPath() || hasTransform() || hasHiddenBackface() || hasReflection() || style()->specifiesColumns() || !style()->hasAutoZIndex())
+        if (isRoot() || isPositioned() || createsGroup() || hasClipPath() || hasTransform() || hasHiddenBackface() || hasReflection() || style()->specifiesColumns() || !style()->hasAutoZIndex() || style()->hasWillChangeCompositingHint() || style()->hasWillChangeGpuRasterizationHint())
             return NormalLayer;
         if (hasOverflowClip())
             return OverflowClipLayer;
@@ -251,7 +251,7 @@ public:
 
     // More IE extensions.  clientWidth and clientHeight represent the interior of an object
     // excluding border and scrollbar.  clientLeft/Top are just the borderLeftWidth and borderTopWidth.
-    LayoutUnit clientLeft() const { return borderLeft(); }
+    LayoutUnit clientLeft() const { return borderLeft() + (style()->shouldPlaceBlockDirectionScrollbarOnLogicalLeft() ? verticalScrollbarWidth() : 0); }
     LayoutUnit clientTop() const { return borderTop(); }
     LayoutUnit clientWidth() const;
     LayoutUnit clientHeight() const;
@@ -540,7 +540,7 @@ public:
     bool shrinkToAvoidFloats() const;
     virtual bool avoidsFloats() const;
 
-    virtual void markForPaginationRelayoutIfNeeded(SubtreeLayoutScope&) { }
+    virtual void markForPaginationRelayoutIfNeeded(SubtreeLayoutScope&);
 
     bool isWritingModeRoot() const { return !parent() || parent()->style()->writingMode() != style()->writingMode(); }
 
@@ -613,7 +613,7 @@ public:
 
     ShapeOutsideInfo* shapeOutsideInfo() const
     {
-        return ShapeOutsideInfo::isEnabledFor(this) ? ShapeOutsideInfo::info(this) : 0;
+        return ShapeOutsideInfo::isEnabledFor(*this) ? ShapeOutsideInfo::info(*this) : 0;
     }
 
     void markShapeOutsideDependentsForLayout()

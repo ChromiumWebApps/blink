@@ -48,7 +48,7 @@ class Dictionary;
 {% if named_constructor %}
 class {{v8_class}}Constructor {
 public:
-    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*, WrapperWorldType);
+    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
     static const WrapperTypeInfo wrapperTypeInfo;
 };
 
@@ -56,11 +56,13 @@ public:
 class {{v8_class}} {
 public:
     static bool hasInstance(v8::Handle<v8::Value>, v8::Isolate*);
-    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*, WrapperWorldType);
+    static v8::Handle<v8::Object> findInstanceInPrototypeChain(v8::Handle<v8::Value>, v8::Isolate*);
+    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
     static {{cpp_class}}* toNative(v8::Handle<v8::Object> object)
     {
         return fromInternalPointer(object->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex));
     }
+    static {{cpp_class}}* toNativeWithTypeCheck(v8::Isolate*, v8::Handle<v8::Value>);
     static const WrapperTypeInfo wrapperTypeInfo;
     static void derefObject(void*);
     {% if has_visit_dom_wrapper %}
@@ -73,7 +75,7 @@ public:
     static EventTarget* toEventTarget(v8::Handle<v8::Object>);
     {% endif %}
     {% if interface_name == 'Window' %}
-    static v8::Handle<v8::ObjectTemplate> getShadowObjectTemplate(v8::Isolate*, WrapperWorldType);
+    static v8::Handle<v8::ObjectTemplate> getShadowObjectTemplate(v8::Isolate*);
     {% endif %}
     {% for method in methods if method.is_custom %}
     {% filter conditional(method.conditional_string) %}
@@ -178,6 +180,10 @@ public:
     {% if interface_name == 'HTMLElement' %}
     friend v8::Handle<v8::Object> createV8HTMLWrapper(HTMLElement*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     friend v8::Handle<v8::Object> createV8HTMLDirectWrapper(HTMLElement*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
+    {% elif interface_name == 'SVGElement' %}
+    friend v8::Handle<v8::Object> createV8SVGWrapper(SVGElement*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
+    friend v8::Handle<v8::Object> createV8SVGDirectWrapper(SVGElement*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
+    friend v8::Handle<v8::Object> createV8SVGFallbackWrapper(SVGElement*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     {% elif interface_name == 'HTMLUnknownElement' %}
     friend v8::Handle<v8::Object> createV8HTMLFallbackWrapper(HTMLUnknownElement*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     {% elif interface_name == 'Element' %}
@@ -190,12 +196,6 @@ private:
     friend v8::Handle<v8::Object> wrap({{cpp_class}}*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     static v8::Handle<v8::Object> createWrapper({{pass_ref_ptr}}<{{cpp_class}}>, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     {% endif %}
-};
-
-template<>
-class WrapperTypeTraits<{{cpp_class}} > {
-public:
-    static const WrapperTypeInfo* wrapperTypeInfo() { return &{{v8_class}}::wrapperTypeInfo; }
 };
 
 {% if has_custom_to_v8 %}
@@ -257,7 +257,7 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, {{cpp_class}}* im
 template<typename CallbackInfo>
 inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, {{cpp_class}}* impl)
 {
-    ASSERT(worldType(callbackInfo.GetIsolate()) == MainWorld);
+    ASSERT(DOMWrapperWorld::current(callbackInfo.GetIsolate())->isMainWorld());
     if (UNLIKELY(!impl)) {
         v8SetReturnValueNull(callbackInfo);
         return;

@@ -39,6 +39,7 @@
 #include "bindings/v8/DOMRequestState.h"
 #include "bindings/v8/SerializedScriptValue.h"
 #include "bindings/v8/V8Binding.h"
+#include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/custom/V8ArrayBufferViewCustom.h"
 #include "bindings/v8/custom/V8Uint8ArrayCustom.h"
 #include "modules/indexeddb/IDBKey.h"
@@ -123,7 +124,7 @@ static v8::Handle<v8::Value> toV8(const IDBAny* impl, v8::Handle<v8::Object> cre
         // so that event listeners are retained.
         v8::Handle<v8::Value> cursor = toV8(impl->idbCursor(), creationContext, isolate);
         v8::Handle<v8::Value> request = toV8(impl->idbCursor()->request(), creationContext, isolate);
-        setHiddenValue(isolate, cursor->ToObject(), "idbCursorRequest", request);
+        V8HiddenValue::setHiddenValue(isolate, cursor->ToObject(), V8HiddenValue::idbCursorRequest(isolate), request);
         return cursor;
     }
     case IDBAny::IDBCursorWithValueType: {
@@ -131,7 +132,7 @@ static v8::Handle<v8::Value> toV8(const IDBAny* impl, v8::Handle<v8::Object> cre
         // so that event listeners are retained.
         v8::Handle<v8::Value> cursor = toV8(impl->idbCursorWithValue(), creationContext, isolate);
         v8::Handle<v8::Value> request = toV8(impl->idbCursorWithValue()->request(), creationContext, isolate);
-        setHiddenValue(isolate, cursor->ToObject(), "idbCursorRequest", request);
+        V8HiddenValue::setHiddenValue(isolate, cursor->ToObject(), V8HiddenValue::idbCursorRequest(isolate), request);
         return cursor;
     }
     case IDBAny::IDBDatabaseType:
@@ -344,7 +345,7 @@ static PassRefPtr<IDBKey> createIDBKeyFromScriptValueAndKeyPath(const ScriptValu
 PassRefPtr<IDBKey> createIDBKeyFromScriptValueAndKeyPath(DOMRequestState* state, const ScriptValue& value, const IDBKeyPath& keyPath)
 {
     IDB_TRACE("createIDBKeyFromScriptValueAndKeyPath");
-    v8::Isolate* isolate = state ? state->context()->GetIsolate() : v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = state ? state->isolate() : v8::Isolate::GetCurrent();
     return createIDBKeyFromScriptValueAndKeyPath(value, keyPath, isolate);
 }
 
@@ -404,7 +405,7 @@ bool canInjectIDBKeyIntoScriptValue(DOMRequestState* state, const ScriptValue& s
 
 ScriptValue idbAnyToScriptValue(DOMRequestState* state, PassRefPtr<IDBAny> any)
 {
-    v8::Isolate* isolate = state ? state->context()->GetIsolate() : v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = state ? state->isolate() : v8::Isolate::GetCurrent();
     ASSERT(isolate->InContext());
     v8::Local<v8::Context> context = state ? state->context() : isolate->GetCurrentContext();
     v8::HandleScope handleScope(isolate);
@@ -414,7 +415,7 @@ ScriptValue idbAnyToScriptValue(DOMRequestState* state, PassRefPtr<IDBAny> any)
 
 ScriptValue idbKeyToScriptValue(DOMRequestState* state, PassRefPtr<IDBKey> key)
 {
-    v8::Isolate* isolate = state ? state->context()->GetIsolate() : v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = state ? state->isolate() : v8::Isolate::GetCurrent();
     ASSERT(isolate->InContext());
     v8::Local<v8::Context> context = state ? state->context() : isolate->GetCurrentContext();
     v8::HandleScope handleScope(isolate);
@@ -424,7 +425,7 @@ ScriptValue idbKeyToScriptValue(DOMRequestState* state, PassRefPtr<IDBKey> key)
 
 PassRefPtr<IDBKey> scriptValueToIDBKey(DOMRequestState* state, const ScriptValue& scriptValue)
 {
-    v8::Isolate* isolate = state ? state->context()->GetIsolate() : v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = state ? state->isolate() : v8::Isolate::GetCurrent();
     ASSERT(isolate->InContext());
     v8::HandleScope handleScope(isolate);
     v8::Handle<v8::Value> v8Value(scriptValue.v8Value());
@@ -433,7 +434,7 @@ PassRefPtr<IDBKey> scriptValueToIDBKey(DOMRequestState* state, const ScriptValue
 
 PassRefPtr<IDBKeyRange> scriptValueToIDBKeyRange(DOMRequestState* state, const ScriptValue& scriptValue)
 {
-    v8::Isolate* isolate = state ? state->context()->GetIsolate() : v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = state ? state->isolate() : v8::Isolate::GetCurrent();
     v8::HandleScope handleScope(isolate);
     v8::Handle<v8::Value> value(scriptValue.v8Value());
     return V8IDBKeyRange::toNativeWithTypeCheck(isolate, value);
@@ -445,7 +446,7 @@ void assertPrimaryKeyValidOrInjectable(DOMRequestState* state, PassRefPtr<Shared
     RefPtr<IDBKey> key(prpKey);
 
     DOMRequestState::Scope scope(*state);
-    v8::Isolate* isolate = state ? state->context()->GetIsolate() : v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = state ? state->isolate() : v8::Isolate::GetCurrent();
 
     ScriptValue keyValue = idbKeyToScriptValue(state, key);
     ScriptValue scriptValue(deserializeIDBValueBuffer(buffer.get(), isolate), isolate);

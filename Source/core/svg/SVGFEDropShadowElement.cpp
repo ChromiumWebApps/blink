@@ -30,12 +30,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFEDropShadowElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFEDropShadowElement::SVGFEDropShadowElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feDropShadowTag, document)
     , m_dx(SVGAnimatedNumber::create(this, SVGNames::dxAttr, SVGNumber::create(2)))
@@ -49,7 +43,6 @@ inline SVGFEDropShadowElement::SVGFEDropShadowElement(Document& document)
     addToPropertyMap(m_dy);
     addToPropertyMap(m_stdDeviation);
     addToPropertyMap(m_in1);
-    registerAnimatedPropertiesForSVGFEDropShadowElement();
 }
 
 PassRefPtr<SVGFEDropShadowElement> SVGFEDropShadowElement::create(Document& document)

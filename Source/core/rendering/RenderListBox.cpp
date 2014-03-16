@@ -38,13 +38,13 @@
 #include "core/dom/Document.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/editing/FrameSelection.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
 #include "core/rendering/HitTestResult.h"
@@ -191,7 +191,7 @@ void RenderListBox::layout()
     }
 
     if (m_scrollToRevealSelectionAfterLayout) {
-        LayoutStateDisabler layoutStateDisabler(view());
+        LayoutStateDisabler layoutStateDisabler(*this);
         scrollToRevealSelection();
     }
 }
@@ -539,8 +539,7 @@ void RenderListBox::panScroll(const IntPoint& panStartMousePosition)
         return;
 
     if (yDelta > 0)
-        //offsetY = view()->viewHeight();
-        absOffset.move(0, listHeight());
+        absOffset.move(0, listHeight().toFloat());
     else if (yDelta < 0)
         yDelta--;
 
@@ -906,12 +905,6 @@ int RenderListBox::pageStep(ScrollbarOrientation orientation) const
 float RenderListBox::pixelStep(ScrollbarOrientation) const
 {
     return 1.0f / itemHeight();
-}
-
-ScrollableArea* RenderListBox::enclosingScrollableArea() const
-{
-    // FIXME: Return a RenderLayer that's scrollable.
-    return 0;
 }
 
 IntRect RenderListBox::scrollableAreaBoundingBox() const

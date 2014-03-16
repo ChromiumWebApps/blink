@@ -56,6 +56,8 @@ public:
 private:
     explicit HTMLMarqueeElement(Document&);
 
+    virtual void didMoveToNewDocument(Document& oldDocument) OVERRIDE;
+
     virtual bool isPresentationAttribute(const QualifiedName&) const OVERRIDE;
     virtual void collectStyleForPresentationAttribute(const QualifiedName&, const AtomicString&, MutableStylePropertySet*) OVERRIDE;
 
@@ -67,8 +69,6 @@ private:
 
     RenderMarquee* renderMarquee() const;
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLMarqueeElement, hasTagName(HTMLNames::marqueeTag));
 
 } // namespace WebCore
 

@@ -46,7 +46,13 @@ TextTrackList::TextTrackList(HTMLMediaElement* owner)
 
 TextTrackList::~TextTrackList()
 {
+    ASSERT(!m_owner);
+
     m_asyncEventQueue->close();
+
+    for (unsigned i = 0; i < length(); ++i) {
+        item(i)->setTrackList(0);
+    }
 }
 
 unsigned TextTrackList::length() const
@@ -201,7 +207,6 @@ void TextTrackList::append(PassRefPtr<TextTrack> prpTrack)
 void TextTrackList::remove(TextTrack* track)
 {
     Vector<RefPtr<TextTrack> >* tracks = 0;
-    RefPtr<InbandTextTrack> inbandTrack;
 
     if (track->trackType() == TextTrack::TrackElement) {
         tracks = &m_elementTracks;
@@ -209,7 +214,6 @@ void TextTrackList::remove(TextTrack* track)
         tracks = &m_addTrackTracks;
     } else if (track->trackType() == TextTrack::InBand) {
         tracks = &m_inbandTracks;
-        inbandTrack = static_cast<InbandTextTrack*>(track);
     } else {
         ASSERT_NOT_REACHED();
     }
@@ -225,10 +229,15 @@ void TextTrackList::remove(TextTrack* track)
 
     tracks->remove(index);
 
-    if (inbandTrack)
-        inbandTrack->trackRemoved();
-
     scheduleRemoveTrackEvent(track);
+}
+
+void TextTrackList::removeAllInbandTracks()
+{
+    for (unsigned i = 0; i < m_inbandTracks.size(); ++i) {
+        m_inbandTracks[i]->setTrackList(0);
+    }
+    m_inbandTracks.clear();
 }
 
 bool TextTrackList::contains(TextTrack* track) const
@@ -256,6 +265,11 @@ ExecutionContext* TextTrackList::executionContext() const
 {
     ASSERT(m_owner);
     return m_owner->executionContext();
+}
+
+void TextTrackList::clearOwner()
+{
+    m_owner = 0;
 }
 
 void TextTrackList::scheduleTrackEvent(const AtomicString& eventName, PassRefPtr<TextTrack> track)
@@ -310,7 +324,7 @@ void TextTrackList::scheduleRemoveTrackEvent(PassRefPtr<TextTrack> track)
     scheduleTrackEvent(EventTypeNames::removetrack, track);
 }
 
-Node* TextTrackList::owner() const
+HTMLMediaElement* TextTrackList::owner() const
 {
     return m_owner;
 }

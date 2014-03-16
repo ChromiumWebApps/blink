@@ -26,9 +26,11 @@
 #include "config.h"
 #include "core/css/CSSFontFace.h"
 
+#include "core/css/CSSFontFaceSource.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/FontFaceSet.h"
+#include "core/css/RemoteFontFaceSource.h"
 #include "core/dom/Document.h"
 #include "core/frame/UseCounter.h"
 #include "platform/fonts/SimpleFontData.h"
@@ -62,8 +64,11 @@ void CSSFontFace::beginLoadIfNeeded(CSSFontFaceSource* source, CSSFontSelector* 
         setLoadStatus(FontFace::Loading);
 }
 
-void CSSFontFace::fontLoaded(CSSFontFaceSource* source)
+void CSSFontFace::fontLoaded(RemoteFontFaceSource* source)
 {
+    if (m_segmentedFontFace)
+        m_segmentedFontFace->fontSelector()->fontLoaded();
+
     if (!isValid() || source != m_sources.first())
         return;
 
@@ -82,6 +87,14 @@ void CSSFontFace::fontLoaded(CSSFontFaceSource* source)
 
     if (m_segmentedFontFace)
         m_segmentedFontFace->fontLoaded(this);
+}
+
+void CSSFontFace::fontLoadWaitLimitExceeded(RemoteFontFaceSource* source)
+{
+    if (!isValid() || source != m_sources.first())
+        return;
+    if (m_segmentedFontFace)
+        m_segmentedFontFace->fontLoadWaitLimitExceeded(this);
 }
 
 PassRefPtr<SimpleFontData> CSSFontFace::getFontData(const FontDescription& fontDescription)

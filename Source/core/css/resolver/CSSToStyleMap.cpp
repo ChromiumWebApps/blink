@@ -180,10 +180,14 @@ void CSSToStyleMap::mapFillRepeatY(CSSPropertyID, FillLayer* layer, CSSValue* va
 
 void CSSToStyleMap::mapFillSize(CSSPropertyID, FillLayer* layer, CSSValue* value) const
 {
-    if (!value->isPrimitiveValue()) {
-        layer->setSizeType(SizeNone);
+    if (value->isInitialValue()) {
+        layer->setSizeType(FillLayer::initialFillSizeType(layer->type()));
+        layer->setSizeLength(FillLayer::initialFillSizeLength(layer->type()));
         return;
     }
+
+    if (!value->isPrimitiveValue())
+        return;
 
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
     if (primitiveValue->getValueID() == CSSValueContain)
@@ -195,7 +199,7 @@ void CSSToStyleMap::mapFillSize(CSSPropertyID, FillLayer* layer, CSSValue* value
 
     LengthSize b = FillLayer::initialFillSizeLength(layer->type());
 
-    if (value->isInitialValue() || primitiveValue->getValueID() == CSSValueContain || primitiveValue->getValueID() == CSSValueCover) {
+    if (primitiveValue->getValueID() == CSSValueContain || primitiveValue->getValueID() == CSSValueCover) {
         layer->setSizeLength(b);
         return;
     }
@@ -458,7 +462,7 @@ PassRefPtr<TimingFunction> CSSToStyleMap::animationTimingFunction(CSSValue* valu
         CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
         switch (primitiveValue->getValueID()) {
         case CSSValueLinear:
-            return LinearTimingFunction::create();
+            return LinearTimingFunction::preset();
             break;
         case CSSValueEase:
             return CubicBezierTimingFunction::preset(CubicBezierTimingFunction::Ease);
@@ -475,6 +479,9 @@ PassRefPtr<TimingFunction> CSSToStyleMap::animationTimingFunction(CSSValue* valu
         case CSSValueStepStart:
             return StepsTimingFunction::preset(StepsTimingFunction::Start);
             break;
+        case CSSValueStepMiddle:
+            return StepsTimingFunction::preset(StepsTimingFunction::Middle);
+            break;
         case CSSValueStepEnd:
             return StepsTimingFunction::preset(StepsTimingFunction::End);
             break;
@@ -489,7 +496,7 @@ PassRefPtr<TimingFunction> CSSToStyleMap::animationTimingFunction(CSSValue* valu
         return CubicBezierTimingFunction::create(cubicTimingFunction->x1(), cubicTimingFunction->y1(), cubicTimingFunction->x2(), cubicTimingFunction->y2());
     } else if (value->isStepsTimingFunctionValue()) {
         CSSStepsTimingFunctionValue* stepsTimingFunction = toCSSStepsTimingFunctionValue(value);
-        return StepsTimingFunction::create(stepsTimingFunction->numberOfSteps(), stepsTimingFunction->stepAtStart());
+        return StepsTimingFunction::create(stepsTimingFunction->numberOfSteps(), stepsTimingFunction->stepAtPosition());
     }
 
     return nullptr;
@@ -498,8 +505,15 @@ PassRefPtr<TimingFunction> CSSToStyleMap::animationTimingFunction(CSSValue* valu
 void CSSToStyleMap::mapAnimationTimingFunction(CSSAnimationData* animation, CSSValue* value) const
 {
     RefPtr<TimingFunction> timingFunction = animationTimingFunction(value, true);
-    if (timingFunction)
-        animation->setTimingFunction(timingFunction);
+    if (timingFunction) {
+        // Step middle timing functions are supported up to this point for use in the Web Animations API,
+        // but should not be supported for CSS Animations and Transitions.
+        bool isStepMiddleFunction = (timingFunction->type() == TimingFunction::StepsFunction) && (toStepsTimingFunction(*timingFunction).stepAtPosition() == StepsTimingFunction::StepAtMiddle);
+        if (isStepMiddleFunction)
+            animation->setTimingFunction(CubicBezierTimingFunction::preset(CubicBezierTimingFunction::Ease));
+        else
+            animation->setTimingFunction(timingFunction);
+    }
 }
 
 void CSSToStyleMap::mapNinePieceImage(RenderStyle* mutableStyle, CSSPropertyID property, CSSValue* value, NinePieceImage& image)

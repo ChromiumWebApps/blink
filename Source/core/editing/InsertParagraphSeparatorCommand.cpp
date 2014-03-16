@@ -50,7 +50,7 @@ static Element* highestVisuallyEquivalentDivBelowRoot(Element* startBlock)
     Element* curBlock = startBlock;
     // We don't want to return a root node (if it happens to be a div, e.g., in a document fragment) because there are no
     // siblings for us to append to.
-    while (!curBlock->nextSibling() && curBlock->parentElement()->hasTagName(divTag) && curBlock->parentElement()->parentElement()) {
+    while (!curBlock->nextSibling() && isHTMLDivElement(*curBlock->parentElement()) && curBlock->parentElement()->parentElement()) {
         if (curBlock->parentElement()->hasAttributes())
             break;
         curBlock = curBlock->parentElement();
@@ -170,10 +170,10 @@ void InsertParagraphSeparatorCommand::doApply()
     if (!startBlock
         || !startBlock->nonShadowBoundaryParentNode()
         || isTableCell(startBlock.get())
-        || startBlock->hasTagName(formTag)
+        || isHTMLFormElement(*startBlock)
         // FIXME: If the node is hidden, we don't have a canonical position so we will do the wrong thing for tables and <hr>. https://bugs.webkit.org/show_bug.cgi?id=40342
         || (!canonicalPos.isNull() && isRenderedTable(canonicalPos.deprecatedNode()))
-        || (!canonicalPos.isNull() && canonicalPos.deprecatedNode()->hasTagName(hrTag))) {
+        || (!canonicalPos.isNull() && isHTMLHRElement(*canonicalPos.deprecatedNode()))) {
         applyCommandToComposite(InsertLineBreakCommand::create(document()));
         return;
     }
@@ -240,7 +240,7 @@ void InsertParagraphSeparatorCommand::doApply()
                 // Most of the time we want to stay at the nesting level of the startBlock (e.g., when nesting within lists). However,
                 // for div nodes, this can result in nested div tags that are hard to break out of.
                 Element* siblingNode = startBlock.get();
-                if (blockToInsert->hasTagName(divTag))
+                if (isHTMLDivElement(*blockToInsert))
                     siblingNode = highestVisuallyEquivalentDivBelowRoot(startBlock.get());
                 insertNodeAfter(blockToInsert, siblingNode);
             }
@@ -280,7 +280,7 @@ void InsertParagraphSeparatorCommand::doApply()
             refNode = startBlock->firstChild();
         }
         else if (insertionPosition.deprecatedNode() == startBlock && nestNewBlock) {
-            refNode = startBlock->childNode(insertionPosition.deprecatedEditingOffset());
+            refNode = startBlock->traverseToChildAt(insertionPosition.deprecatedEditingOffset());
             ASSERT(refNode); // must be true or we'd be in the end of block case
         } else
             refNode = insertionPosition.deprecatedNode();
@@ -313,7 +313,7 @@ void InsertParagraphSeparatorCommand::doApply()
     if (isStartOfParagraph(visiblePos)) {
         RefPtr<Element> br = createBreakElement(document());
         insertNodeAt(br.get(), insertionPosition);
-        insertionPosition = positionInParentAfterNode(br.get());
+        insertionPosition = positionInParentAfterNode(*br);
         // If the insertion point is a break element, there is nothing else
         // we need to do.
         if (visiblePos.deepEquivalent().anchorNode()->renderer()->isBR()) {
@@ -400,7 +400,7 @@ void InsertParagraphSeparatorCommand::doApply()
             splitTreeToNode(splitTo, startBlock.get());
 
             for (n = startBlock->firstChild(); n; n = n->nextSibling()) {
-                VisiblePosition beforeNodePosition = positionBeforeNode(n);
+                VisiblePosition beforeNodePosition(positionBeforeNode(n));
                 if (!beforeNodePosition.isNull() && comparePositions(VisiblePosition(insertionPosition), beforeNodePosition) <= 0)
                     break;
             }

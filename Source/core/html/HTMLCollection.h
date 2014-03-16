@@ -24,7 +24,8 @@
 #ifndef HTMLCollection_h
 #define HTMLCollection_h
 
-#include "core/dom/LiveNodeList.h"
+#include "core/dom/LiveNodeListBase.h"
+#include "core/html/CollectionIndexCache.h"
 #include "core/html/CollectionType.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
@@ -39,7 +40,7 @@ public:
         DoesNotOverrideItemAfter,
     };
 
-    static PassRefPtr<HTMLCollection> create(ContainerNode* base, CollectionType);
+    static PassRefPtr<HTMLCollection> create(ContainerNode& base, CollectionType);
     virtual ~HTMLCollection();
     virtual void invalidateCache(Document* oldDocument = 0) const OVERRIDE;
 
@@ -62,7 +63,7 @@ public:
     Element* traverseForwardToOffset(unsigned offset, Element& currentElement, unsigned& currentOffset, const ContainerNode& root) const;
 
 protected:
-    HTMLCollection(ContainerNode* base, CollectionType, ItemAfterOverrideType);
+    HTMLCollection(ContainerNode& base, CollectionType, ItemAfterOverrideType);
 
     bool overridesItemAfter() const { return m_overridesItemAfter; }
     virtual Element* virtualItemAfter(Element*) const;

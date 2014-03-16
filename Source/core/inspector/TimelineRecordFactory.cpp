@@ -131,6 +131,13 @@ PassRefPtr<JSONObject> TimelineRecordFactory::createEvaluateScriptData(const Str
     return data.release();
 }
 
+PassRefPtr<JSONObject> TimelineRecordFactory::createConsoleTimeData(const String& message)
+{
+    RefPtr<JSONObject> data = JSONObject::create();
+    data->setString("message", message);
+    return data.release();
+}
+
 PassRefPtr<JSONObject> TimelineRecordFactory::createTimeStampData(const String& message)
 {
     RefPtr<JSONObject> data = JSONObject::create();
@@ -258,6 +265,13 @@ PassRefPtr<JSONObject> TimelineRecordFactory::createLayerData(long long rootNode
     return createNodeData(rootNodeId);
 }
 
+PassRefPtr<JSONObject> TimelineRecordFactory::createLayerTreeData(PassRefPtr<JSONValue> layerTree)
+{
+    RefPtr<JSONObject> data = JSONObject::create();
+    data->setValue("layerTree", layerTree);
+    return data.release();
+}
+
 void TimelineRecordFactory::setNodeData(JSONObject* data, long long nodeId)
 {
     if (nodeId)
@@ -301,6 +315,13 @@ void TimelineRecordFactory::setImageDetails(JSONObject* data, long long imageEle
         data->setNumber("elementId", imageElementId);
     if (!url.isEmpty())
         data->setString("url", url);
+}
+
+PassRefPtr<JSONObject> TimelineRecordFactory::createEmbedderCallbackData(const String& callbackName)
+{
+    RefPtr<JSONObject> data = JSONObject::create();
+    data->setString("callbackName", callbackName);
+    return data.release();
 }
 
 } // namespace WebCore

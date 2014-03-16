@@ -34,7 +34,7 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-HTMLNameCollection::HTMLNameCollection(ContainerNode* document, CollectionType type, const AtomicString& name)
+HTMLNameCollection::HTMLNameCollection(ContainerNode& document, CollectionType type, const AtomicString& name)
     : HTMLCollection(document, type, OverridesItemAfter)
     , m_name(name)
 {
@@ -42,11 +42,10 @@ HTMLNameCollection::HTMLNameCollection(ContainerNode* document, CollectionType t
 
 HTMLNameCollection::~HTMLNameCollection()
 {
-    ASSERT(ownerNode());
-    ASSERT(ownerNode()->isDocumentNode());
+    ASSERT(ownerNode().isDocumentNode());
     ASSERT(type() == WindowNamedItems || type() == DocumentNamedItems);
 
-    ownerNode()->nodeLists()->removeCache(this, type(), m_name);
+    ownerNode().nodeLists()->removeCache(this, type(), m_name);
 }
 
 Element* HTMLNameCollection::virtualItemAfter(Element* previous) const
@@ -55,20 +54,20 @@ Element* HTMLNameCollection::virtualItemAfter(Element* previous) const
 
     Element* current;
     if (!previous)
-        current = ElementTraversal::firstWithin(*ownerNode());
+        current = ElementTraversal::firstWithin(ownerNode());
     else
-        current = ElementTraversal::next(*previous, ownerNode());
+        current = ElementTraversal::next(*previous, &ownerNode());
 
-    for (; current; current = ElementTraversal::next(*current, ownerNode())) {
+    for (; current; current = ElementTraversal::next(*current, &ownerNode())) {
         switch (type()) {
         case WindowNamedItems:
             // find only images, forms, applets, embeds and objects by name,
             // but anything by id
-            if (current->hasTagName(imgTag)
-                || current->hasTagName(formTag)
-                || current->hasTagName(appletTag)
-                || current->hasTagName(embedTag)
-                || current->hasTagName(objectTag)) {
+            if (isHTMLImageElement(*current)
+                || isHTMLFormElement(*current)
+                || isHTMLAppletElement(*current)
+                || isHTMLEmbedElement(*current)
+                || isHTMLObjectElement(*current)) {
                 if (current->getNameAttribute() == m_name)
                     return current;
             }
@@ -79,16 +78,16 @@ Element* HTMLNameCollection::virtualItemAfter(Element* previous) const
             // find images, forms, applets, embeds, objects and iframes by name,
             // applets and object by id, and images by id but only if they have
             // a name attribute (this very strange rule matches IE)
-            if (current->hasTagName(formTag)
-                || current->hasTagName(iframeTag)
-                || (current->hasTagName(embedTag) && toHTMLEmbedElement(current)->isExposed())) {
+            if (isHTMLFormElement(*current)
+                || isHTMLIFrameElement(*current)
+                || (isHTMLEmbedElement(*current) && toHTMLEmbedElement(*current).isExposed())) {
                 if (current->getNameAttribute() == m_name)
                     return current;
-            } else if (current->hasTagName(appletTag)
-                || (current->hasTagName(objectTag) && toHTMLObjectElement(current)->isExposed())) {
+            } else if (isHTMLAppletElement(*current)
+                || (isHTMLObjectElement(*current) && toHTMLObjectElement(*current).isExposed())) {
                 if (current->getNameAttribute() == m_name || current->getIdAttribute() == m_name)
                     return current;
-            } else if (current->hasTagName(imgTag)) {
+            } else if (isHTMLImageElement(*current)) {
                 if (current->getNameAttribute() == m_name || (current->getIdAttribute() == m_name && current->hasName()))
                     return current;
             }

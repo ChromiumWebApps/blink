@@ -49,6 +49,9 @@ const float piOverTwoFloat = static_cast<float>(M_PI_2);
 const double piOverFourDouble = M_PI_4;
 const float piOverFourFloat = static_cast<float>(M_PI_4);
 
+const double twoPiDouble = piDouble * 2.0;
+const float twoPiFloat = piFloat * 2.0f;
+
 #if OS(MACOSX)
 
 // Work around a bug in the Mac OS X libc where ceil(-0.1) return +0.
@@ -113,7 +116,12 @@ inline float log2f(float num)
 }
 #endif
 
-#if COMPILER(MSVC) && (_MSC_VER < 1800)
+#if COMPILER(MSVC)
+
+// VS2013 has most of the math functions now, but we still need to work
+// around various differences in behavior of Inf.
+
+#if _MSC_VER < 1800
 
 namespace std {
 
@@ -128,6 +136,8 @@ inline double nextafter(double x, double y) { return _nextafter(x, y); }
 inline float nextafterf(float x, float y) { return x > y ? x - FLT_EPSILON : x + FLT_EPSILON; }
 
 inline double copysign(double x, double y) { return _copysign(x, y); }
+
+#endif // _MSC_VER
 
 // Work around a bug in Win, where atan2(+-infinity, +-infinity) yields NaN instead of specific values.
 inline double wtf_atan2(double x, double y)
@@ -162,6 +172,8 @@ inline double wtf_pow(double x, double y) { return y == 0 ? 1 : pow(x, y); }
 #define fmod(x, y) wtf_fmod(x, y)
 #define pow(x, y) wtf_pow(x, y)
 
+#if _MSC_VER < 1800
+
 // MSVC's math functions do not bring lrint.
 inline long int lrint(double flt)
 {
@@ -183,6 +195,8 @@ inline long int lrint(double flt)
 #endif
     return static_cast<long int>(intgr);
 }
+
+#endif // _MSC_VER
 
 #endif // COMPILER(MSVC)
 

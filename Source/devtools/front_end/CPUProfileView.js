@@ -25,12 +25,12 @@
 
 /**
  * @constructor
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @param {!WebInspector.CPUProfileHeader} profileHeader
  */
 WebInspector.CPUProfileView = function(profileHeader)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
 
     this.element.classList.add("cpu-profile-view");
 
@@ -106,17 +106,6 @@ WebInspector.CPUProfileView.prototype = {
         if (!this._flameChart)
             return;
         this._flameChart.selectRange(timeLeft, timeRight);
-    },
-
-    _revealProfilerNode: function(event)
-    {
-        var current = this.profileDataGridTree.children[0];
-
-        while (current && current.profileNode !== event.data)
-            current = current.traverseNextNode(false, null, false);
-
-        if (current)
-            current.revealAndSelect();
     },
 
     /**
@@ -397,8 +386,8 @@ WebInspector.CPUProfileView.prototype = {
     {
         if (this._flameChart)
             return;
-        var dataProvider = new WebInspector.CPUFlameChartDataProvider(this);
-        this._flameChart = new WebInspector.FlameChart(dataProvider);
+        this._dataProvider = new WebInspector.CPUFlameChartDataProvider(this);
+        this._flameChart = new WebInspector.FlameChart(this._dataProvider);
         this._flameChart.addEventListener(WebInspector.FlameChart.Events.EntrySelected, this._onEntrySelected.bind(this));
     },
 
@@ -407,7 +396,8 @@ WebInspector.CPUProfileView.prototype = {
      */
     _onEntrySelected: function(event)
     {
-        var node = event.data;
+        var entryIndex = event.data;
+        var node = this._dataProvider._entryNodes[entryIndex];
         if (!node || !node.scriptId)
             return;
         var script = WebInspector.debuggerModel.scriptForId(node.scriptId)
@@ -427,7 +417,7 @@ WebInspector.CPUProfileView.prototype = {
             this.dataGrid.detach();
             this._flameChart.show(this.element);
             this._viewType.set(WebInspector.CPUProfileView._TypeFlame);
-            this._statusBarButtonsElement.enableStyleClass("hidden", true);
+            this._statusBarButtonsElement.classList.toggle("hidden", true);
             return;
         case WebInspector.CPUProfileView._TypeTree:
             this.profileDataGridTree = this._getTopDownProfileDataGridTree();
@@ -441,7 +431,7 @@ WebInspector.CPUProfileView.prototype = {
             break;
         }
 
-        this._statusBarButtonsElement.enableStyleClass("hidden", false);
+        this._statusBarButtonsElement.classList.toggle("hidden", false);
 
         if (this._flameChart)
             this._flameChart.detach();
@@ -626,7 +616,7 @@ WebInspector.CPUProfileView.prototype = {
         }
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**
@@ -700,8 +690,7 @@ WebInspector.CPUProfileType.prototype = {
             resolvedTitle = WebInspector.UIString("Profile %s", this._nextAnonymousConsoleProfileNumber++);
             this._anonymousConsoleProfileIdToTitle[id] = resolvedTitle;
         }
-        var messageElement = document.createTextNode(WebInspector.UIString("Profile '%s' started.", resolvedTitle));
-        this._addMessageToConsole(WebInspector.ConsoleMessage.MessageType.Profile, scriptLocation, messageElement);
+        this._addMessageToConsole(WebInspector.ConsoleMessage.MessageType.Profile, scriptLocation, WebInspector.UIString("Profile '%s' started.", resolvedTitle));
     },
 
     /**
@@ -721,46 +710,36 @@ WebInspector.CPUProfileType.prototype = {
         var profile = new WebInspector.CPUProfileHeader(this, resolvedTitle);
         profile.setProtocolProfile(cpuProfile);
         this.addProfile(profile);
-
-        var messageElement = document.createElement("span");
-        messageElement.createTextChild("Profile '");
-        var a = messageElement.createChild("span", "link");
-        a.title = resolvedTitle;
-        a.textContent = resolvedTitle;
-        a.addEventListener("click", onClick.bind(this, profile.uid), true);
-        function onClick(profileUid, event)
-        {
-            var profile = WebInspector.ProfileTypeRegistry.instance.cpuProfileType.getProfile(profileUid);
-            if (profile)
-                WebInspector.showPanel("profiles").showProfile(profile);
-        }
-        messageElement.createTextChild("' finished.");
-
-        this._addMessageToConsole(WebInspector.ConsoleMessage.MessageType.ProfileEnd, scriptLocation, messageElement);
+        this._addMessageToConsole(WebInspector.ConsoleMessage.MessageType.ProfileEnd, scriptLocation, WebInspector.UIString("Profile '%s' finished.", resolvedTitle));
     },
 
     /**
      * @param {string} type
      * @param {!DebuggerAgent.Location} scriptLocation
-     * @param {!Node} messageElement
+     * @param {string} messageText
      */
-    _addMessageToConsole: function(type, scriptLocation, messageElement)
+    _addMessageToConsole: function(type, scriptLocation, messageText)
     {
-        var rawLocation = new WebInspector.DebuggerModel.Location(scriptLocation.scriptId, scriptLocation.lineNumber, scriptLocation.columnNumber || 0);
-        var uiLocation = WebInspector.debuggerModel.rawLocationToUILocation(rawLocation);
-        var url;
-        if (uiLocation)
-            url = uiLocation.url();
-        var message = WebInspector.ConsoleMessage.create(
+        var script = WebInspector.debuggerModel.scriptForId(scriptLocation.scriptId);
+        var message = new WebInspector.ConsoleMessage(
             WebInspector.ConsoleMessage.MessageSource.ConsoleAPI,
             WebInspector.ConsoleMessage.MessageLevel.Debug,
-            "",
+            messageText,
             type,
-            url || undefined,
-            scriptLocation.lineNumber,
-            scriptLocation.columnNumber);
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            [{
+                functionName: "",
+                scriptId: scriptLocation.scriptId,
+                url: script ? script.contentURL() : "",
+                lineNumber: scriptLocation.lineNumber,
+                columnNumber: scriptLocation.columnNumber || 0
+            }]);
 
-        message.setMessageElement(messageElement);
         WebInspector.console.addMessage(message);
     },
 
@@ -847,7 +826,7 @@ WebInspector.CPUProfileHeader.prototype = {
     onTransferStarted: function()
     {
         this._jsonifiedProfile = "";
-        this.updateStatus(WebInspector.UIString("Loading\u2026 %s", Number.bytesToString(this._jsonifiedProfile.length)));
+        this.updateStatus(WebInspector.UIString("Loading\u2026 %s", Number.bytesToString(this._jsonifiedProfile.length)), true);
     },
 
     /**
@@ -860,10 +839,10 @@ WebInspector.CPUProfileHeader.prototype = {
 
     onTransferFinished: function()
     {
-        this.updateStatus(WebInspector.UIString("Parsing\u2026"));
+        this.updateStatus(WebInspector.UIString("Parsing\u2026"), true);
         this._profile = JSON.parse(this._jsonifiedProfile);
         this._jsonifiedProfile = null;
-        this.updateStatus(WebInspector.UIString("Loaded"));
+        this.updateStatus(WebInspector.UIString("Loaded"), false);
 
         if (this._profileType._profileBeingRecorded === this)
             this._profileType._profileBeingRecorded = null;
@@ -955,7 +934,7 @@ WebInspector.CPUProfileHeader.prototype = {
                     fileOutputStream.close();
             }
             if (this._failedToCreateTempFile) {
-                WebInspector.log("Failed to open temp file with heap snapshot",
+                WebInspector.console.log("Failed to open temp file with heap snapshot",
                                  WebInspector.ConsoleMessage.MessageLevel.Error);
                 fileOutputStream.close();
             } else if (this._tempFile) {
@@ -1059,9 +1038,9 @@ WebInspector.CPUProfileView.colorGenerator = function()
 {
     if (!WebInspector.CPUProfileView._colorGenerator) {
         var colorGenerator = new WebInspector.FlameChart.ColorGenerator();
-        colorGenerator.colorPairForID("(idle)::0", 50);
-        colorGenerator.colorPairForID("(program)::0", 50);
-        colorGenerator.colorPairForID("(garbage collector)::0", 50);
+        colorGenerator.colorForID("(idle)::0", 50);
+        colorGenerator.colorForID("(program)::0", 50);
+        colorGenerator.colorForID("(garbage collector)::0", 50);
         WebInspector.CPUProfileView._colorGenerator = colorGenerator;
     }
     return WebInspector.CPUProfileView._colorGenerator;
@@ -1070,6 +1049,7 @@ WebInspector.CPUProfileView.colorGenerator = function()
 /**
  * @constructor
  * @implements {WebInspector.FlameChartDataProvider}
+ * @param {!WebInspector.CPUProfileView} cpuProfileView
  */
 WebInspector.CPUFlameChartDataProvider = function(cpuProfileView)
 {
@@ -1080,19 +1060,69 @@ WebInspector.CPUFlameChartDataProvider = function(cpuProfileView)
 
 WebInspector.CPUFlameChartDataProvider.prototype = {
     /**
+     * @return {number}
+     */
+    barHeight: function()
+    {
+        return 15;
+    },
+
+    /**
+     * @return {number}
+     */
+    textBaseline: function()
+    {
+        return 4;
+    },
+
+    /**
+     * @return {number}
+     */
+    textPadding: function()
+    {
+        return 2;
+    },
+
+    /**
+     * @param {number} startTime
+     * @param {number} endTime
+     * @return {?Array.<number>}
+     */
+    dividerOffsets: function(startTime, endTime)
+    {
+        return null;
+    },
+
+    /**
+     * @return {number}
+     */
+    zeroTime: function()
+    {
+        return 0;
+    },
+
+    /**
+     * @return {number}
+     */
+    totalTime: function()
+    {
+        return this._cpuProfileView.profileHead.totalTime;
+    },
+
+    /**
+     * @return {number}
+     */
+    maxStackDepth: function()
+    {
+        return this._maxStackDepth;
+    },
+
+    /**
      * @return {?WebInspector.FlameChart.TimelineData}
      */
     timelineData: function()
     {
         return this._timelineData || this._calculateTimelineData();
-    },
-
-    /**
-     * @return {!WebInspector.FlameChart.ColorGenerator}
-     */
-    colorGenerator: function()
-    {
-        return this._colorGenerator;
     },
 
     /**
@@ -1113,21 +1143,18 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
 
         var openIntervals = [];
         var stackTrace = [];
-        var colorEntryIndexes = [];
         var maxDepth = 5; // minimum stack depth for the case when we see no activity.
         var depth = 0;
 
         /**
          * @constructor
-         * @param {!Object} colorPair
-         * @param {!number} depth
-         * @param {!number} duration
-         * @param {!number} startTime
+         * @param {number} depth
+         * @param {number} duration
+         * @param {number} startTime
          * @param {!Object} node
          */
-        function ChartEntry(colorPair, depth, duration, startTime, node)
+        function ChartEntry(depth, duration, startTime, node)
         {
-            this.colorPair = colorPair;
             this.depth = depth;
             this.duration = duration;
             this.startTime = startTime;
@@ -1178,15 +1205,9 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
             }
 
             var colorGenerator = this._colorGenerator;
+            var color = "";
             while (node) {
-                var colorPair = colorGenerator.colorPairForID(node.functionName + ":" + node.url + ":" + node.lineNumber);
-                var indexesForColor = colorEntryIndexes[colorPair.index];
-                if (!indexesForColor)
-                    indexesForColor = colorEntryIndexes[colorPair.index] = [];
-
-                var entry = new ChartEntry(colorPair, depth, samplingInterval, sampleIndex * samplingInterval, node);
-                indexesForColor.push(entries.length);
-                entries.push(entry);
+                entries.push(new ChartEntry(depth, samplingInterval, sampleIndex * samplingInterval, node));
                 openIntervals.push({node: node, index: index});
                 ++index;
 
@@ -1197,40 +1218,30 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
         }
 
         var entryNodes = new Array(entries.length);
-        var entryColorIndexes = new Uint16Array(entries.length);
         var entryLevels = new Uint8Array(entries.length);
         var entryTotalTimes = new Float32Array(entries.length);
         var entrySelfTimes = new Float32Array(entries.length);
         var entryOffsets = new Float32Array(entries.length);
-        var entryTitles = new Array(entries.length);
-        var entryDeoptFlags = new Uint8Array(entries.length);
 
         for (var i = 0; i < entries.length; ++i) {
             var entry = entries[i];
             entryNodes[i] = entry.node;
-            entryColorIndexes[i] = colorPair.index;
             entryLevels[i] = entry.depth;
             entryTotalTimes[i] = entry.duration;
-            entrySelfTimes[i] = entry.selfTime;
             entryOffsets[i] = entry.startTime;
-            entryTitles[i] = entry.node.functionName;
-            var reason = entry.node.deoptReason;
-            entryDeoptFlags[i] = (reason && reason !== "no reason");
+            entrySelfTimes[i] = entry.selfTime;
         }
 
+        this._maxStackDepth = Math.max(maxDepth, depth);
+
         this._timelineData = {
-            maxStackDepth: Math.max(maxDepth, depth),
-            totalTime: this._cpuProfileView.profileHead.totalTime,
-            entryNodes: entryNodes,
-            entryColorIndexes: entryColorIndexes,
             entryLevels: entryLevels,
             entryTotalTimes: entryTotalTimes,
-            entrySelfTimes: entrySelfTimes,
             entryOffsets: entryOffsets,
-            colorEntryIndexes: colorEntryIndexes,
-            entryTitles: entryTitles,
-            entryDeoptFlags: entryDeoptFlags
         };
+
+        this._entryNodes = entryNodes;
+        this._entrySelfTimes = entrySelfTimes;
 
         return /** @type {!WebInspector.FlameChart.TimelineData} */ (this._timelineData);
     },
@@ -1255,7 +1266,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
     prepareHighlightedEntryInfo: function(entryIndex)
     {
         var timelineData = this._timelineData;
-        var node = timelineData.entryNodes[entryIndex];
+        var node = this._entryNodes[entryIndex];
         if (!node)
             return null;
 
@@ -1268,8 +1279,8 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
             entryInfo.push(row);
         }
 
-        pushEntryInfoRow(WebInspector.UIString("Name"), timelineData.entryTitles[entryIndex]);
-        var selfTime = this._millisecondsToString(timelineData.entrySelfTimes[entryIndex]);
+        pushEntryInfoRow(WebInspector.UIString("Name"), node.functionName);
+        var selfTime = this._millisecondsToString(this._entrySelfTimes[entryIndex]);
         var totalTime = this._millisecondsToString(timelineData.entryTotalTimes[entryIndex]);
         pushEntryInfoRow(WebInspector.UIString("Self time"), selfTime);
         pushEntryInfoRow(WebInspector.UIString("Total time"), totalTime);
@@ -1289,16 +1300,96 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
      */
     canJumpToEntry: function(entryIndex)
     {
-        return this._timelineData.entryNodes[entryIndex].scriptId !== "0";
+        return this._entryNodes[entryIndex].scriptId !== "0";
     },
 
     /**
      * @param {number} entryIndex
-     * @return {!Object}
+     * @return {?string}
      */
-    entryData: function(entryIndex)
+    entryTitle: function(entryIndex)
     {
-        return this._timelineData.entryNodes[entryIndex];
+        var node = this._entryNodes[entryIndex];
+        return node.functionName;
+    },
+
+    /**
+     * @param {number} entryIndex
+     * @return {?string}
+     */
+    entryFont: function(entryIndex)
+    {
+        if (!this._font) {
+            this._font = (this.barHeight() - 4) + "px " + WebInspector.fontFamily();
+            this._boldFont = "bold " + this._font;
+        }
+        var node = this._entryNodes[entryIndex];
+        var reason = node.deoptReason;
+        return (reason && reason !== "no reason") ? this._boldFont : this._font;
+    },
+
+    /**
+     * @param {number} entryIndex
+     * @return {!string}
+     */
+    entryColor: function(entryIndex)
+    {
+        var node = this._entryNodes[entryIndex];
+        return this._colorGenerator.colorForID(node.functionName + ":" + node.url + ":" + node.lineNumber);
+    },
+
+    /**
+     * @param {number} entryIndex
+     * @param {!CanvasRenderingContext2D} context
+     * @param {?string} text
+     * @param {number} barX
+     * @param {number} barY
+     * @param {number} barWidth
+     * @param {number} barHeight
+     * @param {function(number):number} offsetToPosition
+     * @return {boolean}
+     */
+    decorateEntry: function(entryIndex, context, text, barX, barY, barWidth, barHeight, offsetToPosition)
+    {
+        return false;
+    },
+
+    /**
+     * @param {number} entryIndex
+     * @return {boolean}
+     */
+    forceDecoration: function(entryIndex)
+    {
+        return false;
+    },
+
+    /**
+     * @param {number} entryIndex
+     * @return {!{startTimeOffset: number, endTimeOffset: number}}
+     */
+    highlightTimeRange: function(entryIndex)
+    {
+        var startTimeOffset = this._timelineData.entryOffsets[entryIndex];
+        return {
+            startTimeOffset: startTimeOffset,
+            endTimeOffset: startTimeOffset + this._timelineData.entryTotalTimes[entryIndex]
+        };
+    },
+
+    /**
+     * @return {number}
+     */
+    paddingLeft: function()
+    {
+        return 15;
+    },
+
+    /**
+     * @param {number} entryIndex
+     * @return {!string}
+     */
+    textColor: function(entryIndex)
+    {
+        return "#333";
     }
 }
-

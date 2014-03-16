@@ -21,48 +21,18 @@
 #define SVGTextMetricsBuilder_h
 
 #include "core/rendering/svg/SVGTextLayoutAttributes.h"
-#include "core/rendering/svg/SVGTextMetrics.h"
-#include "platform/fonts/WidthIterator.h"
-#include "platform/text/TextRun.h"
-#include "wtf/Vector.h"
 
 namespace WebCore {
 
-class RenderObject;
 class RenderSVGInlineText;
 class RenderSVGText;
-struct MeasureTextData;
 
-class SVGTextMetricsBuilder {
-    WTF_MAKE_NONCOPYABLE(SVGTextMetricsBuilder);
-public:
-    SVGTextMetricsBuilder();
-    void measureTextRenderer(RenderSVGInlineText*);
-    void buildMetricsAndLayoutAttributes(RenderSVGText*, RenderSVGInlineText* stopAtLeaf, SVGCharacterDataMap& allCharactersMap);
+namespace SVGTextMetricsBuilder {
 
-private:
-    bool advance();
-    void advanceSimpleText();
-    void advanceComplexText();
-    bool currentCharacterStartsSurrogatePair() const;
+void measureTextRenderer(RenderSVGInlineText*);
+void buildMetricsAndLayoutAttributes(RenderSVGText*, RenderSVGInlineText* stopAtLeaf, SVGCharacterDataMap& allCharactersMap);
 
-    void initializeMeasurementWithTextRenderer(RenderSVGInlineText*);
-    void walkTree(RenderObject*, RenderSVGInlineText* stopAtLeaf, MeasureTextData*);
-    void measureTextRenderer(RenderSVGInlineText*, MeasureTextData*);
-
-    RenderSVGInlineText* m_text;
-    TextRun m_run;
-    unsigned m_textPosition;
-    bool m_isComplexText;
-    SVGTextMetrics m_currentMetrics;
-    float m_totalWidth;
-
-    // Simple text only.
-    OwnPtr<WidthIterator> m_simpleWidthIterator;
-
-    // Complex text only.
-    SVGTextMetrics m_complexStartToCurrentMetrics;
-};
+} // namespace SVGTextMetricsBuilder
 
 } // namespace WebCore
 

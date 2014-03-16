@@ -44,7 +44,7 @@ class PlatformTouchEvent;
 class PlatformWheelEvent;
 
 // A FramelessScrollView is a ScrollView that can be used to render custom
-// content, which does not have an associated Frame.
+// content, which does not have an associated LocalFrame.
 //
 // NOTE: It may be better to just develop a custom subclass of Widget that
 // can have scroll bars for this instead of trying to reuse ScrollView.
@@ -69,7 +69,6 @@ public:
     // ScrollableArea public methods:
     virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&) OVERRIDE;
     virtual bool isActive() const OVERRIDE;
-    virtual ScrollableArea* enclosingScrollableArea() const OVERRIDE;
     virtual bool scrollbarsCanBeActive() const OVERRIDE;
     virtual IntRect scrollableAreaBoundingBox() const OVERRIDE;
 

@@ -40,6 +40,7 @@
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLInputElement.h"
@@ -48,7 +49,6 @@
 #include "core/html/track/vtt/VTTElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/page/FocusController.h"
-#include "core/frame/Frame.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderScrollbar.h"
 #include "core/rendering/style/RenderStyle.h"
@@ -69,10 +69,11 @@ SelectorChecker::SelectorChecker(Document& document, Mode mode)
 static bool matchesCustomPseudoElement(const Element* element, const CSSSelector& selector)
 {
     ShadowRoot* root = element->containingShadowRoot();
-    if (!root || root->type() != ShadowRoot::UserAgentShadowRoot)
+    if (!root)
         return false;
-
     if (element->shadowPseudoId() != selector.value())
+        return false;
+    if (selector.pseudoType() == CSSSelector::PseudoWebKitCustomElement && root->type() != ShadowRoot::UserAgentShadowRoot)
         return false;
 
     return true;
@@ -136,9 +137,6 @@ SelectorChecker::Match SelectorChecker::match(const SelectorCheckingContext& con
     if (context.selector->m_match == CSSSelector::PseudoElement) {
         if (context.selector->isCustomPseudoElement()) {
             if (!matchesCustomPseudoElement(context.element, *context.selector))
-                return SelectorFailsLocally;
-        } else if (context.selector->isContentPseudoElement()) {
-            if (!context.element->isInShadowTree() || !context.element->isInsertionPoint())
                 return SelectorFailsLocally;
         } else {
             if ((!context.elementStyle && m_mode == ResolvingStyle) || m_mode == QueryingRules)
@@ -262,6 +260,10 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
             nextContext.elementStyle = 0;
             return match(nextContext, siblingTraversalStrategy, result);
         }
+
+    case CSSSelector::ShadowContent:
+        return matchForShadowDistributed(context.element, siblingTraversalStrategy, nextContext, result);
+
     case CSSSelector::DirectAdjacent:
         if (m_mode == ResolvingStyle) {
             if (Node* parent = context.element->parentElementOrShadowRoot())
@@ -290,7 +292,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
         return SelectorFailsAllSiblings;
 
     case CSSSelector::ShadowPseudo:
-    case CSSSelector::ChildTree:
+    case CSSSelector::Shadow:
         {
             // If we're in the same tree-scope as the scoping element, then following a shadow descendant combinator would escape that and thus the scope.
             if (context.scope && context.scope->treeScope() == context.element->treeScope() && (context.behaviorAtBoundary & BoundaryBehaviorMask) != StaysWithinTreeScope)
@@ -305,7 +307,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
             return this->match(nextContext, siblingTraversalStrategy, result);
         }
 
-    case CSSSelector::DescendantTree:
+    case CSSSelector::ShadowDeep:
         {
             nextContext.isSubSelector = false;
             nextContext.elementStyle = 0;
@@ -363,9 +365,9 @@ static inline bool containsHTMLSpace(const AtomicString& string)
     return false;
 }
 
-static bool attributeValueMatches(const Attribute* attributeItem, CSSSelector::Match match, const AtomicString& selectorValue, bool caseSensitive)
+static bool attributeValueMatches(const Attribute& attributeItem, CSSSelector::Match match, const AtomicString& selectorValue, bool caseSensitive)
 {
-    const AtomicString& value = attributeItem->value();
+    const AtomicString& value = attributeItem.value();
     if (value.isNull())
         return false;
 
@@ -440,10 +442,11 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
 
     const AtomicString& selectorValue =  selector.value();
 
-    for (size_t i = 0; i < element.attributeCount(); ++i) {
-        const Attribute* attributeItem = element.attributeItem(i);
+    unsigned attributeCount = element.attributeCount();
+    for (size_t i = 0; i < attributeCount; ++i) {
+        const Attribute& attributeItem = element.attributeItem(i);
 
-        if (!attributeItem->matches(selectorAttr))
+        if (!attributeItem.matches(selectorAttr))
             continue;
 
         if (attributeValueMatches(attributeItem, match, selectorValue, true))
@@ -475,7 +478,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
     bool elementIsHostInItsShadowTree = isHostInItsShadowTree(element, context.behaviorAtBoundary, context.scope);
 
     if (selector.m_match == CSSSelector::Tag)
-        return SelectorChecker::tagMatches(element, selector.tagQName(), elementIsHostInItsShadowTree ? MatchingHostInItsShadowTree : MatchingElement);
+        return SelectorChecker::tagMatches(element, selector.tagQName()) && !elementIsHostInItsShadowTree;
 
     if (selector.m_match == CSSSelector::Class)
         return element.hasClass() && element.classNames().contains(selector.value()) && !elementIsHostInItsShadowTree;
@@ -728,7 +731,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoHover:
             // If we're in quirks mode, then hover should never match anchors with no
             // href and *:hover should not match anything. This is important for sites like wsj.com.
-            if (m_strictParsing || context.isSubSelector || (selector.m_match == CSSSelector::Tag && selector.tagQName() != anyQName() && !element.hasTagName(aTag)) || element.isLink()) {
+            if (m_strictParsing || context.isSubSelector || (selector.m_match == CSSSelector::Tag && selector.tagQName() != anyQName() && !isHTMLAnchorElement(element)) || element.isLink()) {
                 if (m_mode == ResolvingStyle) {
                     if (context.elementStyle)
                         context.elementStyle->setAffectedByHover();
@@ -742,7 +745,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoActive:
             // If we're in quirks mode, then :active should never match anchors with no
             // href and *:active should not match anything.
-            if (m_strictParsing || context.isSubSelector || (selector.m_match == CSSSelector::Tag && selector.tagQName() != anyQName() && !element.hasTagName(aTag)) || element.isLink()) {
+            if (m_strictParsing || context.isSubSelector || (selector.m_match == CSSSelector::Tag && selector.tagQName() != anyQName() && !isHTMLAnchorElement(element)) || element.isLink()) {
                 if (m_mode == ResolvingStyle) {
                     if (context.elementStyle)
                         context.elementStyle->setAffectedByActive();
@@ -754,7 +757,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             }
             break;
         case CSSSelector::PseudoEnabled:
-            if (element.isFormControlElement() || element.hasTagName(optionTag) || element.hasTagName(optgroupTag))
+            if (element.isFormControlElement() || isHTMLOptionElement(element) || isHTMLOptGroupElement(element))
                 return !element.isDisabledFormControl();
             break;
         case CSSSelector::PseudoFullPageMedia:
@@ -763,7 +766,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoDefault:
             return element.isDefaultButtonForForm();
         case CSSSelector::PseudoDisabled:
-            if (element.isFormControlElement() || element.hasTagName(optionTag) || element.hasTagName(optgroupTag))
+            if (element.isFormControlElement() || isHTMLOptionElement(element) || isHTMLOptGroupElement(element))
                 return element.isDisabledFormControl();
             break;
         case CSSSelector::PseudoReadOnly:
@@ -782,7 +785,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             return element.willValidate() && !element.isValidFormControlElement();
         case CSSSelector::PseudoChecked:
             {
-                if (element.hasTagName(inputTag)) {
+                if (isHTMLInputElement(element)) {
                     HTMLInputElement& inputElement = toHTMLInputElement(element);
                     // Even though WinIE allows checked and indeterminate to
                     // co-exist, the CSS selector spec says that you can't be
@@ -791,7 +794,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
                     // test for matching the pseudo.
                     if (inputElement.shouldAppearChecked() && !inputElement.shouldAppearIndeterminate())
                         return true;
-                } else if (element.hasTagName(optionTag) && toHTMLOptionElement(element).selected())
+                } else if (isHTMLOptionElement(element) && toHTMLOptionElement(element).selected())
                     return true;
                 break;
             }

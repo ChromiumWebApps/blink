@@ -45,7 +45,6 @@ HistoryItem::HistoryItem()
     : m_pageScaleFactor(0)
     , m_itemSequenceNumber(generateSequenceNumber())
     , m_documentSequenceNumber(generateSequenceNumber())
-    , m_targetFrameID(0)
 {
 }
 
@@ -56,7 +55,6 @@ HistoryItem::~HistoryItem()
 inline HistoryItem::HistoryItem(const HistoryItem& item)
     : RefCounted<HistoryItem>()
     , m_urlString(item.m_urlString)
-    , m_originalURLString(item.m_originalURLString)
     , m_referrer(item.m_referrer)
     , m_target(item.m_target)
     , m_scrollPoint(item.m_scrollPoint)
@@ -64,7 +62,6 @@ inline HistoryItem::HistoryItem(const HistoryItem& item)
     , m_documentState(item.m_documentState)
     , m_itemSequenceNumber(item.m_itemSequenceNumber)
     , m_documentSequenceNumber(item.m_documentSequenceNumber)
-    , m_targetFrameID(item.m_targetFrameID)
     , m_stateObject(item.m_stateObject)
     , m_formContentType(item.m_formContentType)
 {
@@ -93,21 +90,9 @@ const String& HistoryItem::urlString() const
     return m_urlString;
 }
 
-// The first URL we loaded to get to where this history item points. Includes both client
-// and server redirects.
-const String& HistoryItem::originalURLString() const
-{
-    return m_originalURLString;
-}
-
 KURL HistoryItem::url() const
 {
     return KURL(ParsedURLString, m_urlString);
-}
-
-KURL HistoryItem::originalURL() const
-{
-    return KURL(ParsedURLString, m_originalURLString);
 }
 
 const Referrer& HistoryItem::referrer() const
@@ -130,11 +115,6 @@ void HistoryItem::setURL(const KURL& url)
 {
     setURLString(url.string());
     clearDocumentState();
-}
-
-void HistoryItem::setOriginalURLString(const String& urlString)
-{
-    m_originalURLString = urlString;
 }
 
 void HistoryItem::setReferrer(const Referrer& referrer)

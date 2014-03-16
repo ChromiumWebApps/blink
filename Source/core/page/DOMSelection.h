@@ -33,6 +33,7 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/frame/DOMWindowProperty.h"
+#include "heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -40,16 +41,19 @@
 namespace WebCore {
 
 class ExceptionState;
-class Frame;
+class LocalFrame;
 class Node;
 class Position;
 class Range;
 class TreeScope;
 class VisibleSelection;
 
-class DOMSelection FINAL : public RefCounted<DOMSelection>, public ScriptWrappable, public DOMWindowProperty {
+class DOMSelection FINAL : public RefCountedWillBeGarbageCollectedFinalized<DOMSelection>, public ScriptWrappable, public DOMWindowProperty {
 public:
-    static PassRefPtr<DOMSelection> create(const TreeScope* treeScope) { return adoptRef(new DOMSelection(treeScope)); }
+    static PassRefPtrWillBeRawPtr<DOMSelection> create(const TreeScope* treeScope)
+    {
+        return adoptRefWillBeNoop(new DOMSelection(treeScope));
+    }
 
     void clearTreeScope();
 
@@ -90,6 +94,8 @@ public:
 
     // Microsoft Selection Object API
     void empty();
+
+    void trace(Visitor*) { }
 
 private:
     const TreeScope* m_treeScope;

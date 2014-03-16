@@ -41,12 +41,12 @@
 #include "bindings/v8/WrapperTypeInfo.h"
 #include "core/dom/ExecutionContext.h"
 #include "wtf/HashTraits.h"
-#include "wtf/MainThread.h"
 #include "wtf/StdLibExtras.h"
 
 namespace WebCore {
 
 unsigned DOMWrapperWorld::isolatedWorldCount = 0;
+DOMWrapperWorld* DOMWrapperWorld::worldOfInitializingWindow = 0;
 
 PassRefPtr<DOMWrapperWorld> DOMWrapperWorld::create(int worldId, int extensionGroup)
 {
@@ -58,14 +58,6 @@ DOMWrapperWorld::DOMWrapperWorld(int worldId, int extensionGroup)
     , m_extensionGroup(extensionGroup)
     , m_domDataStore(adoptPtr(new DOMDataStore(isMainWorld())))
 {
-}
-
-DOMWrapperWorld* DOMWrapperWorld::current(v8::Isolate* isolate)
-{
-    v8::Handle<v8::Context> context = isolate->GetCurrentContext();
-    if (context.IsEmpty() || !toDOMWindow(context))
-        return 0;
-    return world(context);
 }
 
 DOMWrapperWorld* DOMWrapperWorld::mainWorld()
@@ -83,7 +75,7 @@ static WorldMap& isolatedWorldMap()
     return map;
 }
 
-void DOMWrapperWorld::getAllWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld> >& worlds)
+void DOMWrapperWorld::allWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld> >& worlds)
 {
     ASSERT(isMainThread());
     worlds.append(mainWorld());
@@ -95,6 +87,8 @@ void DOMWrapperWorld::getAllWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld> >&
 DOMWrapperWorld::~DOMWrapperWorld()
 {
     ASSERT(!isMainWorld());
+
+    dispose();
 
     if (!isIsolatedWorld())
         return;
@@ -112,10 +106,15 @@ DOMWrapperWorld::~DOMWrapperWorld()
     ASSERT(map.size() == isolatedWorldCount);
 }
 
+void DOMWrapperWorld::dispose()
+{
+    m_domDataStore.clear();
+}
+
 #ifndef NDEBUG
 static bool isIsolatedWorldId(int worldId)
 {
-    return worldId != MainWorldId && worldId != WorkerWorldId;
+    return MainWorldId < worldId  && worldId < IsolatedWorldIdLimit;
 }
 #endif
 
@@ -200,31 +199,6 @@ void DOMWrapperWorld::clearIsolatedWorldContentSecurityPolicy(int worldId)
 {
     ASSERT(isIsolatedWorldId(worldId));
     isolatedWorldContentSecurityPolicies().remove(worldId);
-}
-
-typedef HashMap<int, OwnPtr<V8DOMActivityLogger>, WTF::IntHash<int>, WTF::UnsignedWithZeroKeyHashTraits<int> > DOMActivityLoggerMap;
-static DOMActivityLoggerMap& domActivityLoggers()
-{
-    ASSERT(isMainThread());
-    DEFINE_STATIC_LOCAL(DOMActivityLoggerMap, map, ());
-    return map;
-}
-
-void DOMWrapperWorld::setActivityLogger(int worldId, PassOwnPtr<V8DOMActivityLogger> logger)
-{
-    domActivityLoggers().set(worldId, logger);
-}
-
-V8DOMActivityLogger* DOMWrapperWorld::activityLogger(int worldId)
-{
-    DOMActivityLoggerMap& loggers = domActivityLoggers();
-    DOMActivityLoggerMap::iterator it = loggers.find(worldId);
-    return it == loggers.end() ? 0 : it->value.get();
-}
-
-bool DOMWrapperWorld::contextHasCorrectPrototype(v8::Handle<v8::Context> context)
-{
-    return V8WindowShell::contextHasCorrectPrototype(context);
 }
 
 } // namespace WebCore

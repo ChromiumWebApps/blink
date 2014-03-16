@@ -31,13 +31,13 @@
 #include "config.h"
 #include "bindings/v8/custom/V8PromiseCustom.h"
 
-#include <v8.h>
 #include "V8Promise.h"
 #include "bindings/v8/DOMRequestState.h"
 #include "bindings/v8/ScopedPersistent.h"
 #include "bindings/v8/ScriptFunctionCall.h"
 #include "bindings/v8/ScriptState.h"
 #include "bindings/v8/V8Binding.h"
+#include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/V8PerIsolateData.h"
 #include "bindings/v8/V8ScriptRunner.h"
 #include "bindings/v8/WrapperTypeInfo.h"
@@ -45,13 +45,24 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/UseCounter.h"
-#include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorPromiseInstrumentation.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/Task.h"
 #include "wtf/Deque.h"
 #include "wtf/Functional.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassOwnPtr.h"
+#include <v8.h>
+
+#define V8TRYCATCH_VOID_EMPTY(type, var, value)    \
+    type var;                                      \
+    {                                              \
+        v8::TryCatch block;                        \
+        var = (value);                             \
+        if (UNLIKELY(block.HasCaught())) {         \
+            return;                                \
+        }                                          \
+    }
 
 namespace WebCore {
 
@@ -60,15 +71,14 @@ namespace {
 v8::Local<v8::ObjectTemplate> cachedObjectTemplate(void* domTemplateKey, int internalFieldCount, v8::Isolate* isolate)
 {
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    WrapperWorldType currentWorldType = worldType(isolate);
-    v8::Handle<v8::FunctionTemplate> functionDescriptor = data->existingDOMTemplate(currentWorldType, domTemplateKey);
+    v8::Handle<v8::FunctionTemplate> functionDescriptor = data->existingDOMTemplate(domTemplateKey);
     if (!functionDescriptor.IsEmpty())
         return functionDescriptor->InstanceTemplate();
 
     functionDescriptor = v8::FunctionTemplate::New(isolate);
     v8::Local<v8::ObjectTemplate> instanceTemplate = functionDescriptor->InstanceTemplate();
     instanceTemplate->SetInternalFieldCount(internalFieldCount);
-    data->setDOMTemplate(currentWorldType, domTemplateKey, functionDescriptor);
+    data->setDOMTemplate(domTemplateKey, functionDescriptor);
     return instanceTemplate;
 }
 
@@ -141,6 +151,8 @@ v8::Local<v8::Object> promiseAllEnvironment(v8::Handle<v8::Object> promise, v8::
 {
     v8::Local<v8::ObjectTemplate> objectTemplate = promiseAllEnvironmentObjectTemplate(isolate);
     v8::Local<v8::Object> environment = objectTemplate->NewInstance();
+    if (environment.IsEmpty())
+        return v8::Local<v8::Object>();
 
     environment->SetInternalField(V8PromiseCustom::PromiseAllEnvironmentPromiseIndex, promise);
     environment->SetInternalField(V8PromiseCustom::PromiseAllEnvironmentCountdownIndex, countdownWrapper);
@@ -186,6 +198,20 @@ void addToDerived(v8::Handle<v8::Object> internal, v8::Handle<v8::Object> derive
     // Since they are treated as a tuple,
     // we need to guaranteed that the length of these arrays are same.
     ASSERT(fulfillCallbacks->Length() == rejectCallbacks->Length() && rejectCallbacks->Length() == derivedPromises->Length());
+}
+
+// Set a |promise|'s state and result that correspond to the state.
+// |promise| must be a Promise instance.
+void setStateForPromise(v8::Handle<v8::Object> promise, V8PromiseCustom::PromiseState state, v8::Handle<v8::Value> value, v8::Isolate* isolate)
+{
+    ASSERT(!value.IsEmpty());
+    ASSERT(state == V8PromiseCustom::Pending || state == V8PromiseCustom::Fulfilled || state == V8PromiseCustom::Rejected || state == V8PromiseCustom::Following);
+    v8::Local<v8::Object> internal = V8PromiseCustom::getInternal(promise);
+    internal->SetInternalField(V8PromiseCustom::InternalStateIndex, v8::Integer::New(isolate, state));
+    internal->SetInternalField(V8PromiseCustom::InternalResultIndex, value);
+    ExecutionContext* context = currentExecutionContext(isolate);
+    if (InspectorInstrumentation::isPromiseTrackerEnabled(context))
+        InspectorInstrumentation::didUpdatePromiseState(context, ScriptObject(ScriptState::forContext(isolate->GetCurrentContext()), promise), state, ScriptValue(value, isolate));
 }
 
 class TaskPerformScopeForInstrumentation {
@@ -284,7 +310,7 @@ void UpdateDerivedTask::performTask(ExecutionContext* context)
     DOMRequestState::Scope scope(m_requestState);
     v8::Isolate* isolate = m_requestState.isolate();
     v8::Local<v8::Object> originatorValueObject = m_originatorValueObject.newLocal(isolate);
-    v8::Local<v8::Value> coercedAlready = getHiddenValue(isolate, originatorValueObject, "thenableHiddenPromise");
+    v8::Local<v8::Value> coercedAlready = V8HiddenValue::getHiddenValue(isolate, originatorValueObject, V8HiddenValue::thenableHiddenPromise(isolate));
     if (!coercedAlready.IsEmpty() && coercedAlready->IsObject()) {
         ASSERT(V8PromiseCustom::isPromise(coercedAlready.As<v8::Object>(), isolate));
         V8PromiseCustom::updateDerivedFromPromise(m_promise.newLocal(isolate), m_onFulfilled.newLocal(isolate), m_onRejected.newLocal(isolate), coercedAlready.As<v8::Object>(), isolate);
@@ -303,6 +329,9 @@ void UpdateDerivedTask::performTask(ExecutionContext* context)
     if (then->IsFunction()) {
         ASSERT(then->IsObject());
         v8::Local<v8::Object> coerced = V8PromiseCustom::coerceThenable(originatorValueObject, then.As<v8::Function>(), isolate);
+        // If the stack is exhausted coerced can be empty, but it is impossible
+        // because this function is executed on a fresh stack.
+        ASSERT(!coerced.IsEmpty());
         V8PromiseCustom::updateDerivedFromPromise(m_promise.newLocal(isolate), m_onFulfilled.newLocal(isolate), m_onRejected.newLocal(isolate), coerced, isolate);
         return;
     }
@@ -385,17 +414,15 @@ void PromisePropagator::performPropagation(v8::Isolate* isolate)
 
 void PromisePropagator::setValue(v8::Handle<v8::Object> promise, v8::Handle<v8::Value> value, v8::Isolate* isolate)
 {
-    v8::Local<v8::Object> internal = V8PromiseCustom::getInternal(promise);
-    ASSERT(V8PromiseCustom::getState(internal) != V8PromiseCustom::Fulfilled && V8PromiseCustom::getState(internal) != V8PromiseCustom::Rejected);
-    V8PromiseCustom::setState(internal, V8PromiseCustom::Fulfilled, value, isolate);
+    ASSERT(V8PromiseCustom::getState(V8PromiseCustom::getInternal(promise)) != V8PromiseCustom::Fulfilled && V8PromiseCustom::getState(V8PromiseCustom::getInternal(promise)) != V8PromiseCustom::Rejected);
+    setStateForPromise(promise, V8PromiseCustom::Fulfilled, value, isolate);
     propagateToDerived(promise, isolate);
 }
 
 void PromisePropagator::setReason(v8::Handle<v8::Object> promise, v8::Handle<v8::Value> reason, v8::Isolate* isolate)
 {
-    v8::Local<v8::Object> internal = V8PromiseCustom::getInternal(promise);
-    ASSERT(V8PromiseCustom::getState(internal) != V8PromiseCustom::Fulfilled && V8PromiseCustom::getState(internal) != V8PromiseCustom::Rejected);
-    V8PromiseCustom::setState(internal, V8PromiseCustom::Rejected, reason, isolate);
+    ASSERT(V8PromiseCustom::getState(V8PromiseCustom::getInternal(promise)) != V8PromiseCustom::Fulfilled && V8PromiseCustom::getState(V8PromiseCustom::getInternal(promise)) != V8PromiseCustom::Rejected);
+    setStateForPromise(promise, V8PromiseCustom::Rejected, reason, isolate);
     propagateToDerived(promise, isolate);
 }
 
@@ -476,6 +503,11 @@ void PromisePropagator::updateDerivedFromPromise(v8::Handle<v8::Object> derivedP
     } else {
         addToDerived(internal, derivedPromise, onFulfilled, onRejected, isolate);
     }
+    ExecutionContext* context = currentExecutionContext(isolate);
+    if (InspectorInstrumentation::isPromiseTrackerEnabled(context)) {
+        ScriptState* scriptState = ScriptState::forContext(isolate->GetCurrentContext());
+        InspectorInstrumentation::didUpdatePromiseParent(context, ScriptObject(scriptState, derivedPromise), ScriptObject(scriptState, promise));
+    }
 }
 
 } // namespace
@@ -491,11 +523,10 @@ void V8Promise::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& inf
         return;
     }
     v8::Local<v8::Function> init = info[0].As<v8::Function>();
-    v8::Local<v8::Object> promise = V8PromiseCustom::createPromise(info.Holder(), isolate);
-    v8::Handle<v8::Value> argv[] = {
-        createClosure(promiseResolveCallback, promise, isolate),
-        createClosure(promiseRejectCallback, promise, isolate)
-    };
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, promise, V8PromiseCustom::createPromise(info.Holder(), isolate));
+    V8TRYCATCH_VOID_EMPTY(v8::Handle<v8::Value>, resolve, createClosure(promiseResolveCallback, promise, isolate));
+    V8TRYCATCH_VOID_EMPTY(v8::Handle<v8::Value>, reject, createClosure(promiseRejectCallback, promise, isolate));
+    v8::Handle<v8::Value> argv[] = { resolve, reject };
     v8::TryCatch trycatch;
     if (V8ScriptRunner::callFunction(init, currentExecutionContext(isolate), v8::Undefined(isolate), WTF_ARRAY_LENGTH(argv), argv, isolate).IsEmpty()) {
         // An exception is thrown. Reject the promise if its resolved flag is unset.
@@ -513,7 +544,8 @@ void V8Promise::thenMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info
         onFulfilled = info[0].As<v8::Function>();
     if (info.Length() > 1 && info[1]->IsFunction())
         onRejected = info[1].As<v8::Function>();
-    v8SetReturnValue(info, V8PromiseCustom::then(info.Holder(), onFulfilled, onRejected, isolate));
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, newPromise, V8PromiseCustom::then(info.Holder(), onFulfilled, onRejected, isolate));
+    v8SetReturnValue(info, newPromise);
 }
 
 void V8Promise::castMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -525,7 +557,8 @@ void V8Promise::castMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info
     if (info.Length() > 0)
         result = info[0];
 
-    v8SetReturnValue(info, V8PromiseCustom::toPromise(result, isolate));
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, cast, V8PromiseCustom::toPromise(result, isolate));
+    v8SetReturnValue(info, cast);
 }
 
 void V8Promise::catchMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -540,7 +573,8 @@ void V8Promise::catchMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& inf
         }
         onRejected = info[0].As<v8::Function>();
     }
-    v8SetReturnValue(info, V8PromiseCustom::then(info.Holder(), onFulfilled, onRejected, isolate));
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, newPromise, V8PromiseCustom::then(info.Holder(), onFulfilled, onRejected, isolate));
+    v8SetReturnValue(info, newPromise);
 }
 
 void V8Promise::resolveMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -552,7 +586,7 @@ void V8Promise::resolveMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& i
     if (info.Length() > 0)
         result = info[0];
 
-    v8::Local<v8::Object> promise = V8PromiseCustom::createPromise(info.Holder(), isolate);
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, promise, V8PromiseCustom::createPromise(info.Holder(), isolate));
     V8PromiseCustom::resolve(promise, result, isolate);
     v8SetReturnValue(info, promise);
 }
@@ -566,7 +600,7 @@ void V8Promise::rejectMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& in
     if (info.Length() > 0)
         result = info[0];
 
-    v8::Local<v8::Object> promise = V8PromiseCustom::createPromise(info.Holder(), isolate);
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, promise, V8PromiseCustom::createPromise(info.Holder(), isolate));
     V8PromiseCustom::reject(promise, result, isolate);
     v8SetReturnValue(info, promise);
 }
@@ -574,7 +608,7 @@ void V8Promise::rejectMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& in
 void V8Promise::raceMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Isolate* isolate = info.GetIsolate();
-    v8::Local<v8::Object> promise = V8PromiseCustom::createPromise(info.Holder(), isolate);
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, promise, V8PromiseCustom::createPromise(info.Holder(), isolate));
 
     if (!info.Length() || !info[0]->IsArray()) {
         v8SetReturnValue(info, promise);
@@ -583,14 +617,14 @@ void V8Promise::raceMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info
 
     // FIXME: Now we limit the iterable type to the Array type.
     v8::Local<v8::Array> iterable = info[0].As<v8::Array>();
-    v8::Local<v8::Function> onFulfilled = createClosure(promiseResolveCallback, promise, isolate);
-    v8::Local<v8::Function> onRejected = createClosure(promiseRejectCallback, promise, isolate);
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Function>, onFulfilled, createClosure(promiseResolveCallback, promise, isolate));
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Function>, onRejected, createClosure(promiseRejectCallback, promise, isolate));
 
     for (unsigned i = 0, length = iterable->Length(); i < length; ++i) {
         // Array-holes should not be skipped by for-of iteration semantics.
-        V8TRYCATCH_VOID(v8::Local<v8::Value>, nextValue, iterable->Get(i));
-        v8::Local<v8::Object> nextPromise = V8PromiseCustom::toPromise(nextValue, isolate);
-        V8PromiseCustom::then(nextPromise, onFulfilled, onRejected, isolate);
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, nextValue, iterable->Get(i));
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, nextPromise, V8PromiseCustom::toPromise(nextValue, isolate));
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, unused, V8PromiseCustom::then(nextPromise, onFulfilled, onRejected, isolate));
     }
     v8SetReturnValue(info, promise);
 }
@@ -598,7 +632,7 @@ void V8Promise::raceMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info
 void V8Promise::allMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Isolate* isolate = info.GetIsolate();
-    v8::Local<v8::Object> promise = V8PromiseCustom::createPromise(info.Holder(), isolate);
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, promise, V8PromiseCustom::createPromise(info.Holder(), isolate));
     v8::Local<v8::Array> results = v8::Array::New(info.GetIsolate());
 
     if (!info.Length() || !info[0]->IsArray()) {
@@ -617,17 +651,17 @@ void V8Promise::allMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
     }
 
     v8::Local<v8::ObjectTemplate> objectTemplate = primitiveWrapperObjectTemplate(isolate);
-    v8::Local<v8::Object> countdownWrapper = objectTemplate->NewInstance();
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, countdownWrapper, objectTemplate->NewInstance());
     countdownWrapper->SetInternalField(V8PromiseCustom::PrimitiveWrapperPrimitiveIndex, v8::Integer::New(isolate, iterable->Length()));
 
-    v8::Local<v8::Function> onRejected = createClosure(promiseRejectCallback, promise, isolate);
+    V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Function>, onRejected, createClosure(promiseRejectCallback, promise, isolate));
     for (unsigned i = 0, length = iterable->Length(); i < length; ++i) {
         // Array-holes should not be skipped by for-of iteration semantics.
-        v8::Local<v8::Object> environment = promiseAllEnvironment(promise, countdownWrapper, i, results, isolate);
-        v8::Local<v8::Function> onFulfilled = createClosure(promiseAllFulfillCallback, environment, isolate);
-        V8TRYCATCH_VOID(v8::Local<v8::Value>, nextValue, iterable->Get(i));
-        v8::Local<v8::Object> nextPromise = V8PromiseCustom::toPromise(nextValue, isolate);
-        V8PromiseCustom::then(nextPromise, onFulfilled, onRejected, isolate);
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, environment, promiseAllEnvironment(promise, countdownWrapper, i, results, isolate));
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Function>, onFulfilled, createClosure(promiseAllFulfillCallback, environment, isolate));
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, nextValue, iterable->Get(i));
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Object>, nextPromise, V8PromiseCustom::toPromise(nextValue, isolate));
+        V8TRYCATCH_VOID_EMPTY(v8::Local<v8::Value>, unused, V8PromiseCustom::then(nextPromise, onFulfilled, onRejected, isolate));
     }
     v8SetReturnValue(info, promise);
 }
@@ -638,12 +672,18 @@ v8::Local<v8::Object> V8PromiseCustom::createPromise(v8::Handle<v8::Object> crea
 {
     v8::Local<v8::ObjectTemplate> internalTemplate = internalObjectTemplate(isolate);
     v8::Local<v8::Object> internal = internalTemplate->NewInstance();
+    if (internal.IsEmpty())
+        return v8::Local<v8::Object>();
     v8::Local<v8::Object> promise = V8DOMWrapper::createWrapper(creationContext, &V8Promise::wrapperTypeInfo, 0, isolate);
 
     clearDerived(internal, isolate);
-    setState(internal, Pending, v8::Undefined(isolate), isolate);
-
     promise->SetInternalField(v8DOMWrapperObjectIndex, internal);
+
+    ExecutionContext* context = currentExecutionContext(isolate);
+    if (InspectorInstrumentation::isPromiseTrackerEnabled(context))
+        InspectorInstrumentation::didCreatePromise(context, ScriptObject(ScriptState::forContext(isolate->GetCurrentContext()), promise));
+
+    setStateForPromise(promise, Pending, v8::Undefined(isolate), isolate);
     return promise;
 }
 
@@ -661,18 +701,9 @@ V8PromiseCustom::PromiseState V8PromiseCustom::getState(v8::Handle<v8::Object> i
     return static_cast<PromiseState>(number);
 }
 
-void V8PromiseCustom::setState(v8::Handle<v8::Object> internal, PromiseState state, v8::Handle<v8::Value> value, v8::Isolate* isolate)
-{
-    ASSERT(!value.IsEmpty());
-    ASSERT(state == Pending || state == Fulfilled || state == Rejected || state == Following);
-    internal->SetInternalField(InternalStateIndex, v8::Integer::New(isolate, state));
-    internal->SetInternalField(InternalResultIndex, value);
-}
-
 bool V8PromiseCustom::isPromise(v8::Handle<v8::Value> maybePromise, v8::Isolate* isolate)
 {
-    WrapperWorldType currentWorldType = worldType(isolate);
-    return V8Promise::domTemplate(isolate, currentWorldType)->HasInstance(maybePromise);
+    return V8Promise::domTemplate(isolate)->HasInstance(maybePromise);
 }
 
 v8::Local<v8::Object> V8PromiseCustom::toPromise(v8::Handle<v8::Value> maybePromise, v8::Isolate* isolate)
@@ -684,6 +715,8 @@ v8::Local<v8::Object> V8PromiseCustom::toPromise(v8::Handle<v8::Value> maybeProm
         return maybePromise.As<v8::Object>();
 
     v8::Local<v8::Object> promise = createPromise(v8::Handle<v8::Object>(), isolate);
+    if (promise.IsEmpty())
+        return v8::Local<v8::Object>();
     resolve(promise, maybePromise, isolate);
     return promise;
 }
@@ -705,7 +738,7 @@ void V8PromiseCustom::resolve(v8::Handle<v8::Object> promise, v8::Handle<v8::Val
             setReason(promise, reason, isolate);
         } else if (valueState == Following) {
             v8::Local<v8::Object> valuePromiseFollowing = valueInternal->GetInternalField(InternalResultIndex).As<v8::Object>();
-            setState(internal, Following, valuePromiseFollowing, isolate);
+            setStateForPromise(promise, Following, valuePromiseFollowing, isolate);
             addToDerived(getInternal(valuePromiseFollowing), promise, v8::Handle<v8::Function>(), v8::Handle<v8::Function>(), isolate);
         } else if (valueState == Fulfilled) {
             setValue(promise, valueInternal->GetInternalField(InternalResultIndex), isolate);
@@ -713,7 +746,7 @@ void V8PromiseCustom::resolve(v8::Handle<v8::Object> promise, v8::Handle<v8::Val
             setReason(promise, valueInternal->GetInternalField(InternalResultIndex), isolate);
         } else {
             ASSERT(valueState == Pending);
-            setState(internal, Following, valuePromise, isolate);
+            setStateForPromise(promise, Following, valuePromise, isolate);
             addToDerived(valueInternal, promise, v8::Handle<v8::Function>(), v8::Handle<v8::Function>(), isolate);
         }
     } else {
@@ -741,6 +774,8 @@ v8::Local<v8::Object> V8PromiseCustom::then(v8::Handle<v8::Object> promise, v8::
     // the creation of the promise objects only from the Blink Promise
     // constructor.
     v8::Local<v8::Object> derivedPromise = createPromise(v8::Handle<v8::Object>(), isolate);
+    if (derivedPromise.IsEmpty())
+        return v8::Local<v8::Object>();
     updateDerivedFromPromise(derivedPromise, onFulfilled, onRejected, promise, isolate);
     return derivedPromise;
 }
@@ -799,15 +834,21 @@ v8::Local<v8::Object> V8PromiseCustom::coerceThenable(v8::Handle<v8::Object> the
     ASSERT(!thenable.IsEmpty());
     ASSERT(!then.IsEmpty());
     v8::Local<v8::Object> promise = createPromise(v8::Handle<v8::Object>(), isolate);
-    v8::Handle<v8::Value> argv[] = {
-        createClosure(promiseResolveCallback, promise, isolate),
-        createClosure(promiseRejectCallback, promise, isolate)
-    };
+    if (promise.IsEmpty())
+        return v8::Local<v8::Object>();
+    v8::Handle<v8::Value> onFulfilled = createClosure(promiseResolveCallback, promise, isolate);
+    if (onFulfilled.IsEmpty())
+        return v8::Local<v8::Object>();
+    v8::Handle<v8::Value> onRejected = createClosure(promiseRejectCallback, promise, isolate);
+    if (onRejected.IsEmpty())
+        return v8::Local<v8::Object>();
+    v8::Handle<v8::Value> argv[] = { onFulfilled, onRejected };
+
     v8::TryCatch trycatch;
     if (V8ScriptRunner::callFunction(then, currentExecutionContext(isolate), thenable, WTF_ARRAY_LENGTH(argv), argv, isolate).IsEmpty()) {
         reject(promise, trycatch.Exception(), isolate);
     }
-    setHiddenValue(isolate, thenable, "thenableHiddenPromise", promise);
+    V8HiddenValue::setHiddenValue(isolate, thenable, V8HiddenValue::thenableHiddenPromise(isolate), promise);
     return promise;
 }
 

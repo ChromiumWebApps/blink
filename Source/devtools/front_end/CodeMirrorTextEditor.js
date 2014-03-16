@@ -50,14 +50,14 @@ importScript("CodeMirrorUtils.js");
 
 /**
  * @constructor
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @implements {WebInspector.TextEditor}
  * @param {?string} url
  * @param {!WebInspector.TextEditorDelegate} delegate
  */
 WebInspector.CodeMirrorTextEditor = function(url, delegate)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
     this._delegate = delegate;
     this._url = url;
 
@@ -240,6 +240,7 @@ CodeMirror.commands.redoAndReveal = function(codemirror)
 
 WebInspector.CodeMirrorTextEditor.LongLineModeLineLengthThreshold = 2000;
 WebInspector.CodeMirrorTextEditor.MaximumNumberOfWhitespacesPerSingleSpan = 16;
+WebInspector.CodeMirrorTextEditor.MaxEditableTextSize = 1024 * 1024 * 10;
 
 WebInspector.CodeMirrorTextEditor.prototype = {
     _enableBracketMatchingIfNeeded: function()
@@ -276,7 +277,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
                 return;
             indents[i] = 1 + (indents[i] || 0);
         }
-        this._codeMirror.eachLine(processLine);
+        this._codeMirror.eachLine(0, 1000, processLine);
 
         var onePercentFilterThreshold = this.linesCount / 100;
         if (tabLines && tabLines > onePercentFilterThreshold)
@@ -414,6 +415,8 @@ WebInspector.CodeMirrorTextEditor.prototype = {
      */
     _addTextToCompletionDictionary: function(text)
     {
+        if (this.readOnly())
+            return;
         var words = WebInspector.TextUtils.textToWords(text);
         for (var i = 0; i < words.length; ++i) {
             if (this._shouldProcessWordForAutocompletion(words[i]))
@@ -426,6 +429,8 @@ WebInspector.CodeMirrorTextEditor.prototype = {
      */
     _removeTextFromCompletionDictionary: function(text)
     {
+        if (this.readOnly())
+            return;
         var words = WebInspector.TextUtils.textToWords(text);
         for (var i = 0; i < words.length; ++i) {
             if (this._shouldProcessWordForAutocompletion(words[i]))
@@ -589,7 +594,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
     _updateCodeMirrorMode: function()
     {
         var showWhitespaces = WebInspector.settings.showWhitespacesInEditor.get();
-        this.element.enableStyleClass("show-whitespaces", showWhitespaces);
+        this.element.classList.toggle("show-whitespaces", showWhitespaces);
         this._codeMirror.setOption("mode", showWhitespaces ? this._whitespaceOverlayMode(this._mimeType) : this._mimeType);
     },
 
@@ -611,7 +616,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
      */
     setReadOnly: function(readOnly)
     {
-        this.element.enableStyleClass("CodeMirror-readonly", readOnly)
+        this.element.classList.toggle("CodeMirror-readonly", readOnly)
         this._codeMirror.setOption("readOnly", readOnly);
     },
 
@@ -868,6 +873,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
 
     onResize: function()
     {
+        this._autocompleteController.finishAutocomplete();
         this._resizeEditor();
     },
 
@@ -966,9 +972,6 @@ WebInspector.CodeMirrorTextEditor.prototype = {
             if (!this._muteTextChangedEvent)
                 this._delegate.onTextChanged(oldRange, newRange);
 
-            for (var i = newRange.startLine; i <= newRange.endLine; ++i) {
-                linesToUpdate[i] = true;
-            }
             if (this._dictionary) {
                 for (var i = newRange.startLine; i <= newRange.endLine; ++i)
                     linesToUpdate[i] = this.line(i);
@@ -1101,6 +1104,11 @@ WebInspector.CodeMirrorTextEditor.prototype = {
     setText: function(text)
     {
         this._muteTextChangedEvent = true;
+        if (text.length > WebInspector.CodeMirrorTextEditor.MaxEditableTextSize) {
+            if (this._dictionary)
+                this._dictionary.reset();
+            this.setReadOnly(true);
+        }
         this._codeMirror.setValue(text);
         this._updateEditorIndentation();
         if (this._shouldClearHistory) {
@@ -1213,7 +1221,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
         return new WebInspector.CodeMirrorPositionHandle(this._codeMirror, new CodeMirror.Pos(lineNumber, columnNumber));
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**

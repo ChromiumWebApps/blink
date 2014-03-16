@@ -32,8 +32,8 @@ namespace WebCore {
 class SVGFELightElement : public SVGElement {
 public:
     virtual PassRefPtr<LightSource> lightSource() const = 0;
-    static SVGFELightElement* findLightElement(const SVGElement*);
-    static PassRefPtr<LightSource> findLightSource(const SVGElement*);
+    static SVGFELightElement* findLightElement(const SVGElement&);
+    static PassRefPtr<LightSource> findLightSource(const SVGElement&);
 
     SVGAnimatedNumber* azimuth() { return m_azimuth.get(); }
     const SVGAnimatedNumber* azimuth() const { return m_azimuth.get(); }
@@ -77,8 +77,6 @@ private:
     RefPtr<SVGAnimatedNumber> m_pointsAtZ;
     RefPtr<SVGAnimatedNumber> m_specularExponent;
     RefPtr<SVGAnimatedNumber> m_limitingConeAngle;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGFELightElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
 
 inline bool isSVGFELightElement(const Node& node)
@@ -86,7 +84,7 @@ inline bool isSVGFELightElement(const Node& node)
     return node.hasTagName(SVGNames::feDistantLightTag) || node.hasTagName(SVGNames::fePointLightTag) || node.hasTagName(SVGNames::feSpotLightTag);
 }
 
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGFELightElement);
+DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(SVGFELightElement);
 
 } // namespace WebCore
 

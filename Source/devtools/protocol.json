@@ -248,7 +248,7 @@
                     { "name": "url", "type": "string", "description": "URL to navigate the page to." }
                 ],
                 "description": "Navigates current page to the given URL.",
-                "handlers": ["browser"]
+                "handlers": ["browser", "renderer"]
             },
             {
               "name": "getNavigationHistory",
@@ -2149,14 +2149,14 @@
                 "hidden": true
             },
             {
-                "name": "pushNodeByBackendIdToFrontend",
+                "name": "pushNodesByBackendIdsToFrontend",
                 "parameters": [
-                    { "name": "backendNodeId", "$ref": "BackendNodeId", "description": "The backend node id of the node." }
+                    { "name": "backendNodeIds", "type": "array", "items": {"$ref": "BackendNodeId"}, "description": "The array of backend node ids." }
                 ],
                 "returns": [
-                    { "name": "nodeId", "$ref": "NodeId", "description": "The pushed node's id." }
+                    { "name": "nodeIds", "type": "array", "items": {"$ref": "NodeId"}, "description": "The array of ids of pushed nodes that correspond to the backend ids specified in backendNodeIds." }
                 ],
-                "description": "Requests that the node is sent to the caller given its backend node id.",
+                "description": "Requests that a batch of nodes is sent to the caller given their backend node ids.",
                 "hidden": true
             },
             {
@@ -2539,11 +2539,11 @@
                 "properties": [
                     { "name": "name", "type": "string", "description": "The property name." },
                     { "name": "value", "type": "string", "description": "The property value." },
-                    { "name": "priority", "type": "string", "optional": true, "description": "The property priority (implies \"\" if absent)." },
+                    { "name": "important", "type": "boolean", "optional": true, "description": "Whether the property has \"!important\" annotation (implies <code>false</code> if absent)." },
                     { "name": "implicit", "type": "boolean", "optional": true, "description": "Whether the property is implicit (implies <code>false</code> if absent)." },
                     { "name": "text", "type": "string", "optional": true, "description": "The full property text as specified in the style." },
                     { "name": "parsedOk", "type": "boolean", "optional": true, "description": "Whether the property is understood by the browser (implies <code>true</code> if absent)." },
-                    { "name": "status", "type": "string", "enum": ["active", "inactive", "disabled", "style"], "optional": true, "description": "The property status: \"active\" if the property is effective in the style, \"inactive\" if the property is overridden by a same-named property in this style later on, \"disabled\" if the property is disabled by the user, \"style\" (implied if absent) if the property is reported by the browser rather than by the CSS source parser." },
+                    { "name": "disabled", "type": "boolean", "optional": true, "description": "Whether the property is disabled by the user (present for source-based properties only)." },
                     { "name": "range", "$ref": "SourceRange", "optional": true, "description": "The entire property range in the enclosing style declaration (if available)." }
                 ],
                 "description": "CSS property declaration data."
@@ -2671,15 +2671,25 @@
                 "description": "Modifies the rule selector."
             },
             {
+                "name": "createStyleSheet",
+                "parameters": [
+                    { "name": "frameId", "$ref": "Page.FrameId", "description": "Identifier of the frame where \"via-inspector\" stylesheet should be created."}
+                ],
+                "returns": [
+                    { "name": "styleSheetId", "$ref": "StyleSheetId", "description": "Identifier of the created \"via-inspector\" stylesheet." }
+                ],
+                "description": "Creates a new special \"via-inspector\" stylesheet in the frame with given <code>frameId</code>."
+            },
+            {
                 "name": "addRule",
                 "parameters": [
-                    { "name": "contextNodeId", "$ref": "DOM.NodeId" },
+                    { "name": "styleSheetId", "$ref": "StyleSheetId" },
                     { "name": "selector", "type": "string" }
                 ],
                 "returns": [
                     { "name": "rule", "$ref": "CSSRule", "description": "The newly created rule." }
                 ],
-                "description": "Creates a new empty rule with the given <code>selector</code> in a special \"inspector\" stylesheet in the owner document of the context node."
+                "description": "Creates a new empty rule with the given <code>selector</code> in a stylesheet with given <code>styleSheetId</code>."
             },
             {
                 "name": "forcePseudoState",
@@ -3508,7 +3518,7 @@
                 "parameters": [
                     { "name": "workerId", "type": "integer" }
                 ],
-                "handlers": ["browser"]
+                "handlers": ["browser", "renderer"]
             },
             {
                 "name": "setAutoconnectToWorkers",
@@ -3840,7 +3850,7 @@
                 "properties": [
                     { "name": "layerId", "$ref": "LayerId", "description": "The unique id for this layer." },
                     { "name": "parentLayerId", "$ref": "LayerId", "optional": true, "description": "The id of parent (not present for root)." },
-                    { "name": "nodeId", "$ref": "DOM.NodeId", "optional": true, "description": "The id for the node associated with this layer." },
+                    { "name": "backendNodeId", "$ref": "DOM.BackendNodeId", "optional": true, "description": "The backend id for the node associated with this layer." },
                     { "name": "offsetX", "type": "number", "description": "Offset from parent layer, X coordinate." },
                     { "name": "offsetY", "type": "number", "description": "Offset from parent layer, X coordinate." },
                     { "name": "width", "type": "number", "description": "Layer width." },
@@ -4037,6 +4047,15 @@
                 "name": "end",
                 "description": "Stop power events collection.",
                 "parameters": [],
+                "handlers": ["browser", "frontend"]
+            },
+            {
+                "name": "canProfilePower",
+                "description": "Tells whether power profiling is supported.",
+                "returns": [
+                  { "name": "result", "type": "boolean", "description": "True if power profiling is supported." }
+                ],
+                "hidden": true,
                 "handlers": ["browser", "frontend"]
             }
         ],

@@ -36,6 +36,7 @@
 #include "core/rendering/RenderCombineText.h"
 #include "core/rendering/RenderText.h"
 #include "core/rendering/svg/RenderSVGInlineText.h"
+#include "core/svg/SVGForeignObjectElement.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -89,7 +90,7 @@ PassRefPtr<Node> Text::mergeNextSiblingNodesIfPossible()
         nextText->setDataWithoutUpdate(emptyString());
         nextText->updateTextRenderer(0, nextTextData.length());
 
-        document().didMergeTextNodes(nextText.get(), offset);
+        document().didMergeTextNodes(*nextText, offset);
 
         // Restore nextText for mutation event.
         nextText->setDataWithoutUpdate(nextTextData);
@@ -128,7 +129,7 @@ PassRefPtr<Text> Text::splitText(unsigned offset, ExceptionState& exceptionState
         toRenderText(renderer())->setTextWithOffset(dataImpl(), 0, oldStr.length());
 
     if (parentNode())
-        document().didSplitTextNode(this);
+        document().didSplitTextNode(*this);
 
     return newText.release();
 }
@@ -290,7 +291,8 @@ bool Text::textRendererIsNeeded(const RenderStyle& style, const RenderObject& pa
 static bool isSVGText(Text* text)
 {
     Node* parentOrShadowHostNode = text->parentOrShadowHostNode();
-    return parentOrShadowHostNode->isSVGElement() && !parentOrShadowHostNode->hasTagName(SVGNames::foreignObjectTag);
+    ASSERT(parentOrShadowHostNode);
+    return parentOrShadowHostNode->isSVGElement() && !isSVGForeignObjectElement(*parentOrShadowHostNode);
 }
 
 RenderText* Text::createTextRenderer(RenderStyle* style)

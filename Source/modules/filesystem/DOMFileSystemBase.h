@@ -31,6 +31,7 @@
 #ifndef DOMFileSystemBase_h
 #define DOMFileSystemBase_h
 
+#include "heap/Handle.h"
 #include "modules/filesystem/FileSystemFlags.h"
 #include "platform/FileSystemType.h"
 #include "platform/weborigin/KURL.h"
@@ -57,7 +58,7 @@ class SecurityOrigin;
 class VoidCallback;
 
 // A common base class for DOMFileSystem and DOMFileSystemSync.
-class DOMFileSystemBase : public RefCounted<DOMFileSystemBase> {
+class DOMFileSystemBase : public RefCountedWillBeRefCountedGarbageCollected<DOMFileSystemBase> {
 public:
     enum SynchronousType {
         Synchronous,
@@ -80,7 +81,7 @@ public:
     virtual void removePendingCallbacks() { }
 
     // Overridden by subclasses to handle sync vs async error-handling.
-    virtual void reportError(PassOwnPtr<ErrorCallback>, PassRefPtr<FileError>) = 0;
+    virtual void reportError(PassOwnPtr<ErrorCallback>, PassRefPtrWillBeRawPtr<FileError>) = 0;
 
     const String& name() const { return m_name; }
     FileSystemType type() const { return m_type; }
@@ -112,7 +113,10 @@ public:
     void getParent(const EntryBase*, PassOwnPtr<EntryCallback>, PassOwnPtr<ErrorCallback>);
     void getFile(const EntryBase*, const String& path, const FileSystemFlags&, PassOwnPtr<EntryCallback>, PassOwnPtr<ErrorCallback>, SynchronousType = Asynchronous);
     void getDirectory(const EntryBase*, const String& path, const FileSystemFlags&, PassOwnPtr<EntryCallback>, PassOwnPtr<ErrorCallback>, SynchronousType = Asynchronous);
-    bool readDirectory(PassRefPtr<DirectoryReaderBase>, const String& path, PassOwnPtr<EntriesCallback>, PassOwnPtr<ErrorCallback>, SynchronousType = Asynchronous);
+    int readDirectory(PassRefPtrWillBeRawPtr<DirectoryReaderBase>, const String& path, PassOwnPtr<EntriesCallback>, PassOwnPtr<ErrorCallback>, SynchronousType = Asynchronous);
+    bool waitForAdditionalResult(int callbacksId);
+
+    virtual void trace(Visitor*) { }
 
 protected:
     DOMFileSystemBase(ExecutionContext*, const String& name, FileSystemType, const KURL& rootURL);

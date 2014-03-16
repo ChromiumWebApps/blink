@@ -27,9 +27,9 @@
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLSummaryElement.h"
-#include "core/html/shadow/HTMLContentElement.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/rendering/RenderBlockFlow.h"
 #include "platform/text/PlatformLocale.h"
@@ -79,13 +79,11 @@ void HTMLDetailsElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 
 Element* HTMLDetailsElement::findMainSummary() const
 {
-    for (Element* child = ElementTraversal::firstWithin(*this); child; child = ElementTraversal::nextSibling(*child)) {
-        if (child->hasTagName(summaryTag))
-            return child;
-    }
+    if (HTMLSummaryElement* summary = Traversal<HTMLSummaryElement>::firstChild(*this))
+        return summary;
 
     HTMLContentElement* content = toHTMLContentElement(userAgentShadowRoot()->firstChild());
-    ASSERT(content->firstChild() && content->firstChild()->hasTagName(summaryTag));
+    ASSERT(content->firstChild() && isHTMLSummaryElement(*content->firstChild()));
     return toElement(content->firstChild());
 }
 

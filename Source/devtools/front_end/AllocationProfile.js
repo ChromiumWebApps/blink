@@ -31,19 +31,20 @@
 /**
  * @constructor
  */
-WebInspector.AllocationProfile = function(profile)
+WebInspector.AllocationProfile = function(profile, liveObjectStats)
 {
     this._strings = profile.strings;
+    this._liveObjectStats = liveObjectStats;
 
     this._nextNodeId = 1;
-    this._idToFunctionInfo = {};
+    this._functionInfos = []
     this._idToNode = {};
     this._collapsedTopNodeIdToFunctionInfo = {};
 
     this._traceTops = null;
 
     this._buildAllocationFunctionInfos(profile);
-    this._traceTree = this._buildInvertedAllocationTree(profile);
+    this._traceTree = this._buildInvertedAllocationTree(profile, liveObjectStats);
 }
 
 WebInspector.AllocationProfile.prototype = {
@@ -60,15 +61,12 @@ WebInspector.AllocationProfile.prototype = {
         var columnOffset = functionInfoFields.indexOf("column");
         var functionInfoFieldCount = functionInfoFields.length;
 
-        var map = this._idToFunctionInfo;
-
-        // Special case for the root node.
-        map[0] = new WebInspector.FunctionAllocationInfo("(root)", "<unknown>", 0, -1, -1);
-
         var rawInfos = profile.trace_function_infos;
         var infoLength = rawInfos.length;
+        var functionInfos = this._functionInfos = new Array(infoLength / functionInfoFieldCount);
+        var index = 0;
         for (var i = 0; i < infoLength; i += functionInfoFieldCount) {
-            map[rawInfos[i + functionIdOffset]] = new WebInspector.FunctionAllocationInfo(
+            functionInfos[index++] = new WebInspector.FunctionAllocationInfo(
                 strings[rawInfos[i + functionNameOffset]],
                 strings[rawInfos[i + scriptNameOffset]],
                 rawInfos[i + scriptIdOffset],
@@ -77,14 +75,14 @@ WebInspector.AllocationProfile.prototype = {
         }
     },
 
-    _buildInvertedAllocationTree: function(profile)
+    _buildInvertedAllocationTree: function(profile, liveObjectStats)
     {
         var traceTreeRaw = profile.trace_tree;
-        var idToFunctionInfo = this._idToFunctionInfo;
+        var functionInfos = this._functionInfos;
 
         var traceNodeFields = profile.snapshot.meta.trace_node_fields;
         var nodeIdOffset = traceNodeFields.indexOf("id");
-        var functionIdOffset = traceNodeFields.indexOf("function_id");
+        var functionInfoIndexOffset = traceNodeFields.indexOf("function_info_index");
         var allocationCountOffset = traceNodeFields.indexOf("count");
         var allocationSizeOffset = traceNodeFields.indexOf("size");
         var childrenOffset = traceNodeFields.indexOf("children");
@@ -92,12 +90,18 @@ WebInspector.AllocationProfile.prototype = {
 
         function traverseNode(rawNodeArray, nodeOffset, parent)
         {
-            var functionInfo = idToFunctionInfo[rawNodeArray[nodeOffset + functionIdOffset]];
+            var functionInfo = functionInfos[rawNodeArray[nodeOffset + functionInfoIndexOffset]];
+            var id = rawNodeArray[nodeOffset + nodeIdOffset];
+            var stats = liveObjectStats[id];
+            var liveCount = stats ? stats.count : 0;
+            var liveSize = stats ? stats.size : 0;
             var result = new WebInspector.AllocationTraceNode(
-                rawNodeArray[nodeOffset + nodeIdOffset],
+                id,
                 functionInfo,
                 rawNodeArray[nodeOffset + allocationCountOffset],
                 rawNodeArray[nodeOffset + allocationSizeOffset],
+                liveCount,
+                liveSize,
                 parent);
             functionInfo.addTraceTopNode(result);
 
@@ -112,16 +116,16 @@ WebInspector.AllocationProfile.prototype = {
     },
 
     /**
-     * @return {!Array.<!WebInspector.HeapSnapshotCommon.SerializedTraceTop>}
+     * @return {!Array.<!WebInspector.HeapSnapshotCommon.SerializedAllocationNode>}
      */
     serializeTraceTops: function()
     {
         if (this._traceTops)
             return this._traceTops;
         var result = this._traceTops = [];
-        var idToFunctionInfo = this._idToFunctionInfo;
-        for (var id in idToFunctionInfo) {
-            var info = idToFunctionInfo[id];
+        var functionInfos = this._functionInfos;
+        for (var i = 0; i < functionInfos.length; i++) {
+            var info = functionInfos[i];
             if (info.totalCount === 0)
                 continue;
             var nodeId = this._nextNodeId++;
@@ -130,6 +134,8 @@ WebInspector.AllocationProfile.prototype = {
                 info,
                 info.totalCount,
                 info.totalSize,
+                info.totalLiveCount,
+                info.totalLiveSize,
                 true));
             this._collapsedTopNodeIdToFunctionInfo[nodeId] = info;
         }
@@ -164,10 +170,7 @@ WebInspector.AllocationProfile.prototype = {
         for (var i = 0; i < callers.length; i++) {
             branchingCallers.push(this._serializeCaller(callers[i]));
         }
-        return /** @type {!WebInspector.HeapSnapshotCommon.AllocationNodeCallers} */ ({
-            nodesWithSingleCaller: nodesWithSingleCaller,
-            branchingCallers: branchingCallers
-        });
+        return new WebInspector.HeapSnapshotCommon.AllocationNodeCallers(nodesWithSingleCaller, branchingCallers);
     },
 
     _serializeCaller: function(node)
@@ -179,21 +182,35 @@ WebInspector.AllocationProfile.prototype = {
             node.functionInfo,
             node.allocationCount,
             node.allocationSize,
+            node.liveCount,
+            node.liveSize,
             node.hasCallers());
     },
 
-    _serializeNode: function(nodeId, functionInfo, count, size, hasChildren)
+    /**
+     * @param {number} nodeId
+     * @param {!WebInspector.FunctionAllocationInfo} functionInfo
+     * @param {number} count
+     * @param {number} size
+     * @param {number} liveCount
+     * @param {number} liveSize
+     * @param {boolean} hasChildren
+     * @return {!WebInspector.HeapSnapshotCommon.SerializedAllocationNode}
+     */
+    _serializeNode: function(nodeId, functionInfo, count, size, liveCount, liveSize, hasChildren)
     {
-        return {
-            id: nodeId,
-            name: functionInfo.functionName,
-            scriptName: functionInfo.scriptName,
-            line: functionInfo.line,
-            column: functionInfo.column,
-            count: count,
-            size: size,
-            hasChildren: hasChildren
-        };
+        return new WebInspector.HeapSnapshotCommon.SerializedAllocationNode(
+            nodeId,
+            functionInfo.functionName,
+            functionInfo.scriptName,
+            functionInfo.line,
+            functionInfo.column,
+            count,
+            size,
+            liveCount,
+            liveSize,
+            hasChildren
+        );
     }
 }
 
@@ -201,12 +218,14 @@ WebInspector.AllocationProfile.prototype = {
 /**
  * @constructor
  */
-WebInspector.AllocationTraceNode = function(id, functionInfo, count, size, parent)
+WebInspector.AllocationTraceNode = function(id, functionInfo, count, size, liveCount, liveSize, parent)
 {
     this.id = id;
     this.functionInfo = functionInfo;
     this.allocationCount = count;
     this.allocationSize = size;
+    this.liveCount = liveCount;
+    this.liveSize = liveSize;
     this.parent = parent;
     this.children = [];
 }
@@ -221,6 +240,8 @@ WebInspector.AllocationBackTraceNode = function(functionInfo)
     this.functionInfo = functionInfo;
     this.allocationCount = 0;
     this.allocationSize = 0;
+    this.liveCount = 0;
+    this.liveSize = 0;
     this._callers = [];
 }
 
@@ -278,6 +299,8 @@ WebInspector.FunctionAllocationInfo = function(functionName, scriptName, scriptI
     this.column = column;
     this.totalCount = 0;
     this.totalSize = 0;
+    this.totalLiveCount = 0;
+    this.totalLiveSize = 0;
     this._traceTops = [];
 }
 
@@ -289,6 +312,8 @@ WebInspector.FunctionAllocationInfo.prototype = {
         this._traceTops.push(node);
         this.totalCount += node.allocationCount;
         this.totalSize += node.allocationSize;
+        this.totalLiveCount += node.liveCount;
+        this.totalLiveSize += node.liveSize;
     },
 
     /**
@@ -312,9 +337,13 @@ WebInspector.FunctionAllocationInfo.prototype = {
             var backTraceNode = this._backTraceTree;
             var count = node.allocationCount;
             var size = node.allocationSize;
+            var liveCount = node.liveCount;
+            var liveSize = node.liveSize;
             while (true) {
                 backTraceNode.allocationCount += count;
                 backTraceNode.allocationSize += size;
+                backTraceNode.liveCount += liveCount;
+                backTraceNode.liveSize += liveSize;
                 node = node.parent;
                 if (node === null) {
                     break;

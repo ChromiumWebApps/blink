@@ -42,12 +42,12 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/TextIterator.h"
 #include "core/editing/htmlediting.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 
-static Node* selectionShadowAncestor(Frame* frame)
+static Node* selectionShadowAncestor(LocalFrame* frame)
 {
     Node* node = frame->selection().selection().base().anchorNode();
     if (!node)
@@ -337,7 +337,7 @@ void DOMSelection::extend(Node* node, int offset, ExceptionState& exceptionState
         exceptionState.throwDOMException(IndexSizeError, String::number(offset) + " is not a valid offset.");
         return;
     }
-    if (offset > (node->offsetInCharacters() ? caretMaxOffset(node) : (int)node->childNodeCount())) {
+    if (offset > (node->offsetInCharacters() ? caretMaxOffset(node) : (int)node->countChildren())) {
         exceptionState.throwDOMException(IndexSizeError, String::number(offset) + " is larger than the given node's length.");
         return;
     }
@@ -369,8 +369,7 @@ PassRefPtr<Range> DOMSelection::getRangeAt(int index, ExceptionState& exceptionS
         return Range::create(shadowAncestor->document(), container, offset, container, offset);
     }
 
-    const VisibleSelection& selection = m_frame->selection().selection();
-    return selection.firstRange();
+    return m_frame->selection().firstRange();
 }
 
 void DOMSelection::removeAllRanges()
@@ -390,7 +389,7 @@ void DOMSelection::addRange(Range* r)
     FrameSelection& selection = m_frame->selection();
 
     if (selection.isNone()) {
-        selection.setSelection(VisibleSelection(r));
+        selection.setSelectedRange(r, VP_DEFAULT_AFFINITY);
         return;
     }
 
@@ -482,7 +481,7 @@ void DOMSelection::selectAllChildren(Node* n, ExceptionState& exceptionState)
         return;
 
     // This doesn't (and shouldn't) select text node characters.
-    setBaseAndExtent(n, 0, n, n->childNodeCount(), exceptionState);
+    setBaseAndExtent(n, 0, n, n->countChildren(), exceptionState);
 }
 
 String DOMSelection::toString()

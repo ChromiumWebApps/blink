@@ -31,8 +31,8 @@
 #include "config.h"
 #include "core/rendering/ImageQualityController.h"
 
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "platform/graphics/GraphicsContext.h"
 
 namespace WebCore {
@@ -109,7 +109,7 @@ void ImageQualityController::highQualityRepaintTimerFired(Timer<ImageQualityCont
     m_animatedResizeIsActive = false;
 
     for (ObjectLayerSizeMap::iterator it = m_objectLayerSizeMap.begin(); it != m_objectLayerSizeMap.end(); ++it) {
-        if (Frame* frame = it->key->document().frame()) {
+        if (LocalFrame* frame = it->key->document().frame()) {
             // If this renderer's containing FrameView is in live resize, punt the timer and hold back for now.
             if (frame->view() && frame->view()->inLiveResize()) {
                 restartTimer();
@@ -124,7 +124,7 @@ void ImageQualityController::highQualityRepaintTimerFired(Timer<ImageQualityCont
 
 void ImageQualityController::restartTimer()
 {
-    m_timer.startOneShot(cLowQualityTimeThreshold);
+    m_timer.startOneShot(cLowQualityTimeThreshold, FROM_HERE);
 }
 
 bool ImageQualityController::shouldPaintAtLowQuality(GraphicsContext* context, RenderObject* object, Image* image, const void *layer, const LayoutSize& layoutSize)
@@ -135,6 +135,10 @@ bool ImageQualityController::shouldPaintAtLowQuality(GraphicsContext* context, R
         return false;
 
     if (object->style()->imageRendering() == ImageRenderingOptimizeContrast)
+        return true;
+
+    // For images that are potentially animated we paint them at low quality.
+    if (image->maybeAnimated())
         return true;
 
     // Look ourselves up in the hashtables.
@@ -159,7 +163,7 @@ bool ImageQualityController::shouldPaintAtLowQuality(GraphicsContext* context, R
     LayoutSize scaledLayoutSize = currentTransform.mapSize(roundedIntSize(layoutSize));
 
     // If the containing FrameView is being resized, paint at low quality until resizing is finished.
-    if (Frame* frame = object->document().frame()) {
+    if (LocalFrame* frame = object->document().frame()) {
         bool frameViewIsCurrentlyInLiveResize = frame->view() && frame->view()->inLiveResize();
         if (frameViewIsCurrentlyInLiveResize) {
             set(object, innerMap, layer, scaledLayoutSize);

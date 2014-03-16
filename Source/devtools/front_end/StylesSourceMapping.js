@@ -76,6 +76,14 @@ WebInspector.StylesSourceMapping.prototype = {
     },
 
     /**
+     * @return {boolean}
+     */
+    isIdentity: function()
+    {
+        return true;
+    },
+
+    /**
      * @param {!WebInspector.CSSStyleSheetHeader} header
      */
     addHeader: function(header)
@@ -347,7 +355,7 @@ WebInspector.StyleFile.prototype = {
     _styleContentSet: function(error)
     {
         if (error)
-            WebInspector.showErrorMessage(error);
+            WebInspector.console.showErrorMessage(error);
     },
 
     _clearIncrementalUpdateTimer: function()

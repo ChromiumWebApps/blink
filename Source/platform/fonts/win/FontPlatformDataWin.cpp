@@ -34,10 +34,8 @@
 
 #include "platform/LayoutTestSupport.h"
 #include "platform/fonts/FontCache.h"
-#if USE(HARFBUZZ)
 #include "platform/fonts/harfbuzz/HarfBuzzFace.h"
-#endif
-#include "platform/fonts/skia/SkiaFontWin.h"
+#include "platform/fonts/win/SkiaFontWin.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/win/HWndDC.h"
 #include "public/platform/Platform.h"
@@ -127,21 +125,6 @@ static int computePaintTextFlags(String fontFamilyName)
     return textFlags;
 }
 
-#if !USE(HARFBUZZ)
-PassRefPtr<SkTypeface> CreateTypefaceFromHFont(HFONT hfont, int* size)
-{
-    LOGFONT info;
-    GetObject(hfont, sizeof(info), &info);
-    if (size) {
-        int height = info.lfHeight;
-        if (height < 0)
-            height = -height;
-        *size = height;
-    }
-    return adoptRef(SkCreateTypefaceFromLOGFONT(info));
-}
-#endif
-
 FontPlatformData::FontPlatformData(WTF::HashTableDeletedValueType)
     : m_textSize(-1)
     , m_syntheticBold(false)
@@ -152,10 +135,6 @@ FontPlatformData::FontPlatformData(WTF::HashTableDeletedValueType)
     , m_isHashTableDeletedValue(true)
     , m_useSubpixelPositioning(false)
 {
-#if !USE(HARFBUZZ)
-    m_font = 0;
-    m_scriptCache = 0;
-#endif
 }
 
 FontPlatformData::FontPlatformData()
@@ -168,27 +147,7 @@ FontPlatformData::FontPlatformData()
     , m_isHashTableDeletedValue(false)
     , m_useSubpixelPositioning(false)
 {
-#if !USE(HARFBUZZ)
-    m_font = 0;
-    m_scriptCache = 0;
-#endif
 }
-
-#if ENABLE(GDI_FONTS_ON_WINDOWS) && !USE(HARFBUZZ)
-FontPlatformData::FontPlatformData(HFONT font, float size, FontOrientation orientation)
-    : m_font(RefCountedHFONT::create(font))
-    , m_textSize(size)
-    , m_syntheticBold(false)
-    , m_syntheticItalic(false)
-    , m_orientation(orientation)
-    , m_scriptCache(0)
-    , m_typeface(CreateTypefaceFromHFont(font, 0))
-    , m_isHashTableDeletedValue(false)
-    , m_useSubpixelPositioning(false)
-{
-    m_paintTextFlags = computePaintTextFlags(fontFamilyName());
-}
-#endif
 
 // FIXME: this constructor is needed for SVG fonts but doesn't seem to do much
 FontPlatformData::FontPlatformData(float size, bool bold, bool oblique)
@@ -201,10 +160,6 @@ FontPlatformData::FontPlatformData(float size, bool bold, bool oblique)
     , m_isHashTableDeletedValue(false)
     , m_useSubpixelPositioning(false)
 {
-#if !USE(HARFBUZZ)
-    m_font = 0;
-    m_scriptCache = 0;
-#endif
 }
 
 FontPlatformData::FontPlatformData(const FontPlatformData& data)
@@ -217,10 +172,6 @@ FontPlatformData::FontPlatformData(const FontPlatformData& data)
     , m_isHashTableDeletedValue(false)
     , m_useSubpixelPositioning(data.m_useSubpixelPositioning)
 {
-#if !USE(HARFBUZZ)
-    m_font = data.m_font;
-    m_scriptCache = 0;
-#endif
 }
 
 FontPlatformData::FontPlatformData(const FontPlatformData& data, float textSize)
@@ -233,10 +184,6 @@ FontPlatformData::FontPlatformData(const FontPlatformData& data, float textSize)
     , m_isHashTableDeletedValue(false)
     , m_useSubpixelPositioning(data.m_useSubpixelPositioning)
 {
-#if !USE(HARFBUZZ)
-    m_font = data.m_font;
-    m_scriptCache = 0;
-#endif
 }
 
 FontPlatformData::FontPlatformData(PassRefPtr<SkTypeface> tf, const char* family,
@@ -251,16 +198,6 @@ FontPlatformData::FontPlatformData(PassRefPtr<SkTypeface> tf, const char* family
     , m_useSubpixelPositioning(useSubpixelPositioning)
 {
     m_paintTextFlags = computePaintTextFlags(fontFamilyName());
-#if !USE(HARFBUZZ)
-    // FIXME: This can be removed together with m_font once the last few
-    // uses of hfont() has been eliminated.
-    LOGFONT logFont;
-    SkLOGFONTFromTypeface(m_typeface.get(), &logFont);
-    logFont.lfHeight = -textSize;
-    HFONT hFont = CreateFontIndirect(&logFont);
-    m_font = hFont ? RefCountedHFONT::create(hFont) : 0;
-    m_scriptCache = 0;
-#endif
 }
 
 FontPlatformData& FontPlatformData::operator=(const FontPlatformData& data)
@@ -272,75 +209,27 @@ FontPlatformData& FontPlatformData::operator=(const FontPlatformData& data)
         m_orientation = data.m_orientation;
         m_typeface = data.m_typeface;
         m_paintTextFlags = data.m_paintTextFlags;
-
-#if !USE(HARFBUZZ)
-        m_font = data.m_font;
-        // The following fields will get re-computed if necessary.
-        ScriptFreeCache(&m_scriptCache);
-        m_scriptCache = 0;
-        m_scriptFontProperties.clear();
-#endif
     }
     return *this;
 }
 
 FontPlatformData::~FontPlatformData()
 {
-#if !USE(HARFBUZZ)
-    ScriptFreeCache(&m_scriptCache);
-    m_scriptCache = 0;
-#endif
 }
 
 String FontPlatformData::fontFamilyName() const
 {
-#if ENABLE(GDI_FONTS_ON_WINDOWS)
-    HWndDC dc(0);
-    HGDIOBJ oldFont = static_cast<HFONT>(SelectObject(dc, hfont()));
-    WCHAR name[LF_FACESIZE];
-    unsigned resultLength = GetTextFace(dc, LF_FACESIZE, name);
-    if (resultLength > 0)
-        resultLength--; // ignore the null terminator
-    SelectObject(dc, oldFont);
-    return String(name, resultLength);
-#else
     // FIXME: This returns the requested name, perhaps a better solution would be to
     // return the list of names provided by SkTypeface::createFamilyNameIterator.
     ASSERT(typeface());
     SkString familyName;
     typeface()->getFamilyName(&familyName);
     return String::fromUTF8(familyName.c_str());
-#endif
 }
 
 bool FontPlatformData::isFixedPitch() const
 {
-#if ENABLE(GDI_FONTS_ON_WINDOWS)
-    // TEXTMETRICS have this. Set m_treatAsFixedPitch based off that.
-    HWndDC dc(0);
-    HGDIOBJ oldFont = SelectObject(dc, hfont());
-
-    // Yes, this looks backwards, but the fixed pitch bit is actually set if the font
-    // is *not* fixed pitch. Unbelievable but true.
-    TEXTMETRIC textMetric = { 0 };
-    if (!GetTextMetrics(dc, &textMetric)) {
-        if (ensureFontLoaded(hfont())) {
-            // Retry GetTextMetrics.
-            // FIXME: Handle gracefully the error if this call also fails.
-            // See http://crbug.com/6401.
-            if (!GetTextMetrics(dc, &textMetric))
-                WTF_LOG_ERROR("Unable to get the text metrics after second attempt");
-        }
-    }
-
-    bool treatAsFixedPitch = !(textMetric.tmPitchAndFamily & TMPF_FIXED_PITCH);
-
-    SelectObject(dc, oldFont);
-
-    return treatAsFixedPitch;
-#else
     return typeface() && typeface()->isFixedPitch();
-#endif
 }
 
 bool FontPlatformData::operator==(const FontPlatformData& a) const
@@ -353,7 +242,6 @@ bool FontPlatformData::operator==(const FontPlatformData& a) const
         && m_isHashTableDeletedValue == a.m_isHashTableDeletedValue;
 }
 
-#if USE(HARFBUZZ)
 HarfBuzzFace* FontPlatformData::harfBuzzFace() const
 {
     if (!m_harfBuzzFace)
@@ -362,55 +250,9 @@ HarfBuzzFace* FontPlatformData::harfBuzzFace() const
     return m_harfBuzzFace.get();
 }
 
-#else
-FontPlatformData::RefCountedHFONT::~RefCountedHFONT()
-{
-    DeleteObject(m_hfont);
-}
-
-SCRIPT_FONTPROPERTIES* FontPlatformData::scriptFontProperties() const
-{
-    if (!m_scriptFontProperties) {
-        m_scriptFontProperties = adoptPtr(new SCRIPT_FONTPROPERTIES);
-        memset(m_scriptFontProperties.get(), 0, sizeof(SCRIPT_FONTPROPERTIES));
-        m_scriptFontProperties->cBytes = sizeof(SCRIPT_FONTPROPERTIES);
-        HRESULT result = ScriptGetFontProperties(0, scriptCache(), m_scriptFontProperties.get());
-        if (result == E_PENDING) {
-            HWndDC dc(0);
-            HGDIOBJ oldFont = SelectObject(dc, hfont());
-            HRESULT hr = ScriptGetFontProperties(dc, scriptCache(), m_scriptFontProperties.get());
-            if (S_OK != hr) {
-                if (FontPlatformData::ensureFontLoaded(hfont())) {
-                    // FIXME: Handle gracefully the error if this call also fails.
-                    hr = ScriptGetFontProperties(dc, scriptCache(), m_scriptFontProperties.get());
-                    if (S_OK != hr) {
-                        WTF_LOG_ERROR("Unable to get the font properties after second attempt");
-                    }
-                }
-            }
-
-            SelectObject(dc, oldFont);
-        }
-    }
-    return m_scriptFontProperties.get();
-}
-
-bool FontPlatformData::ensureFontLoaded(HFONT font)
-{
-    blink::WebSandboxSupport* sandboxSupport = blink::Platform::current()->sandboxSupport();
-    // if there is no sandbox, then we can assume the font
-    // was able to be loaded successfully already
-    return sandboxSupport ? sandboxSupport->ensureFontLoaded(font) : true;
-}
-#endif
-
 bool FontPlatformData::defaultUseSubpixelPositioning()
 {
-#if OS(WIN) && !ENABLE(GDI_FONTS_ON_WINDOWS)
     return FontCache::fontCache()->useSubpixelPositioning();
-#else
-    return false;
-#endif
 }
 
 #ifndef NDEBUG

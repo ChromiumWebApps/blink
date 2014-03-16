@@ -31,17 +31,17 @@
 
 /**
  * @constructor
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @param {!WebInspector.Searchable} searchable
  */
 WebInspector.SearchableView = function(searchable)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
 
     this._searchProvider = searchable;
     this.element.addEventListener("keydown", this._onKeyDown.bind(this), false);
 
-    this._footerElementContainer = this.element.createChild("div", "inspector-footer status-bar hidden");
+    this._footerElementContainer = this.element.createChild("div", "search-bar status-bar hidden");
     this._footerElementContainer.style.order = 100;
 
     this._footerElement = this._footerElementContainer.createChild("table", "toolbar-search");
@@ -244,7 +244,7 @@ WebInspector.SearchableView.prototype = {
 
     _toggleSearchBar: function(toggled)
     {
-        this._footerElementContainer.enableStyleClass("hidden", !toggled);
+        this._footerElementContainer.classList.toggle("hidden", !toggled);
         this.doResize();
     },
 
@@ -363,7 +363,7 @@ WebInspector.SearchableView.prototype = {
 
     _updateReplaceVisibility: function()
     {
-        this._replaceElement.enableStyleClass("hidden", !this._replaceable);
+        this._replaceElement.classList.toggle("hidden", !this._replaceable);
         if (!this._replaceable) {
             this._replaceCheckboxElement.checked = false;
             this._updateSecondRowVisibility();
@@ -462,21 +462,18 @@ WebInspector.SearchableView.prototype = {
 
     _updateSecondRowVisibility: function()
     {
-        if (this._replaceCheckboxElement.checked) {
-            this._footerElement.classList.add("toolbar-search-replace");
-            this._secondRowElement.classList.remove("hidden");
-            this._prevButtonElement.classList.remove("hidden");
-            this._findButtonElement.classList.remove("hidden");
-            this._replaceCheckboxElement.tabIndex = -1;
+        var secondRowVisible = this._replaceCheckboxElement.checked;
+        this._footerElementContainer.classList.toggle("replaceable", secondRowVisible);
+        this._footerElement.classList.toggle("toolbar-search-replace", secondRowVisible);
+        this._secondRowElement.classList.toggle("hidden", !secondRowVisible);
+        this._prevButtonElement.classList.toggle("hidden", !secondRowVisible);
+        this._findButtonElement.classList.toggle("hidden", !secondRowVisible);
+        this._replaceCheckboxElement.tabIndex = secondRowVisible ? -1 : 0;
+
+        if (secondRowVisible)
             this._replaceInputElement.focus();
-        } else {
-            this._footerElement.classList.remove("toolbar-search-replace");
-            this._secondRowElement.classList.add("hidden");
-            this._prevButtonElement.classList.add("hidden");
-            this._findButtonElement.classList.add("hidden");
-            this._replaceCheckboxElement.tabIndex = 0;
+        else
             this._searchInputElement.focus();
-        }
         this.doResize();
     },
 
@@ -502,7 +499,7 @@ WebInspector.SearchableView.prototype = {
         this._performSearch(false, true);
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**

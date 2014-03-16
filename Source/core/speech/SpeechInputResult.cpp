@@ -30,14 +30,14 @@
 
 namespace WebCore {
 
-PassRefPtr<SpeechInputResult> SpeechInputResult::create(const String& utterance, double confidence)
+PassRefPtrWillBeRawPtr<SpeechInputResult> SpeechInputResult::create(const String& utterance, double confidence)
 {
-    return adoptRef(new SpeechInputResult(utterance, confidence));
+    return adoptRefWillBeNoop(new SpeechInputResult(utterance, confidence));
 }
 
-PassRefPtr<SpeechInputResult> SpeechInputResult::create(const SpeechInputResult& source)
+PassRefPtrWillBeRawPtr<SpeechInputResult> SpeechInputResult::create(const SpeechInputResult& source)
 {
-    return adoptRef(new SpeechInputResult(source.m_utterance, source.m_confidence));
+    return adoptRefWillBeNoop(new SpeechInputResult(source.m_utterance, source.m_confidence));
 }
 
 SpeechInputResult::SpeechInputResult(const String& utterance, double confidence)

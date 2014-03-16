@@ -73,6 +73,7 @@ class WebURL;
 class WebURLLoader;
 class WebURLResponse;
 class WebWorkerPermissionClientProxy;
+struct WebContextMenuData;
 struct WebPluginParams;
 struct WebRect;
 struct WebSize;
@@ -92,7 +93,9 @@ public:
     virtual WebApplicationCacheHost* createApplicationCacheHost(WebFrame*, WebApplicationCacheHostClient*) { return 0; }
 
     // May return null. Takes ownership of the client.
+    // FIXME: Deprecate the second argument.
     virtual WebServiceWorkerProvider* createServiceWorkerProvider(WebFrame*, WebServiceWorkerProviderClient*) { return 0; }
+    virtual WebServiceWorkerProvider* createServiceWorkerProvider(WebFrame* frame) { return createServiceWorkerProvider(frame, 0); }
 
     // May return null.
     virtual WebWorkerPermissionClientProxy* createWorkerPermissionClientProxy(WebFrame*) { return 0; }
@@ -126,6 +129,9 @@ public:
 
     // This frame has been detached from the view, but has not been closed yet.
     virtual void frameDetached(WebFrame*) { }
+
+    // This frame has become focused..
+    virtual void frameFocused() { }
 
     // This frame is about to be closed. This is called after frameDetached,
     // when the document is being unloaded, due to new one committing.
@@ -219,6 +225,17 @@ public:
     virtual void didUpdateCurrentHistoryItem(WebFrame*) { }
 
 
+    // UI ------------------------------------------------------------------
+
+    // Shows a context menu with commands relevant to a specific element on
+    // the given frame. Additional context data is supplied.
+    virtual void showContextMenu(const WebContextMenuData&) { }
+
+    // Called when the data attached to the currently displayed context menu is
+    // invalidated. The context menu may be closed if possible.
+    virtual void clearContextMenu() { }
+
+
     // Low-level resource notifications ------------------------------------
 
     // An element will request a resource.
@@ -270,9 +287,6 @@ public:
     virtual void didAbortLoading(WebFrame*) { }
 
     // Script notifications ------------------------------------------------
-
-    // Script in the page tried to allocate too much memory.
-    virtual void didExhaustMemoryAvailableForScript(WebFrame*) { }
 
     // Notifies that a new script context has been created for this frame.
     // This is similar to didClearWindowObject but only called once per

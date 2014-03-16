@@ -32,13 +32,13 @@
 #define FastTextAutosizer_h
 
 #include "core/rendering/RenderObject.h"
+#include "core/rendering/RenderTable.h"
 #include "core/rendering/TextAutosizer.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/text/AtomicStringHash.h"
 
 namespace WebCore {
 
@@ -67,26 +67,8 @@ public:
 
     class LayoutScope {
     public:
-        explicit LayoutScope(Document& document, RenderBlock* block)
-        {
-            m_textAutosizer = document.fastTextAutosizer();
-            if (m_textAutosizer) {
-                if (!m_textAutosizer->enabled()) {
-                    m_textAutosizer = 0;
-                    return;
-                }
-                m_block = block;
-                m_textAutosizer->beginLayout(m_block);
-            } else {
-                m_block = 0;
-            }
-        }
-
-        ~LayoutScope()
-        {
-            if (m_textAutosizer)
-                m_textAutosizer->endLayout(m_block);
-        }
+        explicit LayoutScope(RenderBlock*);
+        ~LayoutScope();
     private:
         FastTextAutosizer* m_textAutosizer;
         RenderBlock* m_block;
@@ -94,6 +76,18 @@ public:
 
 private:
     typedef HashSet<const RenderBlock*> BlockSet;
+
+    enum HasEnoughTextToAutosize {
+        UnknownAmountOfText,
+        HasEnoughText,
+        NotEnoughText
+    };
+
+    enum PageAutosizingStatus {
+        PageAutosizingStatusUnknown,
+        PageNeedsAutosizing,
+        PageDoesNotNeedAutosizing
+    };
 
     // A supercluster represents autosizing information about a set of two or
     // more blocks that all have the same fingerprint. Clusters whose roots
@@ -103,13 +97,11 @@ private:
         explicit Supercluster(const BlockSet* roots)
             : m_roots(roots)
             , m_multiplier(0)
-            , m_anyClusterHasEnoughText(false)
         {
         }
 
         const BlockSet* const m_roots;
         float m_multiplier;
-        bool m_anyClusterHasEnoughText;
     };
 
     struct Cluster {
@@ -119,8 +111,9 @@ private:
             , m_parent(parent)
             , m_autosize(autosize)
             , m_multiplier(0)
-            , m_textLength(-1)
+            , m_hasEnoughTextToAutosize(UnknownAmountOfText)
             , m_supercluster(supercluster)
+            , m_hasTableAncestor(root->isTableCell() || (m_parent && m_parent->m_hasTableAncestor))
         {
         }
 
@@ -135,11 +128,10 @@ private:
         // m_blocksThatHaveBegunLayout assertions cover this). Note: the multiplier is still
         // calculated when m_autosize is false because child clusters may depend on this multiplier.
         float m_multiplier;
-        // Text length is computed lazily (see: textLength). This is an approximation and characters
-        // are assumed to be 1em wide. Negative values indicate the length has not been computed.
-        int m_textLength;
+        HasEnoughTextToAutosize m_hasEnoughTextToAutosize;
         // A set of blocks that are similar to this block.
         Supercluster* m_supercluster;
+        bool m_hasTableAncestor;
     };
 
     enum TextLeafSearch {
@@ -147,47 +139,82 @@ private:
         Last
     };
 
-    typedef HashMap<AtomicString, OwnPtr<Supercluster> > SuperclusterMap;
+    struct FingerprintSourceData {
+        FingerprintSourceData()
+            : m_parentHash(0)
+            , m_qualifiedNameHash(0)
+            , m_packedStyleProperties(0)
+            , m_column(0)
+            , m_width(0)
+        {
+        }
+
+        unsigned m_parentHash;
+        unsigned m_qualifiedNameHash;
+        // Style specific selection of signals
+        unsigned m_packedStyleProperties;
+        unsigned m_column;
+        float m_width;
+    };
+    // Ensures efficient hashing using StringHasher.
+    COMPILE_ASSERT(!(sizeof(FingerprintSourceData) % sizeof(UChar)),
+        Sizeof_FingerprintSourceData_must_be_multiple_of_UChar);
+
+    typedef unsigned Fingerprint;
+    typedef HashMap<Fingerprint, OwnPtr<Supercluster> > SuperclusterMap;
     typedef Vector<OwnPtr<Cluster> > ClusterStack;
 
     // Fingerprints are computed during style recalc, for (some subset of)
     // blocks that will become cluster roots.
     class FingerprintMapper {
     public:
-        void add(const RenderBlock*, AtomicString);
-        void remove(const RenderBlock*);
-        AtomicString get(const RenderBlock*);
-        BlockSet& getBlocks(AtomicString);
+        void add(const RenderObject*, Fingerprint);
+        void addTentativeClusterRoot(const RenderBlock*, Fingerprint);
+        void remove(const RenderObject*);
+        Fingerprint get(const RenderObject*);
+        BlockSet& getTentativeClusterRoots(Fingerprint);
     private:
-        typedef HashMap<const RenderBlock*, AtomicString> FingerprintMap;
-        typedef HashMap<AtomicString, OwnPtr<BlockSet> > ReverseFingerprintMap;
+        typedef HashMap<const RenderObject*, Fingerprint> FingerprintMap;
+        typedef HashMap<Fingerprint, OwnPtr<BlockSet> > ReverseFingerprintMap;
 
         FingerprintMap m_fingerprints;
         ReverseFingerprintMap m_blocksForFingerprint;
+#ifndef NDEBUG
+        void assertMapsAreConsistent();
+#endif
     };
 
     explicit FastTextAutosizer(const Document*);
 
     void beginLayout(RenderBlock*);
     void endLayout(RenderBlock*);
+    void inflateTable(RenderTable*);
     void inflate(RenderBlock*);
     bool enabled();
-    void prepareRenderViewInfo();
+    void updateRenderViewInfo();
+    void prepareClusterStack(const RenderObject*);
     bool isFingerprintingCandidate(const RenderBlock*);
-    bool clusterHasEnoughTextToAutosize(Cluster*);
-    bool clusterWouldHaveEnoughTextToAutosize(const RenderBlock*);
-    float textLength(Cluster*);
-    AtomicString computeFingerprint(const RenderBlock*);
+    bool clusterHasEnoughTextToAutosize(Cluster*, const RenderBlock* widthProvider = 0);
+    bool anyClusterHasEnoughTextToAutosize(const BlockSet* roots, const RenderBlock* widthProvider = 0);
+    bool clusterWouldHaveEnoughTextToAutosize(const RenderBlock* root, const RenderBlock* widthProvider = 0);
+    Fingerprint getFingerprint(const RenderObject*);
+    Fingerprint computeFingerprint(const RenderObject*);
     Cluster* maybeCreateCluster(const RenderBlock*);
     Supercluster* getSupercluster(const RenderBlock*);
     const RenderBlock* deepestCommonAncestor(BlockSet&);
     float clusterMultiplier(Cluster*);
-    float superclusterMultiplier(Supercluster*);
+    float superclusterMultiplier(Cluster*);
+    // A cluster's width provider is typically the deepest block containing all text.
+    // There are exceptions, such as tables and table cells which use the table itself for width.
+    const RenderBlock* clusterWidthProvider(const RenderBlock*);
+    // Typically this returns a block's computed width. In the case of tables layout, this
+    // width is not yet known so the fixed width is used if it's available, or the containing
+    // block's width otherwise.
+    float widthFromBlock(const RenderBlock*);
     float multiplierFromBlock(const RenderBlock*);
     void applyMultiplier(RenderObject*, float);
     bool mightBeWiderOrNarrowerDescendant(const RenderBlock*);
-    bool isWiderDescendant(Cluster*);
-    bool isNarrowerDescendant(Cluster*);
+    bool isWiderOrNarrowerDescendant(Cluster*);
     bool isLayoutRoot(const RenderBlock*) const;
 
     Cluster* currentCluster() const;
@@ -202,9 +229,11 @@ private:
     const RenderObject* findTextLeaf(const RenderObject*, size_t&, TextLeafSearch);
 
     const Document* m_document;
-    int m_frameWidth; // Frame width in density-independent pixels (DIPs).
+    int m_frameWidth; // LocalFrame width in density-independent pixels (DIPs).
     int m_layoutWidth; // Layout width in CSS pixels.
     float m_baseMultiplier; // Includes accessibility font scale factor and device scale adjustment.
+    PageAutosizingStatus m_pageAutosizingStatus;
+    const RenderBlock* m_firstBlock; // First block to receive beginLayout.
 #ifndef NDEBUG
     bool m_renderViewInfoPrepared;
     BlockSet m_blocksThatHaveBegunLayout; // Used to ensure we don't compute properties of a block before beginLayout() is called on it.

@@ -31,7 +31,7 @@
 #include "platform/fonts/FontFeatureSettings.h"
 #include "platform/fonts/FontOrientation.h"
 #include "platform/fonts/FontSmoothingMode.h"
-#include "platform/fonts/FontTraitsMask.h"
+#include "platform/fonts/FontTraits.h"
 #include "platform/fonts/FontWidthVariant.h"
 #include "platform/fonts/TextRenderingMode.h"
 #include "platform/fonts/TypesettingFeatures.h"
@@ -41,30 +41,6 @@
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
-
-enum FontWeight {
-    FontWeight100,
-    FontWeight200,
-    FontWeight300,
-    FontWeight400,
-    FontWeight500,
-    FontWeight600,
-    FontWeight700,
-    FontWeight800,
-    FontWeight900,
-    FontWeightNormal = FontWeight400,
-    FontWeightBold = FontWeight700
-};
-
-enum FontItalic {
-    FontItalicOff = 0,
-    FontItalicOn = 1
-};
-
-enum FontSmallCaps {
-    FontSmallCapsOff = 0,
-    FontSmallCapsOn = 1
-};
 
 class PLATFORM_EXPORT FontDescription {
 public:
@@ -83,16 +59,18 @@ public:
         , m_orientation(Horizontal)
         , m_nonCJKGlyphOrientation(NonCJKGlyphOrientationVerticalRight)
         , m_widthVariant(RegularWidth)
-        , m_italic(FontItalicOff)
-        , m_smallCaps(FontSmallCapsOff)
+        , m_italic(FontStyleNormal)
+        , s_variant(FontVariantNormal)
         , m_isAbsoluteSize(false)
         , m_weight(FontWeightNormal)
+        , m_stretch(FontStretchNormal)
         , m_genericFamily(NoFamily)
         , m_usePrinterFont(false)
         , m_kerning(AutoKerning)
         , m_commonLigaturesState(NormalLigaturesState)
         , m_discretionaryLigaturesState(NormalLigaturesState)
         , m_historicalLigaturesState(NormalLigaturesState)
+        , m_contextualLigaturesState(NormalLigaturesState)
         , m_keywordSize(0)
         , m_fontSmoothing(AutoSmoothing)
         , m_textRendering(AutoTextRendering)
@@ -112,11 +90,12 @@ public:
     FontFamily& firstFamily() { return m_familyList; }
     float specifiedSize() const { return m_specifiedSize; }
     float computedSize() const { return m_computedSize; }
-    FontItalic italic() const { return static_cast<FontItalic>(m_italic); }
+    FontStyle style() const { return static_cast<FontStyle>(m_italic); }
     int computedPixelSize() const { return int(m_computedSize + 0.5f); }
-    FontSmallCaps smallCaps() const { return static_cast<FontSmallCaps>(m_smallCaps); }
+    FontVariant variant() const { return static_cast<FontVariant>(s_variant); }
     bool isAbsoluteSize() const { return m_isAbsoluteSize; }
     FontWeight weight() const { return static_cast<FontWeight>(m_weight); }
+    FontStretch stretch() const { return static_cast<FontStretch>(m_stretch); }
     FontWeight lighterWeight() const;
     FontWeight bolderWeight() const;
     GenericFamilyType genericFamily() const { return static_cast<GenericFamilyType>(m_genericFamily); }
@@ -131,15 +110,16 @@ public:
     LigaturesState commonLigaturesState() const { return static_cast<LigaturesState>(m_commonLigaturesState); }
     LigaturesState discretionaryLigaturesState() const { return static_cast<LigaturesState>(m_discretionaryLigaturesState); }
     LigaturesState historicalLigaturesState() const { return static_cast<LigaturesState>(m_historicalLigaturesState); }
+    LigaturesState contextualLigaturesState() const { return static_cast<LigaturesState>(m_contextualLigaturesState); }
     unsigned keywordSize() const { return m_keywordSize; }
     FontSmoothingMode fontSmoothing() const { return static_cast<FontSmoothingMode>(m_fontSmoothing); }
-    TextRenderingMode textRenderingMode() const { return static_cast<TextRenderingMode>(m_textRendering); }
+    TextRenderingMode textRendering() const { return static_cast<TextRenderingMode>(m_textRendering); }
     UScriptCode script() const { return static_cast<UScriptCode>(m_script); }
     bool isSyntheticBold() const { return m_syntheticBold; }
     bool isSyntheticItalic() const { return m_syntheticItalic; }
     bool useSubpixelPositioning() const { return m_subpixelTextPosition; }
 
-    FontTraitsMask traitsMask() const;
+    FontTraits traits() const;
     float wordSpacing() const { return m_wordSpacing; }
     float letterSpacing() const { return m_letterSpacing; }
     bool isSpecifiedFont() const { return m_isSpecifiedFont; }
@@ -150,26 +130,27 @@ public:
     FontDescription makeNormalFeatureSettings() const;
 
     float effectiveFontSize() const; // Returns either the computedSize or the computedPixelSize
-    FontCacheKey cacheKey(const AtomicString& familyName, FontTraitsMask desiredTraits = static_cast<FontTraitsMask>(0)) const;
+    FontCacheKey cacheKey(const AtomicString& familyName, FontTraits desiredTraits = FontTraits(0)) const;
 
     void setFamily(const FontFamily& family) { m_familyList = family; }
     void setComputedSize(float s) { m_computedSize = clampToFloat(s); }
     void setSpecifiedSize(float s) { m_specifiedSize = clampToFloat(s); }
-    void setItalic(FontItalic i) { m_italic = i; }
-    void setItalic(bool i) { setItalic(i ? FontItalicOn : FontItalicOff); }
-    void setSmallCaps(FontSmallCaps c) { m_smallCaps = c; }
-    void setSmallCaps(bool c) { setSmallCaps(c ? FontSmallCapsOn : FontSmallCapsOff); }
+    void setStyle(FontStyle i) { m_italic = i; }
+    void setStyle(bool i) { setStyle(i ? FontStyleItalic : FontStyleNormal); }
+    void setVariant(FontVariant c) { s_variant = c; }
     void setIsAbsoluteSize(bool s) { m_isAbsoluteSize = s; }
     void setWeight(FontWeight w) { m_weight = w; }
+    void setStretch(FontStretch s) { m_stretch = s; }
     void setGenericFamily(GenericFamilyType genericFamily) { m_genericFamily = genericFamily; }
     void setUsePrinterFont(bool p) { m_usePrinterFont = p; }
     void setKerning(Kerning kerning) { m_kerning = kerning; updateTypesettingFeatures(); }
     void setCommonLigaturesState(LigaturesState commonLigaturesState) { m_commonLigaturesState = commonLigaturesState; updateTypesettingFeatures(); }
-    void setDiscretionaryLigaturesState(LigaturesState discretionaryLigaturesState) { m_discretionaryLigaturesState = discretionaryLigaturesState; }
-    void setHistoricalLigaturesState(LigaturesState historicalLigaturesState) { m_historicalLigaturesState = historicalLigaturesState; }
+    void setDiscretionaryLigaturesState(LigaturesState discretionaryLigaturesState) { m_discretionaryLigaturesState = discretionaryLigaturesState; updateTypesettingFeatures(); }
+    void setHistoricalLigaturesState(LigaturesState historicalLigaturesState) { m_historicalLigaturesState = historicalLigaturesState; updateTypesettingFeatures(); }
+    void setContextualLigaturesState(LigaturesState contextualLigaturesState) { m_contextualLigaturesState = contextualLigaturesState; updateTypesettingFeatures(); }
     void setKeywordSize(unsigned s) { m_keywordSize = s; }
     void setFontSmoothing(FontSmoothingMode smoothing) { m_fontSmoothing = smoothing; }
-    void setTextRenderingMode(TextRenderingMode rendering) { m_textRendering = rendering; updateTypesettingFeatures(); }
+    void setTextRendering(TextRenderingMode rendering) { m_textRendering = rendering; updateTypesettingFeatures(); }
     void setIsSpecifiedFont(bool isSpecifiedFont) { m_isSpecifiedFont = isSpecifiedFont; }
     void setOrientation(FontOrientation orientation) { m_orientation = orientation; }
     void setNonCJKGlyphOrientation(NonCJKGlyphOrientation orientation) { m_nonCJKGlyphOrientation = orientation; }
@@ -178,7 +159,7 @@ public:
     void setSyntheticBold(bool syntheticBold) { m_syntheticBold = syntheticBold; }
     void setSyntheticItalic(bool syntheticItalic) { m_syntheticItalic = syntheticItalic; }
     void setFeatureSettings(PassRefPtr<FontFeatureSettings> settings) { m_featureSettings = settings; }
-    void setTraitsMask(FontTraitsMask);
+    void setTraits(FontTraits);
     void setWordSpacing(float s) { m_wordSpacing = s; }
     void setLetterSpacing(float s) { m_letterSpacing = s; }
 
@@ -208,11 +189,12 @@ private:
 
     unsigned m_widthVariant : 2; // FontWidthVariant
 
-    unsigned m_italic : 1; // FontItalic
-    unsigned m_smallCaps : 1; // FontSmallCaps
+    unsigned m_italic : 1; // FontStyle
+    unsigned s_variant : 1; // FontVariant
     unsigned m_isAbsoluteSize : 1; // Whether or not CSS specified an explicit size
                                   // (logical sizes like "medium" don't count).
-    unsigned m_weight : 8; // FontWeight
+    unsigned m_weight : 4; // FontWeight
+    unsigned m_stretch : 4; // FontStretch
     unsigned m_genericFamily : 3; // GenericFamilyType
     unsigned m_usePrinterFont : 1;
 
@@ -221,6 +203,7 @@ private:
     unsigned m_commonLigaturesState : 2;
     unsigned m_discretionaryLigaturesState : 2;
     unsigned m_historicalLigaturesState : 2;
+    unsigned m_contextualLigaturesState : 2;
 
     unsigned m_keywordSize : 4; // We cache whether or not a font is currently represented by a CSS keyword (e.g., medium).  If so,
                            // then we can accurately translate across different generic families to adjust for different preference settings
@@ -249,15 +232,17 @@ inline bool FontDescription::operator==(const FontDescription& other) const
         && m_letterSpacing == other.m_letterSpacing
         && m_wordSpacing == other.m_wordSpacing
         && m_italic == other.m_italic
-        && m_smallCaps == other.m_smallCaps
+        && s_variant == other.s_variant
         && m_isAbsoluteSize == other.m_isAbsoluteSize
         && m_weight == other.m_weight
+        && m_stretch == other.m_stretch
         && m_genericFamily == other.m_genericFamily
         && m_usePrinterFont == other.m_usePrinterFont
         && m_kerning == other.m_kerning
         && m_commonLigaturesState == other.m_commonLigaturesState
         && m_discretionaryLigaturesState == other.m_discretionaryLigaturesState
         && m_historicalLigaturesState == other.m_historicalLigaturesState
+        && m_contextualLigaturesState == other.m_contextualLigaturesState
         && m_keywordSize == other.m_keywordSize
         && m_fontSmoothing == other.m_fontSmoothing
         && m_textRendering == other.m_textRendering

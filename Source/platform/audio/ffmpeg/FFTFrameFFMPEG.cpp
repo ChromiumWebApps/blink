@@ -107,36 +107,6 @@ FFTFrame::~FFTFrame()
     av_rdft_end(m_inverseContext);
 }
 
-void FFTFrame::multiply(const FFTFrame& frame)
-{
-    FFTFrame& frame1 = *this;
-    FFTFrame& frame2 = const_cast<FFTFrame&>(frame);
-
-    float* realP1 = frame1.realData();
-    float* imagP1 = frame1.imagData();
-    const float* realP2 = frame2.realData();
-    const float* imagP2 = frame2.imagData();
-
-    unsigned halfSize = fftSize() / 2;
-    float real0 = realP1[0];
-    float imag0 = imagP1[0];
-
-    VectorMath::zvmul(realP1, imagP1, realP2, imagP2, realP1, imagP1, halfSize);
-
-    // Multiply the packed DC/nyquist component
-    realP1[0] = real0 * realP2[0];
-    imagP1[0] = imag0 * imagP2[0];
-
-    // Scale accounts the peculiar scaling of vecLib on the Mac.
-    // This ensures the right scaling all the way back to inverse FFT.
-    // FIXME: if we change the scaling on the Mac then this scale
-    // factor will need to change too.
-    float scale = 0.5f;
-
-    VectorMath::vsmul(realP1, 1, &scale, realP1, 1, halfSize);
-    VectorMath::vsmul(imagP1, 1, &scale, imagP1, 1, halfSize);
-}
-
 #if OS(WIN)
 // On Windows, the following pragmas are equivalent to compiling the code with /fp:fast. The
 // following code does not need precise FP semantics, and speed is critical here. See
@@ -159,17 +129,14 @@ void FFTFrame::doFFT(const float* data)
     // De-interleave to separate real and complex arrays.
     int len = m_FFTSize / 2;
 
-    // FIXME: see above comment in multiply() about scaling.
-    const float scale = 2.0f;
-
     float* real = m_realData.data();
     float* imag = m_imagData.data();
     for (int i = 0; i < len; ++i) {
         int baseComplexIndex = 2 * i;
         // m_realData[0] is the DC component and m_imagData[0] is the nyquist component
         // since the interleaved complex data is packed.
-        real[i] = scale * p[baseComplexIndex];
-        imag[i] = scale * p[baseComplexIndex + 1];
+        real[i] = p[baseComplexIndex];
+        imag[i] = p[baseComplexIndex + 1];
     }
 }
 
@@ -181,8 +148,10 @@ void FFTFrame::doInverseFFT(float* data)
     // Compute inverse transform.
     av_rdft_calc(m_inverseContext, interleavedData);
 
-    // Scale so that a forward then inverse FFT yields exactly the original data.
-    const float scale = 1.0 / m_FFTSize;
+    // Scale so that a forward then inverse FFT yields exactly the original data. For some reason
+    // av_rdft_calc above returns values that are half of what I expect. Hence make the scale factor
+    // twice as large to compensate for that.
+    const float scale = 2.0 / m_FFTSize;
     VectorMath::vsmul(interleavedData, 1, &scale, data, 1, m_FFTSize);
 }
 

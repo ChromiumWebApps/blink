@@ -34,9 +34,8 @@ class Plugin;
 class PluginData;
 
 class DOMPlugin FINAL : public RefCountedWillBeGarbageCollectedFinalized<DOMPlugin>, public ScriptWrappable, public FrameDestructionObserver {
-    DECLARE_GC_INFO;
 public:
-    static PassRefPtrWillBeRawPtr<DOMPlugin> create(PluginData* pluginData, Frame* frame, unsigned index)
+    static PassRefPtrWillBeRawPtr<DOMPlugin> create(PluginData* pluginData, LocalFrame* frame, unsigned index)
     {
         return adoptRefWillBeNoop(new DOMPlugin(pluginData, frame, index));
     }
@@ -57,7 +56,7 @@ public:
 private:
     const PluginInfo& pluginInfo() const { return m_pluginData->plugins()[m_index]; }
 
-    DOMPlugin(PluginData*, Frame*, unsigned index);
+    DOMPlugin(PluginData*, LocalFrame*, unsigned index);
     RefPtr<PluginData> m_pluginData;
     unsigned m_index;
 };

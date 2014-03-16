@@ -45,7 +45,7 @@ static void setFocusForModalDialog(HTMLDialogElement* dialog)
     Element* focusableDescendant = 0;
     Node* next = 0;
     for (Node* node = dialog->firstChild(); node; node = next) {
-        if (node->hasTagName(dialogTag))
+        if (isHTMLDialogElement(*node))
             next = NodeTraversal::nextSkippingChildren(*node, dialog);
         else
             next = NodeTraversal::next(*node, dialog);
@@ -83,10 +83,10 @@ static void inertSubtreesChanged(Document& document)
     // tree can change inertness which means they must be added or removed from
     // the tree. The most foolproof way is to clear the entire tree and rebuild
     // it, though a more clever way is probably possible.
-    Document* topDocument = document.topDocument();
-    topDocument->clearAXObjectCache();
-    if (AXObjectCache* cache = topDocument->axObjectCache())
-        cache->childrenChanged(cache->getOrCreate(topDocument));
+    Document& topDocument = document.topDocument();
+    topDocument.clearAXObjectCache();
+    if (AXObjectCache* cache = topDocument.axObjectCache())
+        cache->childrenChanged(cache->getOrCreate(&topDocument));
 }
 
 HTMLDialogElement::HTMLDialogElement(Document& document)

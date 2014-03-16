@@ -71,10 +71,10 @@
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/style/KeyframeList.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -93,7 +93,7 @@ void setAnimationUpdateIfNeeded(StyleResolverState& state, Element& element)
     // If any changes to CSS Animations were detected, stash the update away for application after the
     // render object is updated if we're in the appropriate scope.
     if (state.animationUpdate())
-        element.ensureActiveAnimations()->cssAnimations().setPendingUpdate(state.takeAnimationUpdate());
+        element.ensureActiveAnimations().cssAnimations().setPendingUpdate(state.takeAnimationUpdate());
 }
 
 } // namespace
@@ -168,7 +168,7 @@ StyleResolver::StyleResolver(Document& document)
 #endif
 }
 
-void StyleResolver::initWatchedSelectorRules(const Vector<RefPtr<StyleRule> >& watchedSelectors)
+void StyleResolver::initWatchedSelectorRules(const WillBeHeapVector<RefPtrWillBeMember<StyleRule> >& watchedSelectors)
 {
     if (!watchedSelectors.size())
         return;
@@ -177,14 +177,14 @@ void StyleResolver::initWatchedSelectorRules(const Vector<RefPtr<StyleRule> >& w
         m_watchedSelectorsRules->addStyleRule(watchedSelectors[i].get(), RuleHasNoSpecialState);
 }
 
-void StyleResolver::lazyAppendAuthorStyleSheets(unsigned firstNew, const Vector<RefPtr<CSSStyleSheet> >& styleSheets)
+void StyleResolver::lazyAppendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& styleSheets)
 {
     unsigned size = styleSheets.size();
     for (unsigned i = firstNew; i < size; ++i)
         m_pendingStyleSheets.add(styleSheets[i].get());
 }
 
-void StyleResolver::removePendingAuthorStyleSheets(const Vector<RefPtr<CSSStyleSheet> >& styleSheets)
+void StyleResolver::removePendingAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& styleSheets)
 {
     for (unsigned i = 0; i < styleSheets.size(); ++i)
         m_pendingStyleSheets.remove(styleSheets[i].get());
@@ -216,7 +216,7 @@ void StyleResolver::appendPendingAuthorStyleSheets()
     finishAppendAuthorStyleSheets();
 }
 
-void StyleResolver::appendAuthorStyleSheets(unsigned firstNew, const Vector<RefPtr<CSSStyleSheet> >& styleSheets)
+void StyleResolver::appendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& styleSheets)
 {
     // This handles sheets added to the end of the stylesheet list only. In other cases the style resolver
     // needs to be reconstructed. To handle insertions too the rule order numbers would need to be updated.
@@ -246,7 +246,7 @@ void StyleResolver::resetRuleFeatures()
     m_needCollectFeatures = true;
 }
 
-void StyleResolver::addTreeBoundaryCrossingRules(const Vector<MinimalRuleData>& rules, ContainerNode* scope)
+void StyleResolver::addTreeBoundaryCrossingRules(const WillBeHeapVector<MinimalRuleData>& rules, ContainerNode* scope)
 {
     for (unsigned i = 0; i < rules.size(); ++i) {
         const MinimalRuleData& info = rules[i];
@@ -256,7 +256,7 @@ void StyleResolver::addTreeBoundaryCrossingRules(const Vector<MinimalRuleData>& 
 
 void StyleResolver::processScopedRules(const RuleSet& authorRules, const KURL& sheetBaseURL, ContainerNode* scope)
 {
-    const Vector<StyleRuleKeyframes*> keyframesRules = authorRules.keyframesRules();
+    const WillBeHeapVector<RawPtrWillBeMember<StyleRuleKeyframes> > keyframesRules = authorRules.keyframesRules();
     for (unsigned i = 0; i < keyframesRules.size(); ++i)
         ensureScopedStyleResolver(scope)->addKeyframeStyle(keyframesRules[i]);
 
@@ -264,7 +264,7 @@ void StyleResolver::processScopedRules(const RuleSet& authorRules, const KURL& s
 
     // FIXME(BUG 72461): We don't add @font-face rules of scoped style sheets for the moment.
     if (!scope || scope->isDocumentNode()) {
-        const Vector<StyleRuleFontFace*> fontFaceRules = authorRules.fontFaceRules();
+        const WillBeHeapVector<RawPtrWillBeMember<StyleRuleFontFace> > fontFaceRules = authorRules.fontFaceRules();
         for (unsigned i = 0; i < fontFaceRules.size(); ++i)
             addFontFaceRule(&m_document, document().styleEngine()->fontSelector(), fontFaceRules[i]);
         if (fontFaceRules.size())
@@ -292,12 +292,12 @@ void StyleResolver::resetAuthorStyle(const ContainerNode* scopingNode)
     m_styleTree.remove(scopingNode);
 }
 
-static PassOwnPtr<RuleSet> makeRuleSet(const Vector<RuleFeature>& rules)
+static PassOwnPtrWillBeRawPtr<RuleSet> makeRuleSet(const Vector<RuleFeature>& rules)
 {
     size_t size = rules.size();
     if (!size)
         return nullptr;
-    OwnPtr<RuleSet> ruleSet = RuleSet::create();
+    OwnPtrWillBeRawPtr<RuleSet> ruleSet = RuleSet::create();
     for (size_t i = 0; i < size; ++i)
         ruleSet->addRule(rules[i].rule, rules[i].selectorIndex, rules[i].hasDocumentSecurityOrigin ? RuleHasDocumentSecurityOrigin : RuleHasNoSpecialState);
     return ruleSet.release();
@@ -591,13 +591,14 @@ void StyleResolver::matchAllRules(StyleResolverState& state, ElementRuleCollecto
 
 PassRefPtr<RenderStyle> StyleResolver::styleForDocument(Document& document, CSSFontSelector* fontSelector)
 {
-    const Frame* frame = document.frame();
+    const LocalFrame* frame = document.frame();
 
     RefPtr<RenderStyle> documentStyle = RenderStyle::create();
     documentStyle->setDisplay(BLOCK);
     documentStyle->setRTLOrdering(document.visuallyOrdered() ? VisualOrder : LogicalOrder);
     documentStyle->setZoom(frame && !document.printing() ? frame->pageZoomFactor() : 1);
     documentStyle->setLocale(document.contentLanguage());
+    documentStyle->setZIndex(0);
 
     // This overrides any -webkit-user-modify inherited from the parent iframe.
     documentStyle->setUserModify(document.inDesignMode() ? READ_WRITE : READ_ONLY);
@@ -717,7 +718,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
     applyAnimatedProperties(state, element);
 
     // FIXME: Shouldn't this be on RenderBody::styleDidChange?
-    if (element->hasTagName(bodyTag))
+    if (isHTMLBodyElement(*element))
         document().textLinkColors().setTextColor(state.style()->color());
 
     setAnimationUpdateIfNeeded(state, *element);
@@ -740,8 +741,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element* element, const 
     StyleResolverState state(document(), element, parentStyle);
 
     MatchResult result;
-    if (keyframe->properties())
-        result.addMatchedProperties(keyframe->properties());
+    result.addMatchedProperties(&keyframe->properties());
 
     ASSERT(!state.style());
 
@@ -766,10 +766,8 @@ PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element* element, const 
     // We don't need to bother with !important. Since there is only ever one
     // decl, there's nothing to override. So just add the first properties.
     bool inheritedOnly = false;
-    if (keyframe->properties()) {
-        applyMatchedProperties<AnimationProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
-        applyMatchedProperties<HighPriorityProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
-    }
+    applyMatchedProperties<AnimationProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
+    applyMatchedProperties<HighPriorityProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
 
     // If our font got dirtied, go ahead and update it now.
     updateFont(state);
@@ -779,8 +777,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element* element, const 
         StyleBuilder::applyProperty(CSSPropertyLineHeight, state, state.lineHeightValue());
 
     // Now do rest of the properties.
-    if (keyframe->properties())
-        applyMatchedProperties<LowPriorityProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
+    applyMatchedProperties<LowPriorityProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
 
     // If our font got dirtied by one of the non-essential font props,
     // go ahead and update it a second time.
@@ -797,7 +794,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element* element, const 
 
 // This function is used by the WebAnimations JavaScript API method animate().
 // FIXME: Remove this when animate() switches away from resolution-dependent parsing.
-PassRefPtr<KeyframeEffectModel> StyleResolver::createKeyframeEffectModel(Element& element, const Vector<RefPtr<MutableStylePropertySet> >& propertySetVector, KeyframeEffectModel::KeyframeVector& keyframes)
+PassRefPtrWillBeRawPtr<KeyframeEffectModel> StyleResolver::createKeyframeEffectModel(Element& element, const Vector<RefPtr<MutableStylePropertySet> >& propertySetVector, KeyframeEffectModel::KeyframeVector& keyframes)
 {
     ASSERT(propertySetVector.size() == keyframes.size());
 
@@ -1025,7 +1022,7 @@ PassRefPtr<StyleRuleList> StyleResolver::styleRulesForElement(Element* element, 
     return collector.matchedStyleRuleList();
 }
 
-PassRefPtr<CSSRuleList> StyleResolver::pseudoCSSRulesForElement(Element* element, PseudoId pseudoId, unsigned rulesToInclude)
+PassRefPtrWillBeRawPtr<CSSRuleList> StyleResolver::pseudoCSSRulesForElement(Element* element, PseudoId pseudoId, unsigned rulesToInclude)
 {
     ASSERT(element);
     StyleResolverState state(document(), element);
@@ -1035,7 +1032,7 @@ PassRefPtr<CSSRuleList> StyleResolver::pseudoCSSRulesForElement(Element* element
     return collector.matchedCSSRuleList();
 }
 
-PassRefPtr<CSSRuleList> StyleResolver::cssRulesForElement(Element* element, unsigned rulesToInclude)
+PassRefPtrWillBeRawPtr<CSSRuleList> StyleResolver::cssRulesForElement(Element* element, unsigned rulesToInclude)
 {
     return pseudoCSSRulesForElement(element, NOPSEUDO, rulesToInclude);
 }

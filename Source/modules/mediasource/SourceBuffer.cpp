@@ -72,11 +72,9 @@ static bool throwExceptionIfRemovedOrUpdating(bool isRemoved, bool isUpdating, E
 
 } // namespace
 
-DEFINE_GC_INFO(SourceBuffer);
-
 PassRefPtrWillBeRawPtr<SourceBuffer> SourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
 {
-    RefPtrWillBeRawPtr<SourceBuffer> sourceBuffer(adoptRefCountedWillBeRefCountedGarbageCollected(new SourceBuffer(webSourceBuffer, source, asyncEventQueue)));
+    RefPtrWillBeRawPtr<SourceBuffer> sourceBuffer(adoptRefWillBeRefCountedGarbageCollected(new SourceBuffer(webSourceBuffer, source, asyncEventQueue)));
     sourceBuffer->suspendIfNeeded();
     return sourceBuffer.release();
 }
@@ -295,13 +293,13 @@ void SourceBuffer::appendBuffer(PassRefPtr<ArrayBufferView> data, ExceptionState
     appendBufferInternal(static_cast<const unsigned char*>(data->baseAddress()), data->byteLength(), exceptionState);
 }
 
-void SourceBuffer::appendStream(PassRefPtr<Stream> stream, ExceptionState& exceptionState)
+void SourceBuffer::appendStream(PassRefPtrWillBeRawPtr<Stream> stream, ExceptionState& exceptionState)
 {
     m_streamMaxSizeValid = false;
     appendStreamInternal(stream, exceptionState);
 }
 
-void SourceBuffer::appendStream(PassRefPtr<Stream> stream, unsigned long long maxSize, ExceptionState& exceptionState)
+void SourceBuffer::appendStream(PassRefPtrWillBeRawPtr<Stream> stream, unsigned long long maxSize, ExceptionState& exceptionState)
 {
     m_streamMaxSizeValid = maxSize > 0;
     if (m_streamMaxSizeValid)
@@ -536,7 +534,7 @@ void SourceBuffer::appendBufferAsyncPart()
         // so that it can clear its end of stream state if necessary.
         m_pendingAppendData.resize(1);
     }
-    m_webSourceBuffer->append(m_pendingAppendData.data(), appendSize);
+    m_webSourceBuffer->append(m_pendingAppendData.data(), appendSize, &m_timestampOffset);
 
     // 3. Set the updating attribute to false.
     m_updating = false;
@@ -574,7 +572,7 @@ void SourceBuffer::removeAsyncPart()
     scheduleEvent(EventTypeNames::updateend);
 }
 
-void SourceBuffer::appendStreamInternal(PassRefPtr<Stream> stream, ExceptionState& exceptionState)
+void SourceBuffer::appendStreamInternal(PassRefPtrWillBeRawPtr<Stream> stream, ExceptionState& exceptionState)
 {
     // Section 3.2 appendStream()
     // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-appendStream-void-Stream-stream-unsigned-long-long-maxSize
@@ -690,8 +688,7 @@ void SourceBuffer::didReceiveDataForClient(const char* data, unsigned dataLength
     WTF_LOG(Media, "SourceBuffer::didReceiveDataForClient(%d) %p", dataLength, this);
     ASSERT(m_updating);
     ASSERT(m_loader);
-
-    m_webSourceBuffer->append(reinterpret_cast<const unsigned char*>(data), dataLength);
+    m_webSourceBuffer->append(reinterpret_cast<const unsigned char*>(data), dataLength, &m_timestampOffset);
 }
 
 void SourceBuffer::didFinishLoading()
@@ -709,6 +706,7 @@ void SourceBuffer::didFail(FileError::ErrorCode errorCode)
 void SourceBuffer::trace(Visitor* visitor)
 {
     visitor->trace(m_source);
+    visitor->trace(m_stream);
 }
 
 } // namespace WebCore

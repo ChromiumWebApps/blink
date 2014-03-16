@@ -54,16 +54,16 @@
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
 #include "core/events/ThreadLocalEventNames.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/frame/ContentSecurityPolicy.h"
-#include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
-#include "core/frame/Settings.h"
 #include "core/plugins/PluginView.h"
 #include "platform/NotImplemented.h"
 #include "platform/TraceEvent.h"
@@ -80,7 +80,7 @@
 
 namespace WebCore {
 
-bool ScriptController::canAccessFromCurrentOrigin(Frame *frame)
+bool ScriptController::canAccessFromCurrentOrigin(LocalFrame *frame)
 {
     if (!frame)
         return false;
@@ -88,7 +88,7 @@ bool ScriptController::canAccessFromCurrentOrigin(Frame *frame)
     return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(isolate, frame);
 }
 
-ScriptController::ScriptController(Frame* frame)
+ScriptController::ScriptController(LocalFrame* frame)
     : m_frame(frame)
     , m_sourceURL(0)
     , m_isolate(v8::Isolate::GetCurrent())
@@ -123,23 +123,12 @@ void ScriptController::clearScriptObjects()
     }
 }
 
-void ScriptController::clearForOutOfMemory()
-{
-    clearForClose(true);
-}
-
-void ScriptController::clearForClose(bool destroyGlobal)
-{
-    m_windowShell->clearForClose(destroyGlobal);
-    for (IsolatedWorldMap::iterator iter = m_isolatedWorlds.begin(); iter != m_isolatedWorlds.end(); ++iter)
-        iter->value->clearForClose(destroyGlobal);
-    V8GCController::hintForCollectGarbage();
-}
-
 void ScriptController::clearForClose()
 {
     double start = currentTime();
-    clearForClose(false);
+    m_windowShell->clearForClose();
+    for (IsolatedWorldMap::iterator iter = m_isolatedWorlds.begin(); iter != m_isolatedWorlds.end(); ++iter)
+        iter->value->clearForClose();
     blink::Platform::current()->histogramCustomCounts("WebCore.ScriptController.clearForClose", (currentTime() - start) * 1000, 0, 10000, 50);
 }
 
@@ -148,10 +137,10 @@ void ScriptController::updateSecurityOrigin(SecurityOrigin* origin)
     m_windowShell->updateSecurityOrigin(origin);
 }
 
-v8::Local<v8::Value> ScriptController::callFunction(v8::Handle<v8::Function> function, v8::Handle<v8::Object> receiver, int argc, v8::Handle<v8::Value> info[])
+v8::Local<v8::Value> ScriptController::callFunction(v8::Handle<v8::Function> function, v8::Handle<v8::Value> receiver, int argc, v8::Handle<v8::Value> info[])
 {
-    // Keep Frame (and therefore ScriptController) alive.
-    RefPtr<Frame> protect(m_frame);
+    // Keep LocalFrame (and therefore ScriptController) alive.
+    RefPtr<LocalFrame> protect(m_frame);
     return ScriptController::callFunction(m_frame->document(), function, receiver, argc, info, m_isolate);
 }
 
@@ -169,7 +158,7 @@ static bool resourceInfo(const v8::Handle<v8::Function> function, String& resour
     return true;
 }
 
-v8::Local<v8::Value> ScriptController::callFunction(ExecutionContext* context, v8::Handle<v8::Function> function, v8::Handle<v8::Object> receiver, int argc, v8::Handle<v8::Value> info[], v8::Isolate* isolate)
+v8::Local<v8::Value> ScriptController::callFunction(ExecutionContext* context, v8::Handle<v8::Function> function, v8::Handle<v8::Value> receiver, int argc, v8::Handle<v8::Value> info[], v8::Isolate* isolate)
 {
     InspectorInstrumentationCookie cookie;
     if (InspectorInstrumentation::timelineAgentEnabled(context)) {
@@ -208,8 +197,8 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8
         // 1, whereas v8 starts at 0.
         v8::Handle<v8::Script> script = V8ScriptRunner::compileScript(code, source.url(), source.startPosition(), scriptData.get(), m_isolate, corsStatus);
 
-        // Keep Frame (and therefore ScriptController) alive.
-        RefPtr<Frame> protect(m_frame);
+        // Keep LocalFrame (and therefore ScriptController) alive.
+        RefPtr<LocalFrame> protect(m_frame);
         result = V8ScriptRunner::runCompiledScript(script, m_frame->document(), m_isolate);
         ASSERT(!tryCatch.HasCaught() || result.IsEmpty());
     }
@@ -263,10 +252,11 @@ V8WindowShell* ScriptController::windowShell(DOMWrapperWorld* world)
 
 bool ScriptController::shouldBypassMainWorldContentSecurityPolicy()
 {
+    v8::Handle<v8::Context> context = m_isolate->GetCurrentContext();
+    if (context.IsEmpty() || !toDOMWindow(context))
+        return false;
     DOMWrapperWorld* world = DOMWrapperWorld::current(m_isolate);
-    if (world && world->isIsolatedWorld())
-        return world->isolatedWorldHasContentSecurityPolicy();
-    return false;
+    return world->isIsolatedWorld() ? world->isolatedWorldHasContentSecurityPolicy() : false;
 }
 
 TextPosition ScriptController::eventHandlerPosition() const
@@ -278,7 +268,7 @@ TextPosition ScriptController::eventHandlerPosition() const
 }
 
 // Create a V8 object with an interceptor of NPObjectPropertyGetter.
-void ScriptController::bindToWindowObject(Frame* frame, const String& key, NPObject* object)
+void ScriptController::bindToWindowObject(LocalFrame* frame, const String& key, NPObject* object)
 {
     v8::HandleScope handleScope(m_isolate);
 
@@ -324,7 +314,7 @@ PassRefPtr<SharedPersistent<v8::Object> > ScriptController::createPluginWrapper(
     if (!npObject)
         return nullptr;
 
-    // Frame Memory Management for NPObjects
+    // LocalFrame Memory Management for NPObjects
     // -------------------------------------
     // NPObjects are treated differently than other objects wrapped by JS.
     // NPObjects can be created either by the browser (e.g. the main
@@ -333,7 +323,7 @@ PassRefPtr<SharedPersistent<v8::Object> > ScriptController::createPluginWrapper(
     // is especially careful to ensure NPObjects terminate at frame teardown because
     // if a plugin leaks a reference, it could leak its objects (or the browser's objects).
     //
-    // The Frame maintains a list of plugin objects (m_pluginObjects)
+    // The LocalFrame maintains a list of plugin objects (m_pluginObjects)
     // which it can use to quickly find the wrapped embed object.
     //
     // Inside the NPRuntime, we've added a few methods for registering
@@ -389,7 +379,7 @@ static NPObject* createNoScriptObject()
     return 0;
 }
 
-static NPObject* createScriptObject(Frame* frame, v8::Isolate* isolate)
+static NPObject* createScriptObject(LocalFrame* frame, v8::Isolate* isolate)
 {
     v8::HandleScope handleScope(isolate);
     v8::Handle<v8::Context> v8Context = toV8Context(isolate, frame, DOMWrapperWorld::mainWorld());
@@ -452,7 +442,6 @@ void ScriptController::clearWindowShell()
     for (IsolatedWorldMap::iterator iter = m_isolatedWorlds.begin(); iter != m_isolatedWorlds.end(); ++iter)
         iter->value->clearForNavigation();
     clearScriptObjects();
-    V8GCController::hintForCollectGarbage();
     blink::Platform::current()->histogramCustomCounts("WebCore.ScriptController.clearWindowShell", (currentTime() - start) * 1000, 0, 10000, 50);
 }
 
@@ -542,9 +531,9 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url)
         || !m_frame->document()->contentSecurityPolicy()->allowJavaScriptURLs(m_frame->document()->url(), eventHandlerPosition().m_line))
         return true;
 
-    // We need to hold onto the Frame here because executing script can
+    // We need to hold onto the LocalFrame here because executing script can
     // destroy the frame.
-    RefPtr<Frame> protector(m_frame);
+    RefPtr<LocalFrame> protector(m_frame);
     RefPtr<Document> ownerDocument(m_frame->document());
 
     const int javascriptSchemeLength = sizeof("javascript:") - 1;
@@ -607,7 +596,7 @@ ScriptValue ScriptController::evaluateScriptInMainWorld(const ScriptSourceCode& 
     if (v8Context.IsEmpty())
         return ScriptValue();
 
-    RefPtr<Frame> protect(m_frame);
+    RefPtr<LocalFrame> protect(m_frame);
     if (m_frame->loader().stateMachine()->isDisplayingInitialEmptyDocument())
         m_frame->loader().didAccessInitialDocument();
 

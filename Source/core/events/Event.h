@@ -27,6 +27,7 @@
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/DOMTimeStamp.h"
 #include "core/events/EventPath.h"
+#include "heap/Handle.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/AtomicString.h"
 
@@ -43,7 +44,7 @@ struct EventInit {
     bool cancelable;
 };
 
-class Event : public ScriptWrappable, public RefCounted<Event> {
+class Event : public RefCounted<Event>,  public ScriptWrappable {
 public:
     enum PhaseType {
         NONE                = 0,
@@ -177,6 +178,8 @@ public:
     PassRefPtr<NodeList> path() const;
 
     bool isBeingDispatched() const { return eventPhase(); }
+
+    virtual void trace(Visitor*);
 
 protected:
     Event();

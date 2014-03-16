@@ -116,6 +116,8 @@ public:
         return objects && !objects->isEmpty();
     }
 
+    virtual bool visibleForTouchAction() const OVERRIDE FINAL { return true; }
+
     void addPercentHeightDescendant(RenderBox*);
     static void removePercentHeightDescendant(RenderBox*);
     TrackedRendererListHashSet* percentHeightDescendants() const;
@@ -225,12 +227,10 @@ public:
     void setPageLogicalOffset(LayoutUnit);
 
     // Accessors for logical width/height and margins in the containing block's block-flow direction.
-    enum ApplyLayoutDeltaMode { ApplyLayoutDelta, DoNotApplyLayoutDelta };
     LayoutUnit logicalWidthForChild(const RenderBox* child) const { return isHorizontalWritingMode() ? child->width() : child->height(); }
     LayoutUnit logicalHeightForChild(const RenderBox* child) const { return isHorizontalWritingMode() ? child->height() : child->width(); }
+    LayoutSize logicalSizeForChild(const RenderBox* child) const { return isHorizontalWritingMode() ? child->size() : child->size().transposedSize(); }
     LayoutUnit logicalTopForChild(const RenderBox* child) const { return isHorizontalWritingMode() ? child->y() : child->x(); }
-    void setLogicalLeftForChild(RenderBox* child, LayoutUnit logicalLeft, ApplyLayoutDeltaMode = DoNotApplyLayoutDelta);
-    void setLogicalTopForChild(RenderBox* child, LayoutUnit logicalTop, ApplyLayoutDeltaMode = DoNotApplyLayoutDelta);
     LayoutUnit marginBeforeForChild(const RenderBoxModelObject* child) const { return child->marginBefore(style()); }
     LayoutUnit marginAfterForChild(const RenderBoxModelObject* child) const { return child->marginAfter(style()); }
     LayoutUnit marginStartForChild(const RenderBoxModelObject* child) const { return child->marginStart(style()); }
@@ -257,15 +257,15 @@ public:
     void showLineTreeAndMark(const InlineBox* = 0, const char* = 0, const InlineBox* = 0, const char* = 0, const RenderObject* = 0) const;
 #endif
 
-    ShapeInsideInfo* ensureShapeInsideInfo()
+    ShapeInsideInfo& ensureShapeInsideInfo()
     {
         if (!m_rareData || !m_rareData->m_shapeInsideInfo)
-            setShapeInsideInfo(ShapeInsideInfo::createInfo(this));
-        return m_rareData->m_shapeInsideInfo.get();
+            setShapeInsideInfo(ShapeInsideInfo::createInfo(*this));
+        return *m_rareData->m_shapeInsideInfo;
     }
     ShapeInsideInfo* shapeInsideInfo() const
     {
-        return m_rareData && m_rareData->m_shapeInsideInfo && ShapeInsideInfo::isEnabledFor(this) ? m_rareData->m_shapeInsideInfo.get() : 0;
+        return m_rareData && m_rareData->m_shapeInsideInfo && ShapeInsideInfo::isEnabledFor(*this) ? m_rareData->m_shapeInsideInfo.get() : 0;
     }
     void setShapeInsideInfo(PassOwnPtr<ShapeInsideInfo> value)
     {
@@ -290,14 +290,18 @@ protected:
     virtual void layout() OVERRIDE;
     virtual bool updateImageLoadingPriorities() OVERRIDE FINAL;
 
-    void layoutPositionedObjects(bool relayoutChildren, bool fixedPositionObjectsOnly = false);
+    enum PositionedLayoutBehavior {
+        DefaultLayout,
+        LayoutOnlyFixedPositionedObjects,
+        ForcedLayoutAfterContainingBlockMoved
+    };
+
+    void layoutPositionedObjects(bool relayoutChildren, PositionedLayoutBehavior = DefaultLayout);
     void markFixedPositionObjectForLayoutIfNeeded(RenderObject* child, SubtreeLayoutScope&);
 
     LayoutUnit marginIntrinsicLogicalWidthForChild(RenderBox* child) const;
 
     int beforeMarginInLineDirection(LineDirectionMode) const;
-
-    virtual bool supportsPartialLayout() const OVERRIDE { return true; };
 
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE;
     virtual void paintObject(PaintInfo&, const LayoutPoint&) OVERRIDE;
@@ -389,9 +393,6 @@ private:
     void insertIntoTrackedRendererMaps(RenderBox* descendant, TrackedDescendantsMap*&, TrackedContainerMap*&);
     static void removeFromTrackedRendererMaps(RenderBox* descendant, TrackedDescendantsMap*&, TrackedContainerMap*&);
 
-    // Called to lay out the legend for a fieldset or the ruby text of a ruby run.
-    virtual RenderObject* layoutSpecialExcludedChild(bool /*relayoutChildren*/, SubtreeLayoutScope&) { return 0; }
-
     void createFirstLetterRenderer(RenderObject* firstLetterBlock, RenderObject* currentChild, unsigned length);
     void updateFirstLetterStyle(RenderObject* firstLetterBlock, RenderObject* firstLetterContainer);
 
@@ -417,8 +418,6 @@ private:
 
     virtual bool isPointInOverflowControl(HitTestResult&, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset);
 
-    // FIXME: Make this method const so we can remove the const_cast in computeIntrinsicLogicalWidths.
-    void computeInlinePreferredLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth);
     void computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const;
 
     // Obtains the nearest enclosing block (including this block) that contributes a first-line style to our inline
@@ -484,8 +483,6 @@ private:
     // End helper functions and structs used by layoutBlockChildren.
 
 protected:
-    void determineLogicalLeftPositionForChild(RenderBox* child, ApplyLayoutDeltaMode = DoNotApplyLayoutDelta);
-
     // Returns the logicalOffset at the top of the next page. If the offset passed in is already at the top of the current page,
     // then nextPageLogicalTop with ExcludePageBoundary will still move to the top of the next page. nextPageLogicalTop with
     // IncludePageBoundary set will not.

@@ -53,6 +53,12 @@ struct Timing {
         PlaybackDirectionAlternateReverse
     };
 
+    static const Timing& defaults()
+    {
+        DEFINE_STATIC_LOCAL(Timing, timing, ());
+        return timing;
+    }
+
     Timing()
         : startDelay(0)
         , endDelay(0)
@@ -62,7 +68,7 @@ struct Timing {
         , iterationDuration(std::numeric_limits<double>::quiet_NaN())
         , playbackRate(1)
         , direction(PlaybackDirectionNormal)
-        , timingFunction(LinearTimingFunction::create())
+        , timingFunction(LinearTimingFunction::preset())
     {
     }
 
@@ -84,7 +90,6 @@ struct Timing {
     double iterationStart;
     double iterationCount;
     double iterationDuration;
-    // FIXME: Add activeDuration.
     double playbackRate;
     PlaybackDirection direction;
     RefPtr<TimingFunction> timingFunction;

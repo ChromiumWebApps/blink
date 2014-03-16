@@ -63,10 +63,10 @@ static IntSize sizeFor(HTMLVideoElement* video)
     return IntSize();
 }
 
-static ScriptPromise fulfillImageBitmap(ExecutionContext* context, PassRefPtr<ImageBitmap> imageBitmap)
+static ScriptPromise fulfillImageBitmap(ExecutionContext* context, PassRefPtrWillBeRawPtr<ImageBitmap> imageBitmap)
 {
-    ScriptPromise promise = ScriptPromise::createPending(context);
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, context);
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(context);
+    ScriptPromise promise = resolver->promise();
     resolver->resolve(imageBitmap);
     return promise;
 }
@@ -192,11 +192,11 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(EventTarget& eventTarget, 
 ScriptPromise ImageBitmapFactories::createImageBitmap(EventTarget& eventTarget, Blob* blob, ExceptionState& exceptionState)
 {
     if (!blob) {
-        exceptionState.throwDOMException(TypeError, "The blob provided is invalid.");
+        exceptionState.throwTypeError("The blob provided is invalid.");
         return ScriptPromise();
     }
-    ScriptPromise promise = ScriptPromise::createPending(eventTarget.executionContext());
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, eventTarget.executionContext());
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(eventTarget.executionContext());
+    ScriptPromise promise = resolver->promise();
     RefPtr<ImageBitmapLoader> loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), resolver, IntRect());
     from(eventTarget).addLoader(loader);
     loader->loadBlobAsync(eventTarget.executionContext(), blob);
@@ -206,15 +206,15 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(EventTarget& eventTarget, 
 ScriptPromise ImageBitmapFactories::createImageBitmap(EventTarget& eventTarget, Blob* blob, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
 {
     if (!blob) {
-        exceptionState.throwDOMException(TypeError, "The blob provided is invalid.");
+        exceptionState.throwTypeError("The blob provided is invalid.");
         return ScriptPromise();
     }
     if (!sw || !sh) {
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
     }
-    ScriptPromise promise = ScriptPromise::createPending(eventTarget.executionContext());
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, eventTarget.executionContext());
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(eventTarget.executionContext());
+    ScriptPromise promise = resolver->promise();
     RefPtr<ImageBitmapLoader> loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), resolver, IntRect(sx, sy, sw, sh));
     from(eventTarget).addLoader(loader);
     loader->loadBlobAsync(eventTarget.executionContext(), blob);
@@ -270,16 +270,15 @@ ImageBitmapFactories& ImageBitmapFactories::from(EventTarget& eventTarget)
         return fromInternal(*window);
 
     ASSERT(eventTarget.executionContext()->isWorkerGlobalScope());
-    return fromInternal(*toWorkerGlobalScope(eventTarget.executionContext()));
+    return WorkerGlobalScopeImageBitmapFactories::fromInternal(*toWorkerGlobalScope(eventTarget.executionContext()));
 }
 
-template <class T>
-ImageBitmapFactories& ImageBitmapFactories::fromInternal(T& object)
+ImageBitmapFactories& ImageBitmapFactories::fromInternal(DOMWindow& object)
 {
-    ImageBitmapFactories* supplement = static_cast<ImageBitmapFactories*>(Supplement<T>::from(object, supplementName()));
+    ImageBitmapFactories* supplement = static_cast<ImageBitmapFactories*>(Supplement<DOMWindow>::from(object, supplementName()));
     if (!supplement) {
         supplement = new ImageBitmapFactories();
-        Supplement<T>::provideTo(object, supplementName(), adoptPtr(supplement));
+        Supplement<DOMWindow>::provideTo(object, supplementName(), adoptPtr(supplement));
     }
     return *supplement;
 }
@@ -343,7 +342,7 @@ void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
         m_cropRect = IntRect(IntPoint(), image->size());
     }
 
-    RefPtr<ImageBitmap> imageBitmap = ImageBitmap::create(image.get(), m_cropRect);
+    RefPtrWillBeRawPtr<ImageBitmap> imageBitmap = ImageBitmap::create(image.get(), m_cropRect);
     ScriptScope scope(m_scriptState);
     m_resolver->resolve(imageBitmap.release());
     m_factory->didFinishLoading(this);
@@ -352,6 +351,20 @@ void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
 void ImageBitmapFactories::ImageBitmapLoader::didFail(FileError::ErrorCode)
 {
     rejectPromise();
+}
+
+ImageBitmapFactories& WorkerGlobalScopeImageBitmapFactories::fromInternal(WorkerGlobalScope& object)
+{
+    WorkerGlobalScopeImageBitmapFactories* supplement = static_cast<WorkerGlobalScopeImageBitmapFactories*>(WillBeHeapSupplement<WorkerGlobalScope>::from(object, ImageBitmapFactories::supplementName()));
+    if (!supplement) {
+        supplement = new WorkerGlobalScopeImageBitmapFactories();
+        WillBeHeapSupplement<WorkerGlobalScope>::provideTo(object, ImageBitmapFactories::supplementName(), adoptPtrWillBeNoop(supplement));
+    }
+    return *supplement;
+}
+
+void WorkerGlobalScopeImageBitmapFactories::trace(Visitor*)
+{
 }
 
 } // namespace WebCore

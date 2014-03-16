@@ -38,6 +38,7 @@
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLLegendElement.h"
 #include "core/html/HTMLSelectElement.h"
+#include "core/html/HTMLTextAreaElement.h"
 #include "core/rendering/RenderObject.h"
 #include "platform/UserGestureIndicator.h"
 #include "wtf/text/StringBuilder.h"
@@ -76,8 +77,8 @@ static String accessibleNameForNode(Node* node)
     if (node->isTextNode())
         return toText(node)->data();
 
-    if (node->hasTagName(inputTag))
-        return toHTMLInputElement(node)->value();
+    if (isHTMLInputElement(*node))
+        return toHTMLInputElement(*node).value();
 
     if (node->isHTMLElement()) {
         const AtomicString& alt = toHTMLElement(node)->getAttribute(altAttr);
@@ -184,42 +185,42 @@ AccessibilityRole AXNodeObject::determineAccessibilityRole()
         return LinkRole;
     if (node()->isTextNode())
         return StaticTextRole;
-    if (node()->hasTagName(buttonTag))
+    if (isHTMLButtonElement(*node()))
         return buttonRoleType();
-    if (node()->hasTagName(inputTag)) {
-        HTMLInputElement* input = toHTMLInputElement(node());
-        if (input->isCheckbox())
+    if (isHTMLInputElement(*node())) {
+        HTMLInputElement& input = toHTMLInputElement(*node());
+        if (input.isCheckbox())
             return CheckBoxRole;
-        if (input->isRadioButton())
+        if (input.isRadioButton())
             return RadioButtonRole;
-        if (input->isTextButton())
+        if (input.isTextButton())
             return buttonRoleType();
-        if (input->isRangeControl())
+        if (input.isRangeControl())
             return SliderRole;
 
-        const AtomicString& type = input->getAttribute(typeAttr);
+        const AtomicString& type = input.getAttribute(typeAttr);
         if (equalIgnoringCase(type, "color"))
             return ColorWellRole;
 
         return TextFieldRole;
     }
-    if (node()->hasTagName(selectTag)) {
-        HTMLSelectElement* selectElement = toHTMLSelectElement(node());
-        return selectElement->multiple() ? ListBoxRole : PopUpButtonRole;
+    if (isHTMLSelectElement(*node())) {
+        HTMLSelectElement& selectElement = toHTMLSelectElement(*node());
+        return selectElement.multiple() ? ListBoxRole : PopUpButtonRole;
     }
-    if (node()->hasTagName(textareaTag))
+    if (isHTMLTextAreaElement(*node()))
         return TextAreaRole;
     if (headingLevel())
         return HeadingRole;
-    if (node()->hasTagName(divTag))
+    if (isHTMLDivElement(*node()))
         return DivRole;
-    if (node()->hasTagName(pTag))
+    if (isHTMLParagraphElement(*node()))
         return ParagraphRole;
-    if (node()->hasTagName(labelTag))
+    if (isHTMLLabelElement(*node()))
         return LabelRole;
     if (node()->isElementNode() && toElement(node())->isFocusable())
         return GroupRole;
-    if (node()->hasTagName(aTag) && isClickable())
+    if (isHTMLAnchorElement(*node()) && isClickable())
         return LinkRole;
 
     return UnknownRole;
@@ -321,7 +322,7 @@ bool AXNodeObject::isGenericFocusableElement() const
     // cases already, so we don't need to include them here.
     if (roleValue() == WebAreaRole)
         return false;
-    if (node() && node()->hasTagName(bodyTag))
+    if (isHTMLBodyElement(node()))
         return false;
 
     // An SVG root is focusable by default, but it's probably not interactive, so don't
@@ -344,7 +345,7 @@ HTMLLabelElement* AXNodeObject::labelForElement(Element* element) const
     }
 
     for (Element* parent = element->parentElement(); parent; parent = parent->parentElement()) {
-        if (parent->hasTagName(labelTag))
+        if (isHTMLLabelElement(*parent))
             return toHTMLLabelElement(parent);
     }
 
@@ -370,12 +371,10 @@ static Element* siblingWithAriaRole(String role, Node* node)
     if (!parent)
         return 0;
 
-    for (Node* sibling = parent->firstChild(); sibling; sibling = sibling->nextSibling()) {
-        if (sibling->isElementNode()) {
-            const AtomicString& siblingAriaRole = toElement(sibling)->getAttribute(roleAttr);
-            if (equalIgnoringCase(siblingAriaRole, role))
-                return toElement(sibling);
-        }
+    for (Element* sibling = ElementTraversal::firstChild(*parent); sibling; sibling = ElementTraversal::nextSibling(*sibling)) {
+        const AtomicString& siblingAriaRole = sibling->getAttribute(roleAttr);
+        if (equalIgnoringCase(siblingAriaRole, role))
+            return sibling;
     }
 
     return 0;
@@ -472,11 +471,7 @@ bool AXNodeObject::isControl() const
 
 bool AXNodeObject::isFieldset() const
 {
-    Node* node = this->node();
-    if (!node)
-        return false;
-
-    return node->hasTagName(fieldsetTag);
+    return isHTMLFieldSetElement(node());
 }
 
 bool AXNodeObject::isHeading() const
@@ -506,11 +501,8 @@ bool AXNodeObject::isImageButton() const
 bool AXNodeObject::isInputImage() const
 {
     Node* node = this->node();
-    if (!node)
-        return false;
-
-    if (roleValue() == ButtonRole && node->hasTagName(inputTag))
-        return toHTMLInputElement(node)->isImageButton();
+    if (roleValue() == ButtonRole && isHTMLInputElement(node))
+        return toHTMLInputElement(*node).isImageButton();
 
     return false;
 }
@@ -538,13 +530,13 @@ bool AXNodeObject::isMultiSelectable() const
     if (equalIgnoringCase(ariaMultiSelectable, "false"))
         return false;
 
-    return node() && node()->hasTagName(selectTag) && toHTMLSelectElement(node())->multiple();
+    return isHTMLSelectElement(node()) && toHTMLSelectElement(*node()).multiple();
 }
 
 bool AXNodeObject::isNativeCheckboxOrRadio() const
 {
     Node* node = this->node();
-    if (!node || !node->hasTagName(inputTag))
+    if (!isHTMLInputElement(node))
         return false;
 
     HTMLInputElement* input = toHTMLInputElement(node);
@@ -557,14 +549,14 @@ bool AXNodeObject::isNativeImage() const
     if (!node)
         return false;
 
-    if (node->hasTagName(imgTag))
+    if (isHTMLImageElement(*node))
         return true;
 
-    if (node->hasTagName(appletTag) || node->hasTagName(embedTag) || node->hasTagName(objectTag))
+    if (isHTMLAppletElement(*node) || isHTMLEmbedElement(*node) || isHTMLObjectElement(*node))
         return true;
 
-    if (node->hasTagName(inputTag))
-        return toHTMLInputElement(node)->isImageButton();
+    if (isHTMLInputElement(*node))
+        return toHTMLInputElement(*node).isImageButton();
 
     return false;
 }
@@ -575,10 +567,10 @@ bool AXNodeObject::isNativeTextControl() const
     if (!node)
         return false;
 
-    if (node->hasTagName(textareaTag))
+    if (isHTMLTextAreaElement(*node))
         return true;
 
-    if (node->hasTagName(inputTag)) {
+    if (isHTMLInputElement(*node)) {
         HTMLInputElement* input = toHTMLInputElement(node);
         return input->isText() || input->isNumberField();
     }
@@ -603,7 +595,7 @@ bool AXNodeObject::isNonNativeTextControl() const
 bool AXNodeObject::isPasswordField() const
 {
     Node* node = this->node();
-    if (!node || !node->hasTagName(inputTag))
+    if (!isHTMLInputElement(node))
         return false;
 
     if (ariaRoleAttribute() != UnknownRole)
@@ -629,8 +621,8 @@ bool AXNodeObject::isChecked() const
         return false;
 
     // First test for native checkedness semantics
-    if (node->hasTagName(inputTag))
-        return toHTMLInputElement(node)->shouldAppearChecked();
+    if (isHTMLInputElement(*node))
+        return toHTMLInputElement(*node).shouldAppearChecked();
 
     // Else, if this is an ARIA checkbox or radio, respect the aria-checked attribute
     AccessibilityRole ariaRole = ariaRoleAttribute();
@@ -673,7 +665,7 @@ bool AXNodeObject::isEnabled() const
 bool AXNodeObject::isIndeterminate() const
 {
     Node* node = this->node();
-    if (!node || !node->hasTagName(inputTag))
+    if (!isHTMLInputElement(node))
         return false;
 
     return toHTMLInputElement(node)->shouldAppearIndeterminate();
@@ -704,13 +696,13 @@ bool AXNodeObject::isReadOnly() const
     if (!node)
         return true;
 
-    if (node->hasTagName(textareaTag))
-        return toHTMLFormControlElement(node)->isReadOnly();
+    if (isHTMLTextAreaElement(*node))
+        return toHTMLTextAreaElement(*node).isReadOnly();
 
-    if (node->hasTagName(inputTag)) {
-        HTMLInputElement* input = toHTMLInputElement(node);
-        if (input->isTextField())
-            return input->isReadOnly();
+    if (isHTMLInputElement(*node)) {
+        HTMLInputElement& input = toHTMLInputElement(*node);
+        if (input.isTextField())
+            return input.isReadOnly();
     }
 
     return !node->rendererIsEditable();
@@ -768,18 +760,13 @@ bool AXNodeObject::canSetValueAttribute() const
 bool AXNodeObject::canvasHasFallbackContent() const
 {
     Node* node = this->node();
-    if (!node || !node->hasTagName(canvasTag))
+    if (!isHTMLCanvasElement(node))
         return false;
 
     // If it has any children that are elements, we'll assume it might be fallback
     // content. If it has no children or its only children are not elements
     // (e.g. just text nodes), it doesn't have fallback content.
-    for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
-        if (child->isElementNode())
-            return true;
-    }
-
-    return false;
+    return ElementTraversal::firstChild(*node);
 }
 
 bool AXNodeObject::exposesTitleUIElement() const
@@ -881,8 +868,8 @@ String AXNodeObject::text() const
     if (!node)
         return String();
 
-    if (isNativeTextControl() && (node->hasTagName(textareaTag) || node->hasTagName(inputTag)))
-        return toHTMLTextFormControlElement(node)->value();
+    if (isNativeTextControl() && (isHTMLTextAreaElement(*node) || isHTMLInputElement(*node)))
+        return toHTMLTextFormControlElement(*node).value();
 
     if (!node->isElementNode())
         return String();
@@ -922,7 +909,7 @@ void AXNodeObject::colorValue(int& r, int& g, int& b) const
     if (!isColorWell())
         return;
 
-    if (!node() || !node()->hasTagName(inputTag))
+    if (!isHTMLInputElement(node()))
         return;
 
     HTMLInputElement* input = toHTMLInputElement(node());
@@ -952,10 +939,10 @@ float AXNodeObject::valueForRange() const
     if (hasAttribute(aria_valuenowAttr))
         return getAttribute(aria_valuenowAttr).toFloat();
 
-    if (node() && node()->hasTagName(inputTag)) {
-        HTMLInputElement* input = toHTMLInputElement(node());
-        if (input->isRangeControl())
-            return input->valueAsNumber();
+    if (isHTMLInputElement(node())) {
+        HTMLInputElement& input = toHTMLInputElement(*node());
+        if (input.isRangeControl())
+            return input.valueAsNumber();
     }
 
     return 0.0;
@@ -966,10 +953,10 @@ float AXNodeObject::maxValueForRange() const
     if (hasAttribute(aria_valuemaxAttr))
         return getAttribute(aria_valuemaxAttr).toFloat();
 
-    if (node() && node()->hasTagName(inputTag)) {
-        HTMLInputElement* input = toHTMLInputElement(node());
-        if (input->isRangeControl())
-            return input->maximum();
+    if (isHTMLInputElement(node())) {
+        HTMLInputElement& input = toHTMLInputElement(*node());
+        if (input.isRangeControl())
+            return input.maximum();
     }
 
     return 0.0;
@@ -980,10 +967,10 @@ float AXNodeObject::minValueForRange() const
     if (hasAttribute(aria_valueminAttr))
         return getAttribute(aria_valueminAttr).toFloat();
 
-    if (node() && node()->hasTagName(inputTag)) {
-        HTMLInputElement* input = toHTMLInputElement(node());
-        if (input->isRangeControl())
-            return input->minimum();
+    if (isHTMLInputElement(node())) {
+        HTMLInputElement& input = toHTMLInputElement(*node());
+        if (input.isRangeControl())
+            return input.minimum();
     }
 
     return 0.0;
@@ -1010,17 +997,17 @@ String AXNodeObject::stringValue() const
     if (node->isTextNode())
         return textUnderElement();
 
-    if (node->hasTagName(selectTag)) {
-        HTMLSelectElement* selectElement = toHTMLSelectElement(node);
-        int selectedIndex = selectElement->selectedIndex();
-        const Vector<HTMLElement*> listItems = selectElement->listItems();
+    if (isHTMLSelectElement(*node)) {
+        HTMLSelectElement& selectElement = toHTMLSelectElement(*node);
+        int selectedIndex = selectElement.selectedIndex();
+        const Vector<HTMLElement*> listItems = selectElement.listItems();
         if (selectedIndex >= 0 && static_cast<size_t>(selectedIndex) < listItems.size()) {
             const AtomicString& overriddenDescription = listItems[selectedIndex]->fastGetAttribute(aria_labelAttr);
             if (!overriddenDescription.isNull())
                 return overriddenDescription;
         }
-        if (!selectElement->multiple())
-            return selectElement->value();
+        if (!selectElement.multiple())
+            return selectElement.value();
         return String();
     }
 
@@ -1164,27 +1151,27 @@ String AXNodeObject::title() const
     if (!node)
         return String();
 
-    bool isInputTag = node->hasTagName(inputTag);
-    if (isInputTag) {
-        HTMLInputElement* input = toHTMLInputElement(node);
-        if (input->isTextButton())
-            return input->valueWithDefault();
+    bool isInputElement = isHTMLInputElement(*node);
+    if (isInputElement) {
+        HTMLInputElement& input = toHTMLInputElement(*node);
+        if (input.isTextButton())
+            return input.valueWithDefault();
     }
 
-    if (isInputTag || AXObject::isARIAInput(ariaRoleAttribute()) || isControl()) {
+    if (isInputElement || AXObject::isARIAInput(ariaRoleAttribute()) || isControl()) {
         HTMLLabelElement* label = labelForElement(toElement(node));
         if (label && !exposesTitleUIElement())
             return label->innerText();
     }
 
     // If this node isn't rendered, there's no inner text we can extract from a select element.
-    if (!isAXRenderObject() && node->hasTagName(selectTag))
+    if (!isAXRenderObject() && isHTMLSelectElement(*node))
         return String();
 
     switch (roleValue()) {
     case PopUpButtonRole:
         // Native popup buttons should not use their button children's text as a title. That value is retrieved through stringValue().
-        if (node->hasTagName(selectTag))
+        if (isHTMLSelectElement(*node))
             return String();
     case ButtonRole:
     case ToggleButtonRole:
@@ -1331,7 +1318,7 @@ void AXNodeObject::addChildren()
     m_haveChildren = true;
 
     // The only time we add children from the DOM tree to a node with a renderer is when it's a canvas.
-    if (renderer() && !m_node->hasTagName(canvasTag))
+    if (renderer() && !isHTMLCanvasElement(*m_node))
         return;
 
     for (Node* child = m_node->firstChild(); child; child = child->nextSibling())
@@ -1398,11 +1385,11 @@ Element* AXNodeObject::actionElement() const
     if (!node)
         return 0;
 
-    if (node->hasTagName(inputTag)) {
-        HTMLInputElement* input = toHTMLInputElement(node);
-        if (!input->isDisabledFormControl() && (isCheckboxOrRadio() || input->isTextButton()))
-            return input;
-    } else if (node->hasTagName(buttonTag)) {
+    if (isHTMLInputElement(*node)) {
+        HTMLInputElement& input = toHTMLInputElement(*node);
+        if (!input.isDisabledFormControl() && (isCheckboxOrRadio() || input.isTextButton()))
+            return &input;
+    } else if (isHTMLButtonElement(*node)) {
         return toElement(node);
     }
 
@@ -1415,7 +1402,7 @@ Element* AXNodeObject::actionElement() const
     if (isImageButton())
         return toElement(node);
 
-    if (node->hasTagName(selectTag))
+    if (isHTMLSelectElement(*node))
         return toElement(node);
 
     switch (roleValue()) {
@@ -1447,7 +1434,7 @@ Element* AXNodeObject::anchorElement() const
     // search up the DOM tree for an anchor element
     // NOTE: this assumes that any non-image with an anchor is an HTMLAnchorElement
     for ( ; node; node = node->parentNode()) {
-        if (node->hasTagName(aTag) || (node->renderer() && cache->getOrCreate(node->renderer())->isAnchor()))
+        if (isHTMLAnchorElement(*node) || (node->renderer() && cache->getOrCreate(node->renderer())->isAnchor()))
             return toElement(node);
     }
 
@@ -1495,7 +1482,7 @@ HTMLLabelElement* AXNodeObject::labelElementContainer() const
 
     // find if this has a parent that is a label
     for (Node* parentNode = node(); parentNode; parentNode = parentNode->parentNode()) {
-        if (parentNode->hasTagName(labelTag))
+        if (isHTMLLabelElement(*parentNode))
             return toHTMLLabelElement(parentNode);
     }
 
@@ -1569,10 +1556,10 @@ void AXNodeObject::childrenChanged()
 
 void AXNodeObject::selectionChanged()
 {
-    // When the selection changes, post the notification on the first ancestor that's an
-    // ARIA text box, or that's marked as contentEditable, otherwise post the notification
-    // on the web area.
-    if (isNonNativeTextControl() || isWebArea())
+    // Post the selected text changed event on the first ancestor that's
+    // focused (to handle form controls, ARIA text boxes and contentEditable),
+    // or the web area if the selection is just in the document somewhere.
+    if (isFocused() || isWebArea())
         axObjectCache()->postNotification(this, document(), AXObjectCache::AXSelectedTextChanged, true);
     else
         AXObject::selectionChanged(); // Calls selectionChanged on parent.
@@ -1633,7 +1620,7 @@ String AXNodeObject::alternativeTextForWebArea() const
 
     Node* owner = document->ownerElement();
     if (owner) {
-        if (owner->hasTagName(frameTag) || owner->hasTagName(iframeTag)) {
+        if (isHTMLFrameElement(*owner) || isHTMLIFrameElement(*owner)) {
             const AtomicString& title = toElement(owner)->getAttribute(titleAttr);
             if (!title.isEmpty())
                 return title;
@@ -1743,8 +1730,7 @@ void AXNodeObject::titleElementText(Vector<AccessibilityText>& textOrder)
     if (!node)
         return;
 
-    bool isInputTag = node->hasTagName(inputTag);
-    if (isInputTag || AXObject::isARIAInput(ariaRoleAttribute()) || isControl()) {
+    if (isHTMLInputElement(*node) || AXObject::isARIAInput(ariaRoleAttribute()) || isControl()) {
         HTMLLabelElement* label = labelForElement(toElement(node));
         if (label) {
             AXObject* labelObject = axObjectCache()->getOrCreate(label);
@@ -1764,17 +1750,16 @@ void AXNodeObject::visibleText(Vector<AccessibilityText>& textOrder) const
     if (!node)
         return;
 
-    bool isInputTag = node->hasTagName(inputTag);
-    if (isInputTag) {
-        HTMLInputElement* input = toHTMLInputElement(node);
-        if (input->isTextButton()) {
-            textOrder.append(AccessibilityText(input->valueWithDefault(), VisibleText));
+    if (isHTMLInputElement(*node)) {
+        HTMLInputElement& input = toHTMLInputElement(*node);
+        if (input.isTextButton()) {
+            textOrder.append(AccessibilityText(input.valueWithDefault(), VisibleText));
             return;
         }
     }
 
     // If this node isn't rendered, there's no inner text we can extract from a select element.
-    if (!isAXRenderObject() && node->hasTagName(selectTag))
+    if (!isAXRenderObject() && isHTMLSelectElement(*node))
         return;
 
     bool useTextUnderElement = false;
@@ -1782,7 +1767,7 @@ void AXNodeObject::visibleText(Vector<AccessibilityText>& textOrder) const
     switch (roleValue()) {
     case PopUpButtonRole:
         // Native popup buttons should not use their button children's text as a title. That value is retrieved through stringValue().
-        if (node->hasTagName(selectTag))
+        if (isHTMLSelectElement(*node))
             break;
     case ButtonRole:
     case ToggleButtonRole:

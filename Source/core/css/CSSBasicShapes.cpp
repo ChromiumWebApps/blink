@@ -30,14 +30,16 @@
 #include "config.h"
 #include "core/css/CSSBasicShapes.h"
 
+#include "core/css/CSSValuePool.h"
 #include "core/css/Pair.h"
+#include "platform/Length.h"
 #include "wtf/text/StringBuilder.h"
 
 using namespace WTF;
 
 namespace WebCore {
 
-DEFINE_GC_INFO(CSSBasicShape);
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(CSSBasicShape)
 
 static String buildRectangleString(const String& x, const String& y, const String& width, const String& height, const String& radiusX, const String& radiusY, const String& layoutBox)
 {
@@ -133,11 +135,56 @@ static String buildCircleString(const String& radius, const String& centerX, con
     return result.toString();
 }
 
+static String serializePositionOffset(const Pair& offset, const Pair& other)
+{
+    if ((offset.first()->getValueID() == CSSValueLeft && other.first()->getValueID() == CSSValueTop)
+        || (offset.first()->getValueID() == CSSValueTop && other.first()->getValueID() == CSSValueLeft))
+        return offset.second()->cssText();
+    return offset.cssText();
+}
+
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> buildSerializablePositionOffset(PassRefPtrWillBeRawPtr<CSSPrimitiveValue> offset, CSSValueID defaultSide)
+{
+    CSSValueID side = defaultSide;
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> amount;
+
+    if (!offset) {
+        side = CSSValueCenter;
+    } else if (offset->isValueID()) {
+        side = offset->getValueID();
+    } else if (Pair* pair = offset->getPairValue()) {
+        side = pair->first()->getValueID();
+        amount = pair->second();
+    } else {
+        amount = offset;
+    }
+
+    if (side == CSSValueCenter) {
+        side = defaultSide;
+        amount = cssValuePool().createValue(Length(50, Percent));
+    } else if ((side == CSSValueRight || side == CSSValueBottom)
+        && amount->isPercentage()) {
+        side = defaultSide;
+        amount = cssValuePool().createValue(Length(100 - amount->getFloatValue(), Percent));
+    } else if (amount->isLength() && !amount->getFloatValue()) {
+        if (side == CSSValueRight || side == CSSValueBottom)
+            amount = cssValuePool().createValue(Length(100, Percent));
+        else
+            amount = cssValuePool().createValue(Length(0, Percent));
+        side = defaultSide;
+    }
+
+    return cssValuePool().createValue(Pair::create(cssValuePool().createValue(side), amount.release(), Pair::KeepIdenticalValues));
+}
+
 String CSSBasicShapeCircle::cssText() const
 {
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> normalizedCX = buildSerializablePositionOffset(m_centerX, CSSValueLeft);
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> normalizedCY = buildSerializablePositionOffset(m_centerY, CSSValueTop);
+
     return buildCircleString(m_radius ? m_radius->cssText() : String(),
-        m_centerX ? m_centerX->cssText() : String(),
-        m_centerY ? m_centerY->cssText() : String(),
+        serializePositionOffset(*normalizedCX->getPairValue(), *normalizedCY->getPairValue()),
+        serializePositionOffset(*normalizedCY->getPairValue(), *normalizedCX->getPairValue()),
         m_layoutBox ? m_layoutBox->cssText() : String());
 }
 
@@ -227,10 +274,13 @@ static String buildEllipseString(const String& radiusX, const String& radiusY, c
 
 String CSSBasicShapeEllipse::cssText() const
 {
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> normalizedCX = buildSerializablePositionOffset(m_centerX, CSSValueLeft);
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> normalizedCY = buildSerializablePositionOffset(m_centerY, CSSValueTop);
+
     return buildEllipseString(m_radiusX ? m_radiusX->cssText() : String(),
         m_radiusY ? m_radiusY->cssText() : String(),
-        m_centerX ? m_centerX->cssText() : String(),
-        m_centerY ? m_centerY->cssText() : String(),
+        serializePositionOffset(*normalizedCX->getPairValue(), *normalizedCY->getPairValue()),
+        serializePositionOffset(*normalizedCY->getPairValue(), *normalizedCX->getPairValue()),
         m_layoutBox ? m_layoutBox->cssText() : String());
 }
 
@@ -293,9 +343,9 @@ static String buildPolygonString(const WindRule& windRule, const Vector<String>&
 
     StringBuilder result;
     const char evenOddOpening[] = "polygon(evenodd, ";
-    const char nonZeroOpening[] = "polygon(nonzero, ";
+    const char nonZeroOpening[] = "polygon(";
     const char commaSeparator[] = ", ";
-    COMPILE_ASSERT(sizeof(evenOddOpening) == sizeof(nonZeroOpening), polygon_string_openings_have_same_length);
+    COMPILE_ASSERT(sizeof(evenOddOpening) > sizeof(nonZeroOpening), polygon_string_openings_have_same_length);
 
     // Compute the required capacity in advance to reduce allocations.
     size_t length = sizeof(evenOddOpening) - 1;

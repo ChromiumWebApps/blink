@@ -175,7 +175,7 @@ static Node* nextInPreOrderCrossingShadowBoundaries(Node* rangeEndContainer, int
     if (!rangeEndContainer)
         return 0;
     if (rangeEndOffset >= 0 && !rangeEndContainer->offsetInCharacters()) {
-        if (Node* next = rangeEndContainer->childNode(rangeEndOffset))
+        if (Node* next = rangeEndContainer->traverseToChildAt(rangeEndOffset))
             return next;
     }
     for (Node* node = rangeEndContainer; node; node = node->parentOrShadowHostNode()) {
@@ -406,9 +406,9 @@ void TextIterator::advance()
                 } else if (renderer && (renderer->isImage() || renderer->isWidget()
                     || (m_node && m_node->isElementNode()
                     && (toElement(m_node)->isFormControlElement()
-                    || toElement(m_node)->hasTagName(legendTag)
-                    || toElement(m_node)->hasTagName(meterTag)
-                    || toElement(m_node)->hasTagName(progressTag))))) {
+                    || isHTMLLegendElement(toElement(*m_node))
+                    || isHTMLMeterElement(toElement(*m_node))
+                    || isHTMLProgressElement(toElement(*m_node)))))) {
                     handledNode = handleReplacedElement();
                 } else {
                     handledNode = handleNonTextNode();
@@ -808,9 +808,9 @@ static bool shouldEmitNewlineForNode(Node* node, bool emitsOriginalText)
 {
     RenderObject* renderer = node->renderer();
 
-    if (renderer ? !renderer->isBR() : !node->hasTagName(brTag))
+    if (renderer ? !renderer->isBR() : !isHTMLBRElement(node))
         return false;
-    return emitsOriginalText || !(node->isInShadowTree() && node->shadowHost()->hasTagName(inputTag));
+    return emitsOriginalText || !(node->isInShadowTree() && isHTMLInputElement(*node->shadowHost()));
 }
 
 static bool shouldEmitNewlinesBeforeAndAfterNode(Node& node)
@@ -975,7 +975,7 @@ bool TextIterator::shouldRepresentNodeOffsetZero()
     // Additionally, if the range we are iterating over contains huge sections of unrendered content,
     // we would create VisiblePositions on every call to this function without this check.
     if (!m_node->renderer() || m_node->renderer()->style()->visibility() != VISIBLE
-        || (m_node->renderer()->isRenderBlockFlow() && !toRenderBlock(m_node->renderer())->height() && !m_node->hasTagName(bodyTag)))
+        || (m_node->renderer()->isRenderBlockFlow() && !toRenderBlock(m_node->renderer())->height() && !isHTMLBodyElement(*m_node)))
         return false;
 
     // The startPos.isNotNull() check is needed because the start could be before the body,
@@ -1143,7 +1143,7 @@ Node* TextIterator::node() const
     if (node->offsetInCharacters())
         return node;
 
-    return node->childNode(textRange->startOffset());
+    return node->traverseToChildAt(textRange->startOffset());
 }
 
 // --------
@@ -1184,17 +1184,17 @@ SimplifiedBackwardsTextIterator::SimplifiedBackwardsTextIterator(const Range* r,
     int endOffset = r->endOffset();
 
     if (!startNode->offsetInCharacters() && startOffset >= 0) {
-        // childNode() will return 0 if the offset is out of range. We rely on this behavior
-        // instead of calling childNodeCount() to avoid traversing the children twice.
-        if (Node* childAtOffset = startNode->childNode(startOffset)) {
+        // traverseToChildAt() will return 0 if the offset is out of range. We rely on this behavior
+        // instead of calling countChildren() to avoid traversing the children twice.
+        if (Node* childAtOffset = startNode->traverseToChildAt(startOffset)) {
             startNode = childAtOffset;
             startOffset = 0;
         }
     }
     if (!endNode->offsetInCharacters() && endOffset > 0) {
-        // childNode() will return 0 if the offset is out of range. We rely on this behavior
-        // instead of calling childNodeCount() to avoid traversing the children twice.
-        if (Node* childAtOffset = endNode->childNode(endOffset - 1)) {
+        // traverseToChildAt() will return 0 if the offset is out of range. We rely on this behavior
+        // instead of calling countChildren() to avoid traversing the children twice.
+        if (Node* childAtOffset = endNode->traverseToChildAt(endOffset - 1)) {
             endNode = childAtOffset;
             endOffset = lastOffsetInNode(endNode);
         }
@@ -1257,7 +1257,7 @@ void SimplifiedBackwardsTextIterator::advance()
                 return;
         }
 
-        if (!m_handledChildren && m_node->hasChildNodes()) {
+        if (!m_handledChildren && m_node->hasChildren()) {
             m_node = m_node->lastChild();
             pushFullyClippedState(m_fullyClippedStack, m_node);
         } else {

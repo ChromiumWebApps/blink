@@ -29,7 +29,6 @@
 
 namespace WebCore {
 
-class CSSFontFaceSource;
 struct GlyphData;
 class GlyphPage;
 class SimpleFontData;
@@ -37,16 +36,15 @@ struct WidthIterator;
 
 class PLATFORM_EXPORT CustomFontData : public RefCounted<CustomFontData> {
 public:
-    static PassRefPtr<CustomFontData> create(bool isLoadingFallback = false)
-    {
-        return adoptRef(new CustomFontData(isLoadingFallback));
-    }
+    static PassRefPtr<CustomFontData> create() { return adoptRef(new CustomFontData()); }
 
     virtual ~CustomFontData() { }
 
     virtual void beginLoadIfNeeded() const { };
-    bool isLoading() const { return m_isLoadingFallback && m_isUsed; }
-    bool isLoadingFallback() const { return m_isLoadingFallback; }
+    virtual bool isLoading() const { return false; }
+    virtual bool isLoadingFallback() const { return false; }
+    virtual bool shouldSkipDrawing() const { return false; }
+    virtual void clearFontFaceSource() { }
 
     virtual bool isSVGFont() const { return false; }
     virtual void initializeFontData(SimpleFontData*, float) { }
@@ -54,18 +52,8 @@ public:
     virtual bool fillSVGGlyphPage(GlyphPage*, unsigned, unsigned, UChar*, unsigned, const SimpleFontData*) const { return false; }
     virtual bool applySVGGlyphSelection(WidthIterator&, GlyphData&, bool, int, unsigned&) const { return false; }
 
-    virtual void setCSSFontFaceSource(CSSFontFaceSource* source) { ASSERT_NOT_REACHED(); }
-    virtual void clearCSSFontFaceSource() { }
-
 protected:
-    CustomFontData(bool isLoadingFallback)
-        : m_isLoadingFallback(isLoadingFallback)
-        , m_isUsed(false)
-    {
-    }
-
-    bool m_isLoadingFallback; // Whether or not this is a temporary font data for a custom font which is not yet loaded.
-    mutable bool m_isUsed;
+    CustomFontData() { }
 };
 
 }

@@ -98,9 +98,11 @@ struct CSSParserString {
 
     bool equalIgnoringCase(const char* str) const
     {
-        if (is8Bit())
-            return WTF::equalIgnoringCase(str, characters8(), length());
-        return WTF::equalIgnoringCase(str, characters16(), length());
+        bool match = is8Bit() ? WTF::equalIgnoringCase(str, characters8(), length()) : WTF::equalIgnoringCase(str, characters16(), length());
+        if (!match)
+            return false;
+        ASSERT(strlen(str) >= length());
+        return str[length()] == '\0';
     }
 
     template <size_t strLength>
@@ -231,7 +233,6 @@ public:
     void setFunctionArgumentSelector(CSSParserSelector* selector) { m_functionArgumentSelector = selector; }
     bool isDistributedPseudoElement() const { return m_selector->isDistributedPseudoElement(); }
     CSSParserSelector* findDistributedPseudoElementSelector() const;
-    bool isContentPseudoElement() const { return m_selector->isContentPseudoElement(); }
 
     CSSSelector::PseudoType pseudoType() const { return m_selector->pseudoType(); }
     bool isCustomPseudoElement() const { return m_selector->isCustomPseudoElement(); }

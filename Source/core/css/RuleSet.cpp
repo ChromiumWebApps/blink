@@ -40,8 +40,11 @@
 #include "core/css/StyleRuleImport.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/html/track/TextTrackCue.h"
+#include "heap/HeapTerminatedArrayBuilder.h"
 #include "platform/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
+
+#include "wtf/TerminatedArrayBuilder.h"
 
 namespace WebCore {
 
@@ -119,76 +122,6 @@ static inline PropertyWhitelistType determinePropertyWhitelistType(const AddRule
     return PropertyWhitelistNone;
 }
 
-namespace {
-
-// FIXME: Should we move this class to WTF?
-template<typename T>
-class TerminatedArrayBuilder {
-public:
-    explicit TerminatedArrayBuilder(PassOwnPtr<T> array)
-        : m_array(array)
-        , m_count(0)
-        , m_capacity(0)
-    {
-        if (!m_array)
-            return;
-        for (T* item = m_array.get(); !item->isLastInArray(); ++item)
-            ++m_count;
-        ++m_count; // To count the last item itself.
-        m_capacity = m_count;
-    }
-
-    void grow(size_t count)
-    {
-        ASSERT(count);
-        if (!m_array) {
-            ASSERT(!m_count);
-            ASSERT(!m_capacity);
-            m_capacity = count;
-            m_array = adoptPtr(static_cast<T*>(fastMalloc(m_capacity * sizeof(T))));
-            return;
-        }
-        m_capacity += count;
-        m_array = adoptPtr(static_cast<T*>(fastRealloc(m_array.leakPtr(), m_capacity * sizeof(T))));
-        m_array.get()[m_count - 1].setLastInArray(false);
-    }
-
-    void append(const T& item)
-    {
-        RELEASE_ASSERT(m_count < m_capacity);
-        ASSERT(!item.isLastInArray());
-        m_array.get()[m_count++] = item;
-    }
-
-    PassOwnPtr<T> release()
-    {
-        RELEASE_ASSERT(m_count == m_capacity);
-        if (m_array)
-            m_array.get()[m_count - 1].setLastInArray(true);
-        assertValid();
-        return m_array.release();
-    }
-
-private:
-#ifndef NDEBUG
-    void assertValid()
-    {
-        for (size_t i = 0; i < m_count; ++i) {
-            bool isLastInArray = (i + 1 == m_count);
-            ASSERT(m_array.get()[i].isLastInArray() == isLastInArray);
-        }
-    }
-#else
-    void assertValid() { }
-#endif
-
-    OwnPtr<T> m_array;
-    size_t m_count;
-    size_t m_capacity;
-};
-
-}
-
 RuleData::RuleData(StyleRule* rule, unsigned selectorIndex, unsigned position, AddRuleFlags addRuleFlags)
     : m_rule(rule)
     , m_selectorIndex(selectorIndex)
@@ -210,9 +143,9 @@ RuleData::RuleData(StyleRule* rule, unsigned selectorIndex, unsigned position, A
 
 void RuleSet::addToRuleSet(const AtomicString& key, PendingRuleMap& map, const RuleData& ruleData)
 {
-    OwnPtr<LinkedStack<RuleData> >& rules = map.add(key, nullptr).storedValue->value;
+    OwnPtrWillBeMember<WillBeHeapLinkedStack<RuleData> >& rules = map.add(key, nullptr).storedValue->value;
     if (!rules)
-        rules = adoptPtr(new LinkedStack<RuleData>);
+        rules = adoptPtrWillBeNoop(new WillBeHeapLinkedStack<RuleData>);
     rules->push(ruleData);
 }
 
@@ -333,7 +266,7 @@ void RuleSet::addKeyframesRule(StyleRuleKeyframes* rule)
     m_keyframesRules.append(rule);
 }
 
-void RuleSet::addChildRules(const Vector<RefPtr<StyleRuleBase> >& rules, const MediaQueryEvaluator& medium, AddRuleFlags addRuleFlags)
+void RuleSet::addChildRules(const WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& rules, const MediaQueryEvaluator& medium, AddRuleFlags addRuleFlags)
 {
     for (unsigned i = 0; i < rules.size(); ++i) {
         StyleRuleBase* rule = rules[i].get();
@@ -376,7 +309,7 @@ void RuleSet::addRulesFromSheet(StyleSheetContents* sheet, const MediaQueryEvalu
     ASSERT(sheet);
 
     addRuleFlags = static_cast<AddRuleFlags>(addRuleFlags | RuleCanUseFastCheckSelector);
-    const Vector<RefPtr<StyleRuleImport> >& importRules = sheet->importRules();
+    const WillBeHeapVector<RefPtrWillBeMember<StyleRuleImport> >& importRules = sheet->importRules();
     for (unsigned i = 0; i < importRules.size(); ++i) {
         StyleRuleImport* importRule = importRules[i].get();
         if (importRule->styleSheet() && (!importRule->mediaQueries() || medium.eval(importRule->mediaQueries(), &m_viewportDependentMediaQueryResults)))
@@ -396,10 +329,10 @@ void RuleSet::compactPendingRules(PendingRuleMap& pendingMap, CompactRuleMap& co
 {
     PendingRuleMap::iterator end = pendingMap.end();
     for (PendingRuleMap::iterator it = pendingMap.begin(); it != end; ++it) {
-        OwnPtr<LinkedStack<RuleData> > pendingRules = it->value.release();
+        OwnPtrWillBeRawPtr<WillBeHeapLinkedStack<RuleData> > pendingRules = it->value.release();
         CompactRuleMap::ValueType* compactRules = compactMap.add(it->key, nullptr).storedValue;
 
-        TerminatedArrayBuilder<RuleData> builder(compactRules->value.release());
+        WillBeHeapTerminatedArrayBuilder<RuleData> builder(compactRules->value.release());
         builder.grow(pendingRules->size());
         while (!pendingRules->isEmpty()) {
             builder.append(pendingRules->peek());
@@ -413,7 +346,7 @@ void RuleSet::compactPendingRules(PendingRuleMap& pendingMap, CompactRuleMap& co
 void RuleSet::compactRules()
 {
     ASSERT(m_pendingRules);
-    OwnPtr<PendingRuleMaps> pendingRules = m_pendingRules.release();
+    OwnPtrWillBeRawPtr<PendingRuleMaps> pendingRules = m_pendingRules.release();
     compactPendingRules(pendingRules->idRules, m_idRules);
     compactPendingRules(pendingRules->classRules, m_classRules);
     compactPendingRules(pendingRules->tagRules, m_tagRules);
@@ -430,11 +363,53 @@ void RuleSet::compactRules()
     m_shadowDistributedRules.shrinkToFit();
 }
 
-#ifndef NDEBUG
+void MinimalRuleData::trace(Visitor* visitor)
+{
+    visitor->trace(m_rule);
+}
 
+void RuleData::trace(Visitor* visitor)
+{
+    visitor->trace(m_rule);
+}
+
+void RuleSet::PendingRuleMaps::trace(Visitor* visitor)
+{
+    visitor->trace(idRules);
+    visitor->trace(classRules);
+    visitor->trace(tagRules);
+    visitor->trace(shadowPseudoElementRules);
+}
+
+void RuleSet::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(m_idRules);
+    visitor->trace(m_classRules);
+    visitor->trace(m_tagRules);
+    visitor->trace(m_shadowPseudoElementRules);
+    visitor->trace(m_linkPseudoClassRules);
+    visitor->trace(m_cuePseudoRules);
+    visitor->trace(m_focusPseudoClassRules);
+    visitor->trace(m_universalRules);
+    visitor->trace(m_pageRules);
+    visitor->trace(m_viewportRules);
+    visitor->trace(m_fontFaceRules);
+    visitor->trace(m_keyframesRules);
+    visitor->trace(m_treeBoundaryCrossingRules);
+    visitor->trace(m_shadowDistributedRules);
+    visitor->trace(m_viewportDependentMediaQueryResults);
+    visitor->trace(m_pendingRules);
+#ifndef NDEBUG
+    visitor->trace(m_allRules);
+#endif
+#endif
+}
+
+#ifndef NDEBUG
 void RuleSet::show()
 {
-    for (Vector<RuleData>::const_iterator it = m_allRules.begin(); it != m_allRules.end(); ++it)
+    for (WillBeHeapVector<RuleData>::const_iterator it = m_allRules.begin(); it != m_allRules.end(); ++it)
         it->selector().show();
 }
 #endif

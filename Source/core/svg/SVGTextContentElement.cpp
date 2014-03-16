@@ -29,7 +29,7 @@
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/editing/FrameSelection.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/SVGTextQuery.h"
@@ -47,8 +47,6 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<SVGLengthAd
     }
     return entries;
 }
-
-// Animated property definitions
 
 // SVGTextContentElement's 'textLength' attribute needs special handling.
 // It should return getComputedTextLength() when textLength is not specified manually.
@@ -75,9 +73,6 @@ private:
     }
 };
 
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGTextContentElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
 
 SVGTextContentElement::SVGTextContentElement(const QualifiedName& tagName, Document& document)
     : SVGGraphicsElement(tagName, document)
@@ -89,7 +84,6 @@ SVGTextContentElement::SVGTextContentElement(const QualifiedName& tagName, Docum
 
     addToPropertyMap(m_textLength);
     addToPropertyMap(m_lengthAdjust);
-    registerAnimatedPropertiesForSVGTextContentElement();
 }
 
 unsigned SVGTextContentElement::getNumberOfChars()
@@ -286,11 +280,7 @@ SVGTextContentElement* SVGTextContentElement::elementFromRenderer(RenderObject* 
 
     SVGElement* element = toSVGElement(renderer->node());
     ASSERT(element);
-
-    if (!element->isTextContent())
-        return 0;
-
-    return toSVGTextContentElement(element);
+    return isSVGTextContentElement(*element) ? toSVGTextContentElement(element) : 0;
 }
 
 }

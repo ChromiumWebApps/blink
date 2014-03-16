@@ -152,18 +152,6 @@ Element.prototype.removeMatchingStyleClasses = function(classNameRegex)
 }
 
 /**
- * @param {string} className
- * @param {*} enable
- */
-Element.prototype.enableStyleClass = function(className, enable)
-{
-    if (enable)
-        this.classList.add(className);
-    else
-        this.classList.remove(className);
-}
-
-/**
  * @param {number|undefined} x
  * @param {number|undefined} y
  * @param {!Element=} relativeTo
@@ -187,8 +175,10 @@ Element.prototype.positionAt = function(x, y, relativeTo)
 
 Element.prototype.isScrolledToBottom = function()
 {
-    // This code works only for 0-width border
-    return this.scrollTop + this.clientHeight === this.scrollHeight;
+    // This code works only for 0-width border.
+    // Both clientHeight and scrollHeight are rounded to integer values, so we tolerate
+    // one pixel error.
+    return Math.abs(this.scrollTop + this.clientHeight - this.scrollHeight) <= 1;
 }
 
 /**
@@ -567,6 +557,27 @@ Node.prototype.traversePreviousNode = function(stayWithin)
     if (node)
         return node;
     return this.parentNode;
+}
+
+/**
+ * @param {*} text
+ * @param {string=} placeholder
+ * @return {boolean} true if was truncated
+ */
+Node.prototype.setTextContentTruncatedIfNeeded = function(text, placeholder)
+{
+    // Huge texts in the UI reduce rendering performance drastically.
+    // Moreover, Blink/WebKit uses <unsigned short> internally for storing text content
+    // length, so texts longer than 65535 are inherently displayed incorrectly.
+    const maxTextContentLength = 65535;
+
+    if (typeof text === "string" && text.length > maxTextContentLength) {
+        this.textContent = typeof placeholder === "string" ? placeholder : text.trimEnd(maxTextContentLength);
+        return true;
+    }
+
+    this.textContent = text;
+    return false;
 }
 
 /**

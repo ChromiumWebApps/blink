@@ -406,7 +406,7 @@ WebInspector.NetworkRequest.prototype = {
             this._path = "";
         } else {
             this._path = this._parsedURL.host + this._parsedURL.folderPathComponents;
-            this._path = this._path.trimURL(WebInspector.inspectedPageDomain ? WebInspector.inspectedPageDomain : "");
+            this._path = this._path.trimURL(WebInspector.resourceTreeModel.inspectedPageDomain());
             if (this._parsedURL.lastPathComponent || this._parsedURL.queryParams)
                 this._name = this._parsedURL.lastPathComponent + (this._parsedURL.queryParams ? "?" + this._parsedURL.queryParams : "");
             else if (this._parsedURL.folderPathComponents) {
@@ -553,8 +553,10 @@ WebInspector.NetworkRequest.prototype = {
     requestHttpVersion: function()
     {
         var headersText = this.requestHeadersText();
-        if (!headersText)
-            return undefined;
+        if (!headersText) {
+            // SPDY header.
+            return this.requestHeaderValue(":version");
+        }
         var firstLine = headersText.split(/\r\n/)[0];
         var match = firstLine.match(/(HTTP\/\d+\.\d+)$/);
         return match ? match[1] : undefined;
@@ -583,11 +585,6 @@ WebInspector.NetworkRequest.prototype = {
      */
     get responseHeadersText()
     {
-        if (typeof this._responseHeadersText === "undefined") {
-            this._responseHeadersText = "HTTP/1.1 " + this.statusCode + " " + this.statusText + "\r\n";
-            for (var i = 0; i < this.responseHeaders.length; ++i)
-                this._responseHeadersText += this.responseHeaders[i].name + ": " + this.responseHeaders[i].value + "\r\n";
-        }
         return this._responseHeadersText;
     },
 
@@ -596,14 +593,6 @@ WebInspector.NetworkRequest.prototype = {
         this._responseHeadersText = x;
 
         this.dispatchEventToListeners(WebInspector.NetworkRequest.Events.ResponseHeadersChanged);
-    },
-
-    /**
-     * @return {number}
-     */
-    get responseHeadersSize()
-    {
-        return this.responseHeadersText.length;
     },
 
     /**
@@ -699,7 +688,12 @@ WebInspector.NetworkRequest.prototype = {
      */
     get responseHttpVersion()
     {
-        var match = this.responseHeadersText.match(/^(HTTP\/\d+\.\d+)/);
+        var headersText = this._responseHeadersText;
+        if (!headersText) {
+            // SPDY header.
+            return this.responseHeaderValue(":version");
+        }
+        var match = headersText.match(/^(HTTP\/\d+\.\d+)/);
         return match ? match[1] : undefined;
     },
 
@@ -745,6 +739,14 @@ WebInspector.NetworkRequest.prototype = {
     get content()
     {
         return this._content;
+    },
+
+    /**
+     * @return {?Protocol.Error|undefined}
+     */
+    contentError: function()
+    {
+        return this._contentError;
     },
 
     /**
@@ -878,6 +880,7 @@ WebInspector.NetworkRequest.prototype = {
         function onResourceContent(error, content, contentEncoded)
         {
             this._content = error ? null : content;
+            this._contentError = error;
             this._contentEncoded = contentEncoded;
             var callbacks = this._pendingContentCallbacks.slice();
             for (var i = 0; i < callbacks.length; ++i)

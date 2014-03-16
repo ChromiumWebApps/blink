@@ -58,13 +58,9 @@ private:
 
     RefPtr<SVGAnimatedLength> m_x;
     RefPtr<SVGAnimatedLength> m_y;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGCursorElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
     HashSet<SVGElement*> m_clients;
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGCursorElement, hasTagName(SVGNames::cursorTag));
 
 } // namespace WebCore
 

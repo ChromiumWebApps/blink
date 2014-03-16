@@ -30,6 +30,7 @@
 #include "bindings/v8/V8Binding.h"
 #include "core/frame/DOMWindowProperty.h"
 #include "core/storage/StorageArea.h"
+#include "heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
@@ -37,11 +38,11 @@
 namespace WebCore {
 
 class ExceptionState;
-class Frame;
+class LocalFrame;
 
-class Storage FINAL : public ScriptWrappable, public RefCounted<Storage>, public DOMWindowProperty {
+class Storage FINAL : public RefCountedWillBeGarbageCollectedFinalized<Storage>, public ScriptWrappable, public DOMWindowProperty {
 public:
-    static PassRefPtr<Storage> create(Frame*, PassOwnPtr<StorageArea>);
+    static PassRefPtrWillBeRawPtr<Storage> create(LocalFrame*, PassOwnPtrWillBeRawPtr<StorageArea>);
     virtual ~Storage();
 
     unsigned length(ExceptionState& ec) const { return m_storageArea->length(ec, m_frame); }
@@ -63,10 +64,12 @@ public:
     void namedPropertyEnumerator(Vector<String>&, ExceptionState&);
     bool namedPropertyQuery(const AtomicString&, ExceptionState&);
 
-private:
-    Storage(Frame*, PassOwnPtr<StorageArea>);
+    void trace(Visitor*);
 
-    OwnPtr<StorageArea> m_storageArea;
+private:
+    Storage(LocalFrame*, PassOwnPtrWillBeRawPtr<StorageArea>);
+
+    OwnPtrWillBeMember<StorageArea> m_storageArea;
 };
 
 } // namespace WebCore

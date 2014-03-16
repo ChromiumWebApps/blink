@@ -27,6 +27,7 @@
 #define StorageEvent_h
 
 #include "core/events/Event.h"
+#include "heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
@@ -34,13 +35,15 @@ namespace WebCore {
 class Storage;
 
 struct StorageEventInit : public EventInit {
+    STACK_ALLOCATED();
+public:
     StorageEventInit();
 
     String key;
     String oldValue;
     String newValue;
     String url;
-    RefPtr<Storage> storageArea;
+    RefPtrWillBeMember<Storage> storageArea;
 };
 
 class StorageEvent FINAL : public Event {
@@ -64,6 +67,8 @@ public:
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     StorageEvent();
     StorageEvent(const AtomicString& type, const String& key, const String& oldValue, const String& newValue, const String& url, Storage* storageArea);
@@ -73,7 +78,7 @@ private:
     String m_oldValue;
     String m_newValue;
     String m_url;
-    RefPtr<Storage> m_storageArea;
+    RefPtrWillBePersistent<Storage> m_storageArea;
 };
 
 } // namespace WebCore

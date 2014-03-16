@@ -385,14 +385,6 @@
     -webkit-mask-position: -128px -24px;
 }
 
-.glue-async-status-bar-item .glyph {
-    -webkit-mask-position: -128px -48px;
-}
-
-.glue-async-status-bar-item.toggled-on:disabled .glyph {
-    background-color: rgba(0, 0, 0, 0.75);
-}
-
 #resources-container-content {
     overflow: hidden;
     min-height: 100%;
@@ -613,9 +605,11 @@
 
 #timeline-grid-header {
     pointer-events: none;
+    height: 19px;
 }
 
-.timeline-utilization-strips {
+#timeline-graph-records-header {
+    pointer-events: none;
     height: 19px;
     padding: 1px 0;
     justify-content: center;
@@ -626,6 +620,7 @@
     overflow: hidden;
     flex: 0 1 12px;
     position: relative;
+    height: 9px;
 }
 
 .timeline-utilization-strip .timeline-graph-bar {
@@ -784,45 +779,6 @@
     overflow: hidden;
 }
 
-.pie-chart {
-    width: 100px;
-    height: 110px;
-}
-
-.pie-chart-background {
-    position: absolute;
-    width: 100px;
-    height: 100px;
-    border-radius: 50px;
-    background-color: rgb(248, 248, 248);
-    box-shadow: 0 1px 2px;
-}
-
-.pie-chart-foreground {
-    position: absolute;
-    width: 100px;
-    height: 100px;
-    text-align: center;
-    line-height: 100px;
-    z-index: 10;
-}
-
-.pie-chart-slice {
-    position: absolute;
-    width: 100px;
-    height: 100px;
-    border-radius: 50px;
-    clip: rect(0px, 100px, 100px, 50px);
-}
-
-.pie-chart-slice-inner {
-    position: absolute;
-    width: 100px;
-    height: 100px;
-    border-radius: 50px;
-    clip: rect(0px, 50px, 100px, 0px);
-}
-
 .timeline-aggregated-info {
     flex: none;
     position: relative;
@@ -838,12 +794,17 @@
 
 .timeline-aggregated-info .pie-chart {
     margin-left: 20px;
-}
-
-.flame-chart-main-pane {
-    overflow: hidden;
+    margin-bottom: 10px;
 }
 
 .timeline-flamechart-view #timeline-overview-grid {
     display: none;
+}
+
+.timeline-flamechart-view .flame-chart-main-pane .resources-divider-label {
+    text-align: center;
+}
+
+.timeline-flamechart {
+    overflow: hidden;
 }

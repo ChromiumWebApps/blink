@@ -74,13 +74,9 @@ private:
     RefPtr<SVGAnimatedEnumeration<SVGUnitTypes::SVGUnitType> > m_filterUnits;
     RefPtr<SVGAnimatedEnumeration<SVGUnitTypes::SVGUnitType> > m_primitiveUnits;
     RefPtr<SVGAnimatedIntegerOptionalInteger> m_filterRes;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGFilterElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
     HashSet<RefPtr<Node> > m_clientsToAdd;
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGFilterElement, hasTagName(SVGNames::filterTag));
 
 }
 

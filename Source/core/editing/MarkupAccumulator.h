@@ -57,11 +57,16 @@ enum EntityMask {
     EntityMaskInHTMLAttributeValue = EntityAmp | EntityQuot | EntityNbsp,
 };
 
+enum SerializationType {
+    AsOwnerDocument,
+    ForcedXML
+};
+
 class MarkupAccumulator {
     WTF_MAKE_NONCOPYABLE(MarkupAccumulator);
 
 public:
-    MarkupAccumulator(Vector<Node*>*, EAbsoluteURLs, const Range* = 0);
+    MarkupAccumulator(Vector<Node*>*, EAbsoluteURLs, const Range* = 0, SerializationType = AsOwnerDocument);
     virtual ~MarkupAccumulator();
 
     String serializeNodes(Node& targetNode, EChildrenOnly, Vector<QualifiedName>* tagNamesToSkip = 0);
@@ -79,7 +84,7 @@ protected:
     void concatenateMarkup(StringBuilder&);
     void appendAttributeValue(StringBuilder&, const String&, bool);
     virtual void appendCustomAttributes(StringBuilder&, const Element&, Namespaces*);
-    bool shouldAddNamespaceElement(const Element&);
+    bool shouldAddNamespaceElement(const Element&, Namespaces&);
     bool shouldAddNamespaceAttribute(const Attribute&, Namespaces&);
     void appendNamespace(StringBuilder&, const AtomicString& prefix, const AtomicString& namespaceURI, Namespaces&);
     EntityMask entityMaskForText(const Text&) const;
@@ -104,9 +109,11 @@ private:
     String resolveURLIfNeeded(const Element&, const String&) const;
     void appendQuotedURLAttributeValue(StringBuilder&, const Element&, const Attribute&);
     void serializeNodesWithNamespaces(Node& targetNode, EChildrenOnly, const Namespaces*, Vector<QualifiedName>* tagNamesToSkip);
+    bool serializeAsHTMLDocument(const Node&) const;
 
     StringBuilder m_markup;
     const EAbsoluteURLs m_resolveURLsMethod;
+    SerializationType m_serializationType;
 };
 
 }

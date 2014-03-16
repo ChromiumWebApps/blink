@@ -28,32 +28,45 @@ namespace WebCore {
 
 class CSSCustomFontData FINAL : public CustomFontData {
 public:
-    static PassRefPtr<CSSCustomFontData> create(bool isLoadingFallback = false)
+    enum FallbackVisibility { InvisibleFallback, VisibleFallback };
+
+    static PassRefPtr<CSSCustomFontData> create(RemoteFontFaceSource* source, FallbackVisibility visibility)
     {
-        return adoptRef(new CSSCustomFontData(isLoadingFallback));
+        return adoptRef(new CSSCustomFontData(source, visibility));
     }
 
     virtual ~CSSCustomFontData() { }
 
+    virtual bool shouldSkipDrawing() const OVERRIDE
+    {
+        if (m_fontFaceSource)
+            m_fontFaceSource->paintRequested();
+        return m_fallbackVisibility == InvisibleFallback && m_isUsed;
+    }
+
     virtual void beginLoadIfNeeded() const OVERRIDE
     {
-        if (!m_isUsed && m_isLoadingFallback && m_fontFaceSource) {
+        if (!m_isUsed && m_fontFaceSource) {
             m_isUsed = true;
             m_fontFaceSource->beginLoadIfNeeded();
         }
     }
 
-    virtual void setCSSFontFaceSource(CSSFontFaceSource* source) OVERRIDE { m_fontFaceSource = source; }
-    virtual void clearCSSFontFaceSource() OVERRIDE { m_fontFaceSource = 0; }
+    virtual bool isLoading() const OVERRIDE { return m_isUsed; }
+    virtual bool isLoadingFallback() const OVERRIDE { return true; }
+    virtual void clearFontFaceSource() OVERRIDE { m_fontFaceSource = 0; }
 
 private:
-    CSSCustomFontData(bool isLoadingFallback)
-        : CustomFontData(isLoadingFallback)
-        , m_fontFaceSource(0)
+    CSSCustomFontData(RemoteFontFaceSource* source, FallbackVisibility visibility)
+        : m_fontFaceSource(source)
+        , m_fallbackVisibility(visibility)
+        , m_isUsed(false)
     {
     }
 
-    CSSFontFaceSource* m_fontFaceSource;
+    RemoteFontFaceSource* m_fontFaceSource;
+    FallbackVisibility m_fallbackVisibility;
+    mutable bool m_isUsed;
 };
 
 }

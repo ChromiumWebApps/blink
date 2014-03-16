@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # Copyright (C) 2013 Adobe Systems Incorporated. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -196,7 +194,7 @@ class TestImporter(object):
 
         for root, dirs, files in os.walk(directory):
             cur_dir = root.replace(self.layout_tests_dir + '/', '') + '/'
-            _log.info('Scanning ' + cur_dir + '...')
+            _log.info('  scanning ' + cur_dir + '...')
             total_tests = 0
             reftests = 0
             jstests = 0
@@ -216,7 +214,7 @@ class TestImporter(object):
                     if path_base in dirs:
                         dirs.remove(path_base)
                         if not self.options.dry_run and self.import_in_place:
-                            _log.info("Pruning %s" % path_full)
+                            _log.info("  pruning %s" % path_base)
                             self.filesystem.rmtree(path_full)
 
             copy_list = []
@@ -226,7 +224,7 @@ class TestImporter(object):
                 path_base = path_full.replace(self.layout_tests_dir + '/', '')
                 if path_base in paths_to_skip:
                     if not self.options.dry_run and self.import_in_place:
-                        _log.info("Pruning %s" % path_base)
+                        _log.info("  pruning %s" % path_base)
                         self.filesystem.remove(path_full)
                         continue
                 # FIXME: This block should really be a separate function, but the early-continues make that difficult.
@@ -360,13 +358,12 @@ class TestImporter(object):
                         os.makedirs(os.path.dirname(new_filepath))
 
                 if not self.options.overwrite and os.path.exists(new_filepath):
-                    _log.info('Skipping import of existing file ' + new_filepath)
+                    _log.info('  skipping import of existing file ' + new_filepath)
                 else:
                     # FIXME: Maybe doing a file diff is in order here for existing files?
                     # In other words, there's no sense in overwriting identical files, but
                     # there's no harm in copying the identical thing.
-                    _log.info('Importing: %s', orig_filepath)
-                    _log.info('       As: %s', new_filepath)
+                    _log.info('  importing %s', os.path.relpath(new_filepath, self.layout_tests_dir))
 
                 # Only html, xml, or css should be converted
                 # FIXME: Eventually, so should js when support is added for this type of conversion
@@ -393,12 +390,13 @@ class TestImporter(object):
 
                 copied_files.append(new_filepath.replace(self._webkit_root, ''))
 
-            if not self.options.import_in_place and not self.options.dry_run:
+            if not self.import_in_place and not self.options.dry_run:
                 self.remove_deleted_files(new_path, copied_files)
                 self.write_import_log(new_path, copied_files, prefixed_properties)
 
+        _log.info('')
         _log.info('Import complete')
-
+        _log.info('')
         _log.info('IMPORTED %d TOTAL TESTS', total_imported_tests)
         _log.info('Imported %d reftests', total_imported_reftests)
         _log.info('Imported %d JS tests', total_imported_jstests)

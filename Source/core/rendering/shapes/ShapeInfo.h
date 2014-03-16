@@ -43,16 +43,16 @@ namespace WebCore {
 template<class KeyType, class InfoType>
 class MappedInfo {
 public:
-    static InfoType* ensureInfo(const KeyType* key)
+    static InfoType& ensureInfo(const KeyType& key)
     {
         InfoMap& infoMap = MappedInfo<KeyType, InfoType>::infoMap();
-        if (InfoType* info = infoMap.get(key))
-            return info;
-        typename InfoMap::AddResult result = infoMap.add(key, InfoType::createInfo(key));
-        return result.storedValue->value.get();
+        if (InfoType* info = infoMap.get(&key))
+            return *info;
+        typename InfoMap::AddResult result = infoMap.add(&key, InfoType::createInfo(key));
+        return *result.storedValue->value;
     }
-    static void removeInfo(const KeyType* key) { infoMap().remove(key); }
-    static InfoType* info(const KeyType* key) { return infoMap().get(key); }
+    static void removeInfo(const KeyType& key) { infoMap().remove(&key); }
+    static InfoType* info(const KeyType& key) { return infoMap().get(&key); }
 private:
     typedef HashMap<const KeyType*, OwnPtr<InfoType> > InfoMap;
     static InfoMap& infoMap()
@@ -68,34 +68,7 @@ class ShapeInfo {
 public:
     virtual ~ShapeInfo() { }
 
-    void setShapeSize(LayoutUnit logicalWidth, LayoutUnit logicalHeight)
-    {
-        switch (resolvedLayoutBox()) {
-        case MarginBox:
-            logicalHeight += m_renderer->marginLogicalHeight();
-            logicalWidth += m_renderer->marginLogicalWidth();
-            break;
-        case BorderBox:
-            break;
-        case PaddingBox:
-            logicalHeight -= m_renderer->borderLogicalHeight();
-            logicalWidth -= m_renderer->borderLogicalWidth();
-            break;
-        case ContentBox:
-            logicalHeight -= m_renderer->borderAndPaddingLogicalHeight();
-            logicalWidth -= m_renderer->borderAndPaddingLogicalWidth();
-            break;
-        case BoxMissing:
-            // A non-missing box value must be supplied.
-            ASSERT_NOT_REACHED();
-        }
-
-        LayoutSize newLogicalSize(logicalWidth, logicalHeight);
-        if (m_shapeLogicalSize == newLogicalSize)
-            return;
-        dirtyShapeSize();
-        m_shapeLogicalSize = newLogicalSize;
-    }
+    void setReferenceBoxLogicalSize(LayoutSize);
 
     SegmentList computeSegmentsForLine(LayoutUnit lineTop, LayoutUnit lineHeight) const;
 
@@ -106,72 +79,41 @@ public:
     LayoutUnit shapeLogicalWidth() const { return computedShapeLogicalBoundingBox().width(); }
     LayoutUnit shapeLogicalHeight() const { return computedShapeLogicalBoundingBox().height(); }
 
-    LayoutUnit logicalLineTop() const { return m_shapeLineTop + logicalTopOffset(); }
-    LayoutUnit logicalLineBottom() const { return m_shapeLineTop + m_lineHeight + logicalTopOffset(); }
+    LayoutUnit logicalLineTop() const { return m_referenceBoxLineTop + logicalTopOffset(); }
+    LayoutUnit logicalLineBottom() const { return m_referenceBoxLineTop + m_lineHeight + logicalTopOffset(); }
 
-    LayoutUnit shapeContainingBlockHeight() const { return (m_renderer->style()->boxSizing() == CONTENT_BOX) ? (m_shapeLogicalSize.height() + m_renderer->borderAndPaddingLogicalHeight()) : m_shapeLogicalSize.height(); }
+    LayoutUnit shapeContainingBlockHeight() const { return (m_renderer.style()->boxSizing() == CONTENT_BOX) ? (m_referenceBoxLogicalSize.height() + m_renderer.borderAndPaddingLogicalHeight()) : m_referenceBoxLogicalSize.height(); }
 
     virtual bool lineOverlapsShapeBounds() const = 0;
 
-    void dirtyShapeSize() { m_shape.clear(); }
-    bool shapeSizeDirty() { return !m_shape.get(); }
-    const RenderType* owner() const { return m_renderer; }
-    LayoutSize shapeSize() const { return m_shapeLogicalSize; }
+    void markShapeAsDirty() { m_shape.clear(); }
+    bool isShapeDirty() { return !m_shape.get(); }
+    const RenderType& owner() const { return m_renderer; }
+    LayoutSize shapeSize() const { return m_referenceBoxLogicalSize; }
 
 protected:
-    ShapeInfo(const RenderType* renderer): m_renderer(renderer) { }
+    ShapeInfo(const RenderType& renderer): m_renderer(renderer) { }
 
-    const Shape* computedShape() const;
+    const Shape& computedShape() const;
 
-    virtual LayoutBox resolvedLayoutBox() const = 0;
+    virtual LayoutBox referenceBox() const = 0;
     virtual LayoutRect computedShapeLogicalBoundingBox() const = 0;
     virtual ShapeValue* shapeValue() const = 0;
     virtual void getIntervals(LayoutUnit, LayoutUnit, SegmentList&) const = 0;
 
-    LayoutUnit logicalTopOffset() const
-    {
-        switch (resolvedLayoutBox()) {
-        case MarginBox:
-            return -m_renderer->marginBefore();
-        case BorderBox:
-            return LayoutUnit();
-        case PaddingBox:
-            return m_renderer->borderBefore();
-        case ContentBox:
-            return m_renderer->borderAndPaddingBefore();
-        case BoxMissing:
-            // A non-missing box value must be supplied.
-            ASSERT_NOT_REACHED();
-        }
-        return LayoutUnit();
-    }
+    virtual const RenderStyle* styleForWritingMode() const = 0;
 
-    LayoutUnit logicalLeftOffset() const
-    {
-        switch (resolvedLayoutBox()) {
-        case MarginBox:
-            return -m_renderer->marginStart();
-        case BorderBox:
-            return LayoutUnit();
-        case PaddingBox:
-            return m_renderer->borderStart();
-        case ContentBox:
-            return m_renderer->borderAndPaddingStart();
-        case BoxMissing:
-            // A non-missing box value must be supplied.
-            ASSERT_NOT_REACHED();
-        }
-        return LayoutUnit();
-    }
+    LayoutUnit logicalTopOffset() const;
+    LayoutUnit logicalLeftOffset() const;
 
-    LayoutUnit m_shapeLineTop;
+    LayoutUnit m_referenceBoxLineTop;
     LayoutUnit m_lineHeight;
 
-    const RenderType* m_renderer;
+    const RenderType& m_renderer;
 
 private:
     mutable OwnPtr<Shape> m_shape;
-    LayoutSize m_shapeLogicalSize;
+    LayoutSize m_referenceBoxLogicalSize;
 };
 
 bool checkShapeImageOrigin(Document&, ImageResource&);

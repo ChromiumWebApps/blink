@@ -34,21 +34,23 @@ namespace WebCore {
     public:
         virtual ~ClipboardEvent();
 
-        static PassRefPtr<ClipboardEvent> create(const AtomicString& type, bool canBubbleArg, bool cancelableArg, PassRefPtr<Clipboard> clipboardArg)
+        static PassRefPtr<ClipboardEvent> create(const AtomicString& type, bool canBubbleArg, bool cancelableArg, PassRefPtrWillBeRawPtr<Clipboard> clipboardArg)
         {
             return adoptRef(new ClipboardEvent(type, canBubbleArg, cancelableArg, clipboardArg));
         }
 
         Clipboard* clipboard() const { return m_clipboard.get(); }
 
+        virtual void trace(Visitor*) OVERRIDE;
+
     private:
         ClipboardEvent();
-        ClipboardEvent(const AtomicString& type, bool canBubbleArg, bool cancelableArg, PassRefPtr<Clipboard>);
+        ClipboardEvent(const AtomicString& type, bool canBubbleArg, bool cancelableArg, PassRefPtrWillBeRawPtr<Clipboard>);
 
         virtual const AtomicString& interfaceName() const OVERRIDE;
         virtual bool isClipboardEvent() const OVERRIDE;
 
-        RefPtr<Clipboard> m_clipboard;
+        RefPtrWillBeMember<Clipboard> m_clipboard;
     };
 
 } // namespace WebCore

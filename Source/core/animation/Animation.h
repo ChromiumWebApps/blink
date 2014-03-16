@@ -32,7 +32,10 @@
 #define Animation_h
 
 #include "core/animation/AnimationEffect.h"
+#include "core/animation/EffectInput.h"
 #include "core/animation/TimedItem.h"
+#include "core/animation/TimingInput.h"
+#include "heap/Handle.h"
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
@@ -45,11 +48,14 @@ class Animation FINAL : public TimedItem {
 public:
     enum Priority { DefaultPriority, TransitionPriority };
 
-    static PassRefPtr<Animation> create(PassRefPtr<Element>, PassRefPtr<AnimationEffect>, const Timing&, Priority = DefaultPriority, PassOwnPtr<EventDelegate> = nullptr);
+    static PassRefPtr<Animation> create(PassRefPtr<Element>, PassRefPtrWillBeRawPtr<AnimationEffect>, const Timing&, Priority = DefaultPriority, PassOwnPtr<EventDelegate> = nullptr);
     // Web Animations API Bindings constructors.
-    static PassRefPtr<Animation> create(Element*, Vector<Dictionary> keyframeDictionaryVector, Dictionary timingInput);
-    static PassRefPtr<Animation> create(Element*, Vector<Dictionary> keyframeDictionaryVector, double timingInput);
-    static PassRefPtr<Animation> create(Element*, Vector<Dictionary> keyframeDictionaryVector);
+    static PassRefPtr<Animation> create(Element*, PassRefPtrWillBeRawPtr<AnimationEffect>, const Dictionary& timingInputDictionary);
+    static PassRefPtr<Animation> create(Element*, PassRefPtrWillBeRawPtr<AnimationEffect>, double duration);
+    static PassRefPtr<Animation> create(Element*, PassRefPtrWillBeRawPtr<AnimationEffect>);
+    static PassRefPtr<Animation> create(Element*, const Vector<Dictionary>& keyframeDictionaryVector, const Dictionary& timingInputDictionary);
+    static PassRefPtr<Animation> create(Element*, const Vector<Dictionary>& keyframeDictionaryVector, double duration);
+    static PassRefPtr<Animation> create(Element*, const Vector<Dictionary>& keyframeDictionaryVector);
 
     // FIXME: Move all of these setter methods out of Animation,
     // possibly into a new class (TimingInput?).
@@ -94,15 +100,11 @@ protected:
 
 private:
     static void populateTiming(Timing&, Dictionary);
-    // createUnsafe should only be directly called from tests.
-    static PassRefPtr<Animation> createUnsafe(Element*, Vector<Dictionary> keyframeDictionaryVector, Dictionary timingInput);
-    static PassRefPtr<Animation> createUnsafe(Element*, Vector<Dictionary> keyframeDictionaryVector, double timingInput);
-    static PassRefPtr<Animation> createUnsafe(Element*, Vector<Dictionary> keyframeDictionaryVector);
 
-    Animation(PassRefPtr<Element>, PassRefPtr<AnimationEffect>, const Timing&, Priority, PassOwnPtr<EventDelegate>);
+    Animation(PassRefPtr<Element>, PassRefPtrWillBeRawPtr<AnimationEffect>, const Timing&, Priority, PassOwnPtr<EventDelegate>);
 
     RefPtr<Element> m_target;
-    RefPtr<AnimationEffect> m_effect;
+    RefPtrWillBePersistent<AnimationEffect> m_effect;
 
     bool m_activeInAnimationStack;
     OwnPtr<AnimationEffect::CompositableValueList> m_compositableValues;

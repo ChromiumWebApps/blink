@@ -32,15 +32,13 @@
 #include "core/timing/MemoryInfo.h"
 
 #include <limits>
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/MainThread.h"
 #include "wtf/MathExtras.h"
 
 namespace WebCore {
-
-DEFINE_GC_INFO(MemoryInfo);
 
 class HeapSizeCache {
     WTF_MAKE_NONCOPYABLE(HeapSizeCache); WTF_MAKE_FAST_ALLOCATED;
@@ -133,7 +131,7 @@ size_t quantizeMemorySize(size_t size)
 }
 
 
-MemoryInfo::MemoryInfo(Frame* frame)
+MemoryInfo::MemoryInfo(LocalFrame* frame)
 {
     ScriptWrappable::init(this);
     if (!frame || !frame->settings())

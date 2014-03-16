@@ -28,8 +28,8 @@
 #include "core/dom/Element.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/dom/StyleEngine.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLStyleElement.h"
-#include "core/frame/ContentSecurityPolicy.h"
 #include "platform/TraceEvent.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -66,15 +66,20 @@ void StyleElement::processStyleSheet(Document& document, Element* element)
     process(element);
 }
 
-void StyleElement::removedFromDocument(Document& document, Element* element, ContainerNode* scopingNode)
+void StyleElement::removedFromDocument(Document& document, Element* element)
+{
+    removedFromDocument(document, element, 0, document);
+}
+
+void StyleElement::removedFromDocument(Document& document, Element* element, ContainerNode* scopingNode, TreeScope& treeScope)
 {
     ASSERT(element);
-    document.styleEngine()->removeStyleSheetCandidateNode(element, scopingNode);
+    document.styleEngine()->removeStyleSheetCandidateNode(element, scopingNode, treeScope);
 
     RefPtr<StyleSheet> removedSheet = m_sheet;
 
     if (m_sheet)
-        clearSheet();
+        clearSheet(element);
 
     document.removedStyleSheet(removedSheet.get(), RecalcStyleDeferred, AnalyzedStyleUpdate);
 }
@@ -84,8 +89,11 @@ void StyleElement::clearDocumentData(Document& document, Element* element)
     if (m_sheet)
         m_sheet->clearOwnerNode();
 
-    if (element->inDocument())
-        document.styleEngine()->removeStyleSheetCandidateNode(element, element->hasTagName(HTMLNames::styleTag) ? toHTMLStyleElement(element)->scopingNode() :  0);
+    if (element->inDocument()) {
+        ContainerNode* scopingNode = isHTMLStyleElement(element) ? toHTMLStyleElement(element)->scopingNode() :  0;
+        TreeScope& treeScope = scopingNode ? scopingNode->treeScope() : element->treeScope();
+        document.styleEngine()->removeStyleSheetCandidateNode(element, scopingNode, treeScope);
+    }
 }
 
 void StyleElement::childrenChanged(Element* element)
@@ -111,9 +119,13 @@ void StyleElement::process(Element* element)
     createSheet(element, element->textFromChildren());
 }
 
-void StyleElement::clearSheet()
+void StyleElement::clearSheet(Element* ownerElement)
 {
     ASSERT(m_sheet);
+
+    if (ownerElement && m_sheet->isLoading())
+        ownerElement->document().styleEngine()->removePendingSheet(ownerElement);
+
     m_sheet.release()->clearOwnerNode();
 }
 
@@ -122,17 +134,14 @@ void StyleElement::createSheet(Element* e, const String& text)
     ASSERT(e);
     ASSERT(e->inDocument());
     Document& document = e->document();
-    if (m_sheet) {
-        if (m_sheet->isLoading())
-            document.styleEngine()->removePendingSheet(e);
-        clearSheet();
-    }
+    if (m_sheet)
+        clearSheet(e);
 
     // If type is empty or CSS, this is a CSS style sheet.
     const AtomicString& type = this->type();
     bool passesContentSecurityPolicyChecks = document.contentSecurityPolicy()->allowStyleHash(text) || document.contentSecurityPolicy()->allowStyleNonce(e->fastGetAttribute(HTMLNames::nonceAttr)) || document.contentSecurityPolicy()->allowInlineStyle(e->document().url(), m_startPosition.m_line);
     if (isCSS(e, type) && passesContentSecurityPolicyChecks) {
-        RefPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media());
+        RefPtrWillBeRawPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media());
 
         MediaQueryEvaluator screenEval("screen", true);
         MediaQueryEvaluator printEval("print", true);

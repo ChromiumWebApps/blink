@@ -77,8 +77,6 @@ static PassRefPtrWillBeRawPtr<PositionError> createPositionError(GeolocationErro
     return PositionError::create(code, error->message());
 }
 
-DEFINE_GC_INFO(Geolocation::GeoNotifier);
-
 Geolocation::GeoNotifier::GeoNotifier(Geolocation* geolocation, PassOwnPtr<PositionCallback> successCallback, PassOwnPtr<PositionErrorCallback> errorCallback, PassRefPtrWillBeRawPtr<PositionOptions> options)
     : m_geolocation(geolocation)
     , m_successCallback(successCallback)
@@ -112,13 +110,13 @@ void Geolocation::GeoNotifier::setFatalError(PassRefPtrWillBeRawPtr<PositionErro
     m_fatalError = error;
     // An existing timer may not have a zero timeout.
     m_timer.stop();
-    m_timer.startOneShot(0);
+    m_timer.startOneShot(0, FROM_HERE);
 }
 
 void Geolocation::GeoNotifier::setUseCachedPosition()
 {
     m_useCachedPosition = true;
-    m_timer.startOneShot(0);
+    m_timer.startOneShot(0, FROM_HERE);
 }
 
 bool Geolocation::GeoNotifier::hasZeroTimeout() const
@@ -145,7 +143,7 @@ void Geolocation::GeoNotifier::runErrorCallback(PositionError* error)
 void Geolocation::GeoNotifier::startTimerIfNeeded()
 {
     if (m_options->hasTimeout())
-        m_timer.startOneShot(m_options->timeout() / 1000.0);
+        m_timer.startOneShot(m_options->timeout() / 1000.0, FROM_HERE);
 }
 
 void Geolocation::GeoNotifier::stopTimer()
@@ -161,7 +159,7 @@ void Geolocation::GeoNotifier::timerFired(Timer<GeoNotifier>*)
     // could be deleted by a call to clearWatch in a callback.
     RefPtrWillBeRawPtr<GeoNotifier> protect(this);
 
-    // Test for fatal error first. This is required for the case where the Frame is
+    // Test for fatal error first. This is required for the case where the LocalFrame is
     // disconnected and requests are cancelled.
     if (m_fatalError) {
         runErrorCallback(m_fatalError.get());
@@ -251,8 +249,6 @@ void Geolocation::Watchers::getNotifiersVector(GeoNotifierVector& copy) const
     copyValuesToVector(m_idToNotifierMap, copy);
 }
 
-DEFINE_GC_INFO(Geolocation);
-
 PassRefPtrWillBeRawPtr<Geolocation> Geolocation::create(ExecutionContext* context)
 {
     RefPtrWillBeRawPtr<Geolocation> geolocation = adoptRefWillBeNoop(new Geolocation(context));
@@ -286,7 +282,7 @@ Document* Geolocation::document() const
     return toDocument(executionContext());
 }
 
-Frame* Geolocation::frame() const
+LocalFrame* Geolocation::frame() const
 {
     return document() ? document()->frame() : 0;
 }

@@ -38,7 +38,6 @@
 #include "V8Node.h"
 #include "V8TestImplementedAs.h"
 #include "V8TestInterfaceEmpty.h"
-#include "V8TestObjectPython.h"
 #include "bindings/tests/idls/TestImplements.h"
 #include "bindings/tests/idls/TestImplements2Implementation.h"
 #include "bindings/tests/idls/TestPartialInterfacePython.h"
@@ -47,6 +46,7 @@
 #include "bindings/v8/V8AbstractEventListener.h"
 #include "bindings/v8/V8DOMConfiguration.h"
 #include "bindings/v8/V8EventListenerList.h"
+#include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/V8ObjectConstructor.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
@@ -85,7 +85,7 @@ template <typename T> void V8_USE(T) { }
 static void testInterfacePythonAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TestInterfacePythonImplementation* imp = V8TestInterfacePython::toNative(info.Holder());
-    v8SetReturnValueFast(info, imp->testInterfacePythonAttribute(), imp);
+    v8SetReturnValueFast(info, WTF::getPtr(imp->testInterfacePythonAttribute()), imp);
 }
 
 static void testInterfacePythonAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -278,7 +278,7 @@ static void implementsNodeAttributeAttributeGetter(const v8::PropertyCallbackInf
 {
     TestInterfacePythonImplementation* imp = V8TestInterfacePython::toNative(info.Holder());
     ASSERT(imp);
-    v8SetReturnValueFast(info, TestImplements::implementsNodeAttribute(*imp), imp);
+    v8SetReturnValueFast(info, WTF::getPtr(TestImplements::implementsNodeAttribute(*imp)), imp);
 }
 
 static void implementsNodeAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -345,7 +345,7 @@ static void implementsRuntimeEnabledNodeAttributeAttributeGetter(const v8::Prope
 {
     TestInterfacePythonImplementation* imp = V8TestInterfacePython::toNative(info.Holder());
     ASSERT(imp);
-    v8SetReturnValueFast(info, TestImplements::implementsRuntimeEnabledNodeAttribute(*imp), imp);
+    v8SetReturnValueFast(info, WTF::getPtr(TestImplements::implementsRuntimeEnabledNodeAttribute(*imp)), imp);
 }
 
 static void implementsRuntimeEnabledNodeAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -380,7 +380,7 @@ static void implementsPerContextEnabledNodeAttributeAttributeGetter(const v8::Pr
 {
     TestInterfacePythonImplementation* imp = V8TestInterfacePython::toNative(info.Holder());
     ASSERT(imp);
-    v8SetReturnValueFast(info, TestImplements::implementsPerContextEnabledNodeAttribute(*imp), imp);
+    v8SetReturnValueFast(info, WTF::getPtr(TestImplements::implementsPerContextEnabledNodeAttribute(*imp)), imp);
 }
 
 static void implementsPerContextEnabledNodeAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -893,11 +893,11 @@ void V8TestInterfacePython::visitDOMWrapper(void* object, const v8::Persistent<v
     TestInterfacePythonImplementation* impl = fromInternalPointer(object);
     v8::Local<v8::Object> creationContext = v8::Local<v8::Object>::New(isolate, wrapper);
     V8WrapperInstantiationScope scope(creationContext, isolate);
-    TestObjectPython* referencedName = impl->referencedName();
+    TestInterfacePythonImplementation* referencedName = impl->referencedName();
     if (referencedName) {
-        if (!DOMDataStore::containsWrapper<V8TestObjectPython>(referencedName, isolate))
+        if (!DOMDataStore::containsWrapper<V8TestInterfacePython>(referencedName, isolate))
             wrap(referencedName, creationContext, isolate);
-        DOMDataStore::setWrapperReference<V8TestObjectPython>(wrapper, referencedName, isolate);
+        DOMDataStore::setWrapperReference<V8TestInterfacePython>(wrapper, referencedName, isolate);
     }
     setObjectGroup(object, wrapper, isolate);
 }
@@ -922,43 +922,43 @@ static const V8DOMConfiguration::MethodConfiguration V8TestInterfacePythonMethod
     {"partial2VoidMethod", TestInterfacePythonImplementationV8Internal::partial2VoidMethodMethodCallback, 0, 0},
 };
 
-static void configureV8TestInterfacePythonTemplate(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate, WrapperWorldType currentWorldType)
+static void configureV8TestInterfacePythonTemplate(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
 {
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
     if (!RuntimeEnabledFeatures::featureNameEnabled())
-        defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "", V8TestInterfaceEmpty::domTemplate(isolate, currentWorldType), V8TestInterfacePython::internalFieldCount, 0, 0, 0, 0, 0, 0, isolate, currentWorldType);
+        defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "", V8TestInterfaceEmpty::domTemplate(isolate), V8TestInterfacePython::internalFieldCount, 0, 0, 0, 0, 0, 0, isolate);
     else
-        defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "TestInterfacePython", V8TestInterfaceEmpty::domTemplate(isolate, currentWorldType), V8TestInterfacePython::internalFieldCount,
+        defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "TestInterfacePython", V8TestInterfaceEmpty::domTemplate(isolate), V8TestInterfacePython::internalFieldCount,
             V8TestInterfacePythonAttributes, WTF_ARRAY_LENGTH(V8TestInterfacePythonAttributes),
             0, 0,
             V8TestInterfacePythonMethods, WTF_ARRAY_LENGTH(V8TestInterfacePythonMethods),
-            isolate, currentWorldType);
+            isolate);
     v8::Local<v8::ObjectTemplate> ALLOW_UNUSED instanceTemplate = functionTemplate->InstanceTemplate();
     v8::Local<v8::ObjectTemplate> ALLOW_UNUSED prototypeTemplate = functionTemplate->PrototypeTemplate();
     if (RuntimeEnabledFeatures::implementsFeatureNameEnabled()) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {"implementsRuntimeEnabledNodeAttribute", TestInterfacePythonImplementationV8Internal::implementsRuntimeEnabledNodeAttributeAttributeGetterCallback, TestInterfacePythonImplementationV8Internal::implementsRuntimeEnabledNodeAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */};
-        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate, currentWorldType);
+        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate);
     }
     if (RuntimeEnabledFeatures::implements2FeatureNameEnabled()) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {"implements2StringAttribute", TestInterfacePythonImplementationV8Internal::implements2StringAttributeAttributeGetterCallback, TestInterfacePythonImplementationV8Internal::implements2StringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */};
-        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate, currentWorldType);
+        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate);
     }
 #if ENABLE(PARTIAL_CONDITION)
     if (RuntimeEnabledFeatures::partialFeatureNameEnabled()) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {"partialLongAttribute", TestInterfacePythonImplementationV8Internal::partialLongAttributeAttributeGetterCallback, TestInterfacePythonImplementationV8Internal::partialLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */};
-        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate, currentWorldType);
+        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate);
     }
 #endif // ENABLE(PARTIAL_CONDITION)
 #if ENABLE(PARTIAL_CONDITION)
     if (RuntimeEnabledFeatures::partialFeatureNameEnabled()) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {"partialCallWithExecutionContextLongAttribute", TestInterfacePythonImplementationV8Internal::partialCallWithExecutionContextLongAttributeAttributeGetterCallback, TestInterfacePythonImplementationV8Internal::partialCallWithExecutionContextLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */};
-        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate, currentWorldType);
+        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate);
     }
 #endif // ENABLE(PARTIAL_CONDITION)
     static const V8DOMConfiguration::ConstantConfiguration V8TestInterfacePythonConstants[] = {
@@ -1011,25 +1011,28 @@ static void configureV8TestInterfacePythonTemplate(v8::Handle<v8::FunctionTempla
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::current()->toStringTemplate());
 }
 
-v8::Handle<v8::FunctionTemplate> V8TestInterfacePython::domTemplate(v8::Isolate* isolate, WrapperWorldType currentWorldType)
+v8::Handle<v8::FunctionTemplate> V8TestInterfacePython::domTemplate(v8::Isolate* isolate)
 {
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    V8PerIsolateData::TemplateMap::iterator result = data->templateMap(currentWorldType).find(&wrapperTypeInfo);
-    if (result != data->templateMap(currentWorldType).end())
-        return result->value.newLocal(isolate);
+    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(const_cast<WrapperTypeInfo*>(&wrapperTypeInfo));
+    if (!result.IsEmpty())
+        return result;
 
     TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BuildDOMTemplate");
-    v8::EscapableHandleScope handleScope(isolate);
-    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
-    configureV8TestInterfacePythonTemplate(templ, isolate, currentWorldType);
-    data->templateMap(currentWorldType).add(&wrapperTypeInfo, UnsafePersistent<v8::FunctionTemplate>(isolate, templ));
-    return handleScope.Escape(templ);
+    result = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
+    configureV8TestInterfacePythonTemplate(result, isolate);
+    data->setDOMTemplate(const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), result);
+    return result;
 }
 
 bool V8TestInterfacePython::hasInstance(v8::Handle<v8::Value> jsValue, v8::Isolate* isolate)
 {
-    return V8PerIsolateData::from(isolate)->hasInstanceInMainWorld(&wrapperTypeInfo, jsValue)
-        || V8PerIsolateData::from(isolate)->hasInstanceInNonMainWorld(&wrapperTypeInfo, jsValue);
+    return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, jsValue);
+}
+
+v8::Handle<v8::Object> V8TestInterfacePython::findInstanceInPrototypeChain(v8::Handle<v8::Value> jsValue, v8::Isolate* isolate)
+{
+    return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, jsValue);
 }
 
 TestInterfacePythonImplementation* V8TestInterfacePython::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)

@@ -367,7 +367,7 @@ inline void BreakingContext::handleOutOfFlowPositioned(Vector<RenderBox*>& posit
     } else {
         positionedObjects.append(box);
     }
-    m_width.addUncommittedWidth(inlineLogicalWidth(box));
+    m_width.addUncommittedWidth(inlineLogicalWidth(box).toFloat());
     // Reset prior line break context characters.
     m_renderTextInfo.m_lineBreakIterator.resetPriorContext();
 }
@@ -380,7 +380,7 @@ inline void BreakingContext::handleFloat()
     // If it does, position it now, otherwise, position
     // it after moving to next line (in newLine() func)
     // FIXME: Bug 110372: Properly position multiple stacked floats with non-rectangular shape outside.
-    if (m_floatsFitOnLine && m_width.fitsOnLine(m_block->logicalWidthForFloat(floatingObject))) {
+    if (m_floatsFitOnLine && m_width.fitsOnLine(m_block->logicalWidthForFloat(floatingObject).toFloat())) {
         m_block->positionNewFloatOnLine(floatingObject, m_lastFloatFromPreviousLine, m_lineInfo, m_width);
         if (m_lineBreak.object() == m_current.object()) {
             ASSERT(!m_lineBreak.offset());
@@ -442,7 +442,7 @@ inline void BreakingContext::handleEmptyInline()
         }
     }
 
-    m_width.addUncommittedWidth(inlineLogicalWidth(m_current.object()) + borderPaddingMarginStart(flowBox) + borderPaddingMarginEnd(flowBox));
+    m_width.addUncommittedWidth((inlineLogicalWidth(m_current.object()) + borderPaddingMarginStart(flowBox) + borderPaddingMarginEnd(flowBox)).toFloat());
 }
 
 inline void BreakingContext::handleReplaced()
@@ -477,9 +477,9 @@ inline void BreakingContext::handleReplaced()
             m_ignoringSpaces = true;
         }
         if (toRenderListMarker(m_current.object())->isInside())
-            m_width.addUncommittedWidth(replacedLogicalWidth);
+            m_width.addUncommittedWidth(replacedLogicalWidth.toFloat());
     } else {
-        m_width.addUncommittedWidth(replacedLogicalWidth);
+        m_width.addUncommittedWidth(replacedLogicalWidth.toFloat());
     }
     if (m_current.object()->isRubyRun())
         m_width.applyOverhang(toRenderRubyRun(m_current.object()), m_lastObject, m_nextObject);
@@ -516,7 +516,7 @@ inline void updateSegmentsForShapes(RenderBlockFlow* block, const FloatingObject
         return;
 
     bool isHorizontalWritingMode = block->isHorizontalWritingMode();
-    LayoutUnit logicalOffsetFromShapeContainer = block->logicalOffsetFromShapeAncestorContainer(shapeInsideInfo->owner()).height();
+    LayoutUnit logicalOffsetFromShapeContainer = block->logicalOffsetFromShapeAncestorContainer(&shapeInsideInfo->owner()).height();
 
     LayoutUnit lineLogicalTop = block->logicalHeight() + logicalOffsetFromShapeContainer;
     LayoutUnit lineLogicalHeight = block->lineHeight(isFirstLine, isHorizontalWritingMode ? HorizontalLine : VerticalLine, PositionOfInteriorLineBoxes);
@@ -527,6 +527,10 @@ inline void updateSegmentsForShapes(RenderBlockFlow* block, const FloatingObject
 
     bool lineOverlapsWithFloat = (floatLogicalTop < lineLogicalBottom) && (lineLogicalTop < floatLogicalBottom);
     if (!lineOverlapsWithFloat)
+        return;
+
+    // FIXME: We need to remove this once we support multiple-segment polygons
+    if (shapeInsideInfo->segments().size() > 1)
         return;
 
     float minSegmentWidth = firstPositiveWidth(wordMeasurements);
@@ -552,7 +556,7 @@ inline float measureHyphenWidth(RenderText* renderer, const Font& font, TextDire
 {
     RenderStyle* style = renderer->style();
     return font.width(RenderBlockFlow::constructTextRun(renderer, font,
-        style->hyphenString().string(), style, textDirection));
+        style->hyphenString().string(), style, style->direction()));
 }
 
 ALWAYS_INLINE TextDirection textDirectionFromUnicode(WTF::Unicode::Direction direction)
@@ -561,17 +565,13 @@ ALWAYS_INLINE TextDirection textDirectionFromUnicode(WTF::Unicode::Direction dir
         || direction == WTF::Unicode::RightToLeftArabic ? RTL : LTR;
 }
 
-ALWAYS_INLINE float textWidth(RenderText* text, unsigned from, unsigned len, const Font& font, float xPos, bool isFixedPitch, WTF::Unicode::Direction direction, bool collapseWhiteSpace, HashSet<const SimpleFontData*>* fallbackFonts = 0)
+ALWAYS_INLINE float textWidth(RenderText* text, unsigned from, unsigned len, const Font& font, float xPos, bool isFixedPitch, bool collapseWhiteSpace, HashSet<const SimpleFontData*>* fallbackFonts = 0)
 {
-    TextDirection textDirection = textDirectionFromUnicode(direction);
     GlyphOverflow glyphOverflow;
     if (isFixedPitch || (!from && len == text->textLength()) || text->style()->hasTextCombine())
-        return text->width(from, len, font, xPos, textDirection, fallbackFonts, &glyphOverflow);
+        return text->width(from, len, font, xPos, text->style()->direction(), fallbackFonts, &glyphOverflow);
 
-    TextRun run = RenderBlockFlow::constructTextRun(text, font, text, from, len, text->style(), textDirection);
-    run.setCharactersLength(text->textLength() - from);
-    ASSERT(run.charactersLength() >= run.length());
-
+    TextRun run = RenderBlockFlow::constructTextRun(text, font, text, from, len, text->style());
     run.setCharacterScanForCodePath(!text->canUseSimpleFontCodePath());
     run.setTabSize(!collapseWhiteSpace, text->style()->tabSize());
     run.setXPos(xPos);
@@ -647,7 +647,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
     float wordTrailingSpaceWidth = (font.fontDescription().typesettingFeatures() & Kerning) ?
         font.width(RenderBlockFlow::constructTextRun(
             renderText, font, &space, 1, style,
-            textDirectionFromUnicode(m_resolver.position().direction()))) + wordSpacing
+            style->direction())) + wordSpacing
         : 0;
 
     UChar lastCharacter = m_renderTextInfo.m_lineBreakIterator.lastCharacter();
@@ -671,7 +671,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
         if ((breakAll || breakWords) && !midWordBreak) {
             wrapW += charWidth;
             bool midWordBreakIsBeforeSurrogatePair = U16_IS_LEAD(c) && m_current.offset() + 1 < renderText->textLength() && U16_IS_TRAIL((*renderText)[m_current.offset() + 1]);
-            charWidth = textWidth(renderText, m_current.offset(), midWordBreakIsBeforeSurrogatePair ? 2 : 1, font, m_width.committedWidth() + wrapW, isFixedPitch, m_resolver.position().direction(), m_collapseWhiteSpace, 0);
+            charWidth = textWidth(renderText, m_current.offset(), midWordBreakIsBeforeSurrogatePair ? 2 : 1, font, m_width.committedWidth() + wrapW, isFixedPitch, m_collapseWhiteSpace, 0);
             midWordBreak = m_width.committedWidth() + wrapW + charWidth > m_width.availableWidth();
         }
 
@@ -707,15 +707,15 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
 
             float additionalTmpW;
             if (wordTrailingSpaceWidth && c == ' ')
-                additionalTmpW = textWidth(renderText, lastSpace, m_current.offset() + 1 - lastSpace, font, m_width.currentWidth(), isFixedPitch, m_resolver.position().direction(), m_collapseWhiteSpace, &wordMeasurement.fallbackFonts) - wordTrailingSpaceWidth;
+                additionalTmpW = textWidth(renderText, lastSpace, m_current.offset() + 1 - lastSpace, font, m_width.currentWidth(), isFixedPitch, m_collapseWhiteSpace, &wordMeasurement.fallbackFonts) - wordTrailingSpaceWidth;
             else
-                additionalTmpW = textWidth(renderText, lastSpace, m_current.offset() - lastSpace, font, m_width.currentWidth(), isFixedPitch, m_resolver.position().direction(), m_collapseWhiteSpace, &wordMeasurement.fallbackFonts);
+                additionalTmpW = textWidth(renderText, lastSpace, m_current.offset() - lastSpace, font, m_width.currentWidth(), isFixedPitch, m_collapseWhiteSpace, &wordMeasurement.fallbackFonts);
 
             wordMeasurement.width = additionalTmpW + wordSpacingForWordMeasurement;
             additionalTmpW += lastSpaceWordSpacing;
             m_width.addUncommittedWidth(additionalTmpW);
             if (!m_appliedStartWidth) {
-                m_width.addUncommittedWidth(inlineLogicalWidth(m_current.object(), true, false));
+                m_width.addUncommittedWidth(inlineLogicalWidth(m_current.object(), true, false).toFloat());
                 m_appliedStartWidth = true;
             }
 
@@ -725,14 +725,14 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
             applyWordSpacing = wordSpacing && m_currentCharacterIsSpace;
 
             if (!m_width.committedWidth() && m_autoWrap && !m_width.fitsOnLine())
-                m_width.fitBelowFloats();
+                m_width.fitBelowFloats(m_lineInfo.isFirstLine());
 
             if (m_autoWrap || breakWords) {
                 // If we break only after white-space, consider the current character
                 // as candidate width for this line.
                 bool lineWasTooWide = false;
                 if (m_width.fitsOnLine() && m_currentCharacterIsSpace && m_currentStyle->breakOnlyAfterWhiteSpace() && !midWordBreak) {
-                    float charWidth = textWidth(renderText, m_current.offset(), 1, font, m_width.currentWidth(), isFixedPitch, m_resolver.position().direction(), m_collapseWhiteSpace, &wordMeasurement.fallbackFonts) + (applyWordSpacing ? wordSpacing : 0);
+                    float charWidth = textWidth(renderText, m_current.offset(), 1, font, m_width.currentWidth(), isFixedPitch, m_collapseWhiteSpace, &wordMeasurement.fallbackFonts) + (applyWordSpacing ? wordSpacing : 0);
                     // Check if line is too big even without the extra space
                     // at the end of the line. If it is not, do nothing.
                     // If the line needs the extra whitespace to be too long,
@@ -863,7 +863,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
     wordMeasurement.renderer = renderText;
 
     // IMPORTANT: current.m_pos is > length here!
-    float additionalTmpW = m_ignoringSpaces ? 0 : textWidth(renderText, lastSpace, m_current.offset() - lastSpace, font, m_width.currentWidth(), isFixedPitch, m_resolver.position().direction(), m_collapseWhiteSpace, &wordMeasurement.fallbackFonts);
+    float additionalTmpW = m_ignoringSpaces ? 0 : textWidth(renderText, lastSpace, m_current.offset() - lastSpace, font, m_width.currentWidth(), isFixedPitch, m_collapseWhiteSpace, &wordMeasurement.fallbackFonts);
     wordMeasurement.startOffset = lastSpace;
     wordMeasurement.endOffset = m_current.offset();
     wordMeasurement.width = m_ignoringSpaces ? 0 : additionalTmpW + wordSpacingForWordMeasurement;
@@ -901,7 +901,7 @@ inline void BreakingContext::commitAndUpdateLineBreakIfNeeded()
             }
 
             if (!m_width.fitsOnLine() && !m_width.committedWidth())
-                m_width.fitBelowFloats();
+                m_width.fitBelowFloats(m_lineInfo.isFirstLine());
 
             bool canPlaceOnLine = m_width.fitsOnLine() || !m_autoWrapWasEverTrueOnLine;
             if (canPlaceOnLine && checkForBreak) {
@@ -921,7 +921,7 @@ inline void BreakingContext::commitAndUpdateLineBreakIfNeeded()
             return;
         }
 
-        m_width.fitBelowFloats();
+        m_width.fitBelowFloats(m_lineInfo.isFirstLine());
 
         // |width| may have been adjusted because we got shoved down past a float (thus
         // giving us more room), so we need to retest, and only jump to
@@ -933,7 +933,7 @@ inline void BreakingContext::commitAndUpdateLineBreakIfNeeded()
     } else if (m_blockStyle->autoWrap() && !m_width.fitsOnLine() && !m_width.committedWidth()) {
         // If the container autowraps but the current child does not then we still need to ensure that it
         // wraps and moves below any floats.
-        m_width.fitBelowFloats();
+        m_width.fitBelowFloats(m_lineInfo.isFirstLine());
     }
 
     if (!m_current.object()->isFloatingOrOutOfFlowPositioned()) {

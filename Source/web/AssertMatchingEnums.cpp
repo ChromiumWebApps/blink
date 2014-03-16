@@ -33,26 +33,6 @@
 
 #include "config.h"
 
-#include "WebAXEnums.h"
-#include "WebAXObject.h"
-#include "WebConsoleMessage.h"
-#include "WebContentSecurityPolicy.h"
-#include "WebFontDescription.h"
-#include "WebFormElement.h"
-#include "WebGeolocationError.h"
-#include "WebGeolocationPosition.h"
-#include "WebIconURL.h"
-#include "WebInputElement.h"
-#include "WebNavigatorContentUtilsClient.h"
-#include "WebNotificationPresenter.h"
-#include "WebPageVisibilityState.h"
-#include "WebSettings.h"
-#include "WebSpeechRecognizerClient.h"
-#include "WebTextAffinity.h"
-#include "WebTextCheckingResult.h"
-#include "WebTextCheckingType.h"
-#include "WebTextDecorationType.h"
-#include "WebView.h"
 #include "bindings/v8/SerializedScriptValue.h"
 #include "core/accessibility/AXObject.h"
 #include "core/accessibility/AXObjectCache.h"
@@ -61,7 +41,7 @@
 #include "core/dom/IconURL.h"
 #include "core/editing/TextAffinity.h"
 #include "core/fileapi/FileError.h"
-#include "core/frame/ContentSecurityPolicy.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/shadow/TextControlInnerElements.h"
@@ -85,12 +65,13 @@
 #include "platform/Cursor.h"
 #include "platform/FileMetadata.h"
 #include "platform/FileSystemType.h"
-#include "platform/drm/ContentDecryptionModuleSession.h"
+#include "platform/PlatformMouseEvent.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontSmoothingMode.h"
 #include "platform/graphics/filters/FilterOperation.h"
 #include "platform/graphics/media/MediaPlayer.h"
 #include "platform/mediastream/MediaStreamSource.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/text/TextChecking.h"
@@ -116,13 +97,35 @@
 #include "public/platform/WebMediaStreamSource.h"
 #include "public/platform/WebReferrerPolicy.h"
 #include "public/platform/WebScrollbar.h"
+#include "public/platform/WebScrollbarBehavior.h"
 #include "public/platform/WebStorageQuotaError.h"
 #include "public/platform/WebStorageQuotaType.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
+#include "public/web/WebAXEnums.h"
+#include "public/web/WebAXObject.h"
+#include "public/web/WebConsoleMessage.h"
+#include "public/web/WebContentSecurityPolicy.h"
+#include "public/web/WebFontDescription.h"
+#include "public/web/WebFormElement.h"
+#include "public/web/WebGeolocationError.h"
+#include "public/web/WebGeolocationPosition.h"
+#include "public/web/WebIconURL.h"
+#include "public/web/WebInputElement.h"
+#include "public/web/WebInputEvent.h"
 #include "public/web/WebNavigationPolicy.h"
+#include "public/web/WebNavigatorContentUtilsClient.h"
+#include "public/web/WebNotificationPresenter.h"
+#include "public/web/WebPageVisibilityState.h"
 #include "public/web/WebSerializedScriptValueVersion.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebSpeechRecognizerClient.h"
+#include "public/web/WebTextAffinity.h"
+#include "public/web/WebTextCheckingResult.h"
+#include "public/web/WebTextCheckingType.h"
+#include "public/web/WebTextDecorationType.h"
 #include "public/web/WebTouchAction.h"
+#include "public/web/WebView.h"
 #include "wtf/Assertions.h"
 #include "wtf/text/StringImpl.h"
 
@@ -151,6 +154,7 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXEventMenuListValueChanged, AXObjectCache::AXMe
 COMPILE_ASSERT_MATCHING_ENUM(WebAXEventRowCollapsed, AXObjectCache::AXRowCollapsed);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXEventRowCountChanged, AXObjectCache::AXRowCountChanged);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXEventRowExpanded, AXObjectCache::AXRowExpanded);
+COMPILE_ASSERT_MATCHING_ENUM(WebAXEventScrollPositionChanged, AXObjectCache::AXScrollPositionChanged);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXEventScrolledToAnchor, AXObjectCache::AXScrolledToAnchor);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXEventSelectedChildrenChanged, AXObjectCache::AXSelectedChildrenChanged);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXEventSelectedTextChanged, AXObjectCache::AXSelectedTextChanged);
@@ -423,19 +427,10 @@ COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayer::PreloadNone, MediaPlayer::None);
 COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayer::PreloadMetaData, MediaPlayer::MetaData);
 COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayer::PreloadAuto, MediaPlayer::Auto);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayer::MediaKeyExceptionNoError, MediaPlayer::NoError);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayer::MediaKeyExceptionInvalidPlayerState, MediaPlayer::InvalidPlayerState);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayer::MediaKeyExceptionKeySystemNotSupported, MediaPlayer::KeySystemNotSupported);
-
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayerClient::MediaKeyErrorCodeUnknown, MediaPlayerClient::UnknownError);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayerClient::MediaKeyErrorCodeClient, MediaPlayerClient::ClientError);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayerClient::MediaKeyErrorCodeService, MediaPlayerClient::ServiceError);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayerClient::MediaKeyErrorCodeOutput, MediaPlayerClient::OutputError);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayerClient::MediaKeyErrorCodeHardwareChange, MediaPlayerClient::HardwareChangeError);
-COMPILE_ASSERT_MATCHING_ENUM(WebMediaPlayerClient::MediaKeyErrorCodeDomain, MediaPlayerClient::DomainError);
-
-COMPILE_ASSERT_MATCHING_ENUM(WebContentDecryptionModuleSession::Client::MediaKeyErrorCodeUnknown, ContentDecryptionModuleSessionClient::UnknownError);
-COMPILE_ASSERT_MATCHING_ENUM(WebContentDecryptionModuleSession::Client::MediaKeyErrorCodeClient, ContentDecryptionModuleSessionClient::ClientError);
+COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonNone, NoButton);
+COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonLeft, LeftButton);
+COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonMiddle, MiddleButton);
+COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonRight, RightButton);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebNotificationPresenter::PermissionAllowed, NotificationClient::PermissionAllowed);
 COMPILE_ASSERT_MATCHING_ENUM(WebNotificationPresenter::PermissionNotAllowed, NotificationClient::PermissionNotAllowed);
@@ -465,6 +460,11 @@ COMPILE_ASSERT_MATCHING_ENUM(WebScrollbar::AllParts, AllParts);
 COMPILE_ASSERT_MATCHING_ENUM(WebScrollbar::ScrollbarOverlayStyleDefault, ScrollbarOverlayStyleDefault);
 COMPILE_ASSERT_MATCHING_ENUM(WebScrollbar::ScrollbarOverlayStyleDark, ScrollbarOverlayStyleDark);
 COMPILE_ASSERT_MATCHING_ENUM(WebScrollbar::ScrollbarOverlayStyleLight, ScrollbarOverlayStyleLight);
+
+COMPILE_ASSERT_MATCHING_ENUM(WebScrollbarBehavior::ButtonNone, NoButton);
+COMPILE_ASSERT_MATCHING_ENUM(WebScrollbarBehavior::ButtonLeft, LeftButton);
+COMPILE_ASSERT_MATCHING_ENUM(WebScrollbarBehavior::ButtonMiddle, MiddleButton);
+COMPILE_ASSERT_MATCHING_ENUM(WebScrollbarBehavior::ButtonRight, RightButton);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::EditingBehaviorMac, EditingMacBehavior);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::EditingBehaviorWin, EditingWindowsBehavior);
@@ -567,8 +567,8 @@ COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyDefault, ReferrerPolicyDefault);
 COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyNever, ReferrerPolicyNever);
 COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyOrigin, ReferrerPolicyOrigin);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebContentSecurityPolicyTypeReport, ContentSecurityPolicy::Report);
-COMPILE_ASSERT_MATCHING_ENUM(WebContentSecurityPolicyTypeEnforce, ContentSecurityPolicy::Enforce);
+COMPILE_ASSERT_MATCHING_ENUM(WebContentSecurityPolicyTypeReport, ContentSecurityPolicyHeaderTypeReport);
+COMPILE_ASSERT_MATCHING_ENUM(WebContentSecurityPolicyTypeEnforce, ContentSecurityPolicyHeaderTypeEnforce);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebURLResponse::Unknown, ResourceResponse::Unknown);
 COMPILE_ASSERT_MATCHING_ENUM(WebURLResponse::HTTP_0_9, ResourceResponse::HTTP_0_9);
@@ -613,5 +613,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebTouchActionNone, TouchActionNone);
 COMPILE_ASSERT_MATCHING_ENUM(WebTouchActionAuto, TouchActionAuto);
 COMPILE_ASSERT_MATCHING_ENUM(WebTouchActionPanX, TouchActionPanX);
 COMPILE_ASSERT_MATCHING_ENUM(WebTouchActionPanY, TouchActionPanY);
+COMPILE_ASSERT_MATCHING_ENUM(WebTouchActionPinchZoom, TouchActionPinchZoom);
 
 COMPILE_ASSERT_MATCHING_UINT64(kSerializedScriptValueVersion, SerializedScriptValue::wireFormatVersion);

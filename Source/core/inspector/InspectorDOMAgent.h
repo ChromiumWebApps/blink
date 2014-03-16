@@ -134,7 +134,7 @@ public:
     virtual void setInspectModeEnabled(ErrorString*, bool enabled, const bool* inspectShadowDOM, const RefPtr<JSONObject>* highlightConfig) OVERRIDE;
     virtual void requestNode(ErrorString*, const String& objectId, int* nodeId) OVERRIDE;
     virtual void pushNodeByPathToFrontend(ErrorString*, const String& path, int* nodeId) OVERRIDE;
-    virtual void pushNodeByBackendIdToFrontend(ErrorString*, BackendNodeId, int* nodeId) OVERRIDE;
+    virtual void pushNodesByBackendIdsToFrontend(ErrorString*, const RefPtr<JSONArray>& nodeIds, RefPtr<TypeBuilder::Array<int> >&) OVERRIDE;
     virtual void releaseBackendNodeIds(ErrorString*, const String& nodeGroup) OVERRIDE;
     virtual void hideHighlight(ErrorString*) OVERRIDE;
     virtual void highlightRect(ErrorString*, int x, int y, int width, int height, const RefPtr<JSONObject>* color, const RefPtr<JSONObject>* outlineColor) OVERRIDE;
@@ -158,8 +158,8 @@ public:
     void setDocument(Document*);
     void releaseDanglingNodes();
 
-    void domContentLoadedEventFired(Frame*);
-    void didCommitLoad(Frame*, DocumentLoader*);
+    void domContentLoadedEventFired(LocalFrame*);
+    void didCommitLoad(LocalFrame*, DocumentLoader*);
 
     void didInsertDOMNode(Node*);
     void willRemoveDOMNode(Node*);
@@ -171,7 +171,7 @@ public:
     void didInvalidateStyleAttr(Node*);
     void didPushShadowRoot(Element* host, ShadowRoot*);
     void willPopShadowRoot(Element* host, ShadowRoot*);
-    void frameDocumentUpdated(Frame*);
+    void frameDocumentUpdated(LocalFrame*);
     void pseudoElementCreated(PseudoElement*);
     void pseudoElementDestroyed(PseudoElement*);
 
@@ -185,9 +185,9 @@ public:
 
     PassRefPtr<TypeBuilder::Runtime::RemoteObject> resolveNode(Node*, const String& objectGroup);
     bool handleMousePress();
-    bool handleGestureEvent(Frame*, const PlatformGestureEvent&);
-    bool handleTouchEvent(Frame*, const PlatformTouchEvent&);
-    void handleMouseMove(Frame*, const PlatformMouseEvent&);
+    bool handleGestureEvent(LocalFrame*, const PlatformGestureEvent&);
+    bool handleTouchEvent(LocalFrame*, const PlatformTouchEvent&);
+    void handleMouseMove(LocalFrame*, const PlatformMouseEvent&);
 
     InspectorHistory* history() { return m_history.get(); }
 
@@ -225,7 +225,7 @@ private:
     int pushNodePathToFrontend(Node*);
     void pushChildNodesToFrontend(int nodeId, int depth = 1);
 
-    void invalidateFrameOwnerElement(Frame*);
+    void invalidateFrameOwnerElement(LocalFrame*);
 
     bool hasBreakpoint(Node*, int type);
     void updateSubtreeBreakpoints(Node* root, uint32_t rootMask, bool value);
@@ -259,7 +259,9 @@ private:
     HashMap<int, Node*> m_idToNode;
     HashMap<int, NodeToIdMap*> m_idToNodesMap;
     HashSet<int> m_childrenRequested;
-    HashMap<BackendNodeId, std::pair<Node*, String> > m_backendIdToNode;
+    HashMap<int, int> m_cachedChildCount;
+    typedef HashMap<BackendNodeId, std::pair<Node*, String> > BackendIdToNodeMap;
+    BackendIdToNodeMap m_backendIdToNode;
     int m_lastNodeId;
     BackendNodeId m_lastBackendNodeId;
     RefPtr<Document> m_document;

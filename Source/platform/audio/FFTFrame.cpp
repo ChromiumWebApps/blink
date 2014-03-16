@@ -32,6 +32,8 @@
 
 #include "platform/audio/FFTFrame.h"
 
+#include "platform/audio/VectorMath.h"
+
 #ifndef NDEBUG
 #include <stdio.h>
 #endif
@@ -151,21 +153,21 @@ void FFTFrame::interpolateFrequencyComponents(const FFTFrame& frame1, const FFTF
 
         // Unwrap phase deltas
         if (deltaPhase1 > piDouble)
-            deltaPhase1 -= 2.0 * piDouble;
+            deltaPhase1 -= twoPiDouble;
         if (deltaPhase1 < -piDouble)
-            deltaPhase1 += 2.0 * piDouble;
+            deltaPhase1 += twoPiDouble;
         if (deltaPhase2 > piDouble)
-            deltaPhase2 -= 2.0 * piDouble;
+            deltaPhase2 -= twoPiDouble;
         if (deltaPhase2 < -piDouble)
-            deltaPhase2 += 2.0 * piDouble;
+            deltaPhase2 += twoPiDouble;
 
         // Blend group-delays
         double deltaPhaseBlend;
 
         if (deltaPhase1 - deltaPhase2 > piDouble)
-            deltaPhaseBlend = s1 * deltaPhase1 + s2 * (2.0 * piDouble + deltaPhase2);
+            deltaPhaseBlend = s1 * deltaPhase1 + s2 * (twoPiDouble + deltaPhase2);
         else if (deltaPhase2 - deltaPhase1 > piDouble)
-            deltaPhaseBlend = s1 * (2.0 * piDouble + deltaPhase1) + s2 * deltaPhase2;
+            deltaPhaseBlend = s1 * (twoPiDouble + deltaPhase1) + s2 * deltaPhase2;
         else
             deltaPhaseBlend = s1 * deltaPhase1 + s2 * deltaPhase2;
 
@@ -173,9 +175,9 @@ void FFTFrame::interpolateFrequencyComponents(const FFTFrame& frame1, const FFTF
 
         // Unwrap
         if (phaseAccum > piDouble)
-            phaseAccum -= 2.0 * piDouble;
+            phaseAccum -= twoPiDouble;
         if (phaseAccum < -piDouble)
-            phaseAccum += 2.0 * piDouble;
+            phaseAccum += twoPiDouble;
 
         Complex c = complexFromMagnitudePhase(mag, phaseAccum);
 
@@ -195,7 +197,7 @@ double FFTFrame::extractAverageGroupDelay()
 
     int halfSize = fftSize() / 2;
 
-    const double kSamplePhaseDelay = (2.0 * piDouble) / double(fftSize());
+    const double kSamplePhaseDelay = (twoPiDouble) / double(fftSize());
 
     // Calculate weighted average group delay
     for (int i = 0; i < halfSize; i++) {
@@ -208,9 +210,9 @@ double FFTFrame::extractAverageGroupDelay()
 
         // Unwrap
         if (deltaPhase < -piDouble)
-            deltaPhase += 2.0 * piDouble;
+            deltaPhase += twoPiDouble;
         if (deltaPhase > piDouble)
-            deltaPhase -= 2.0 * piDouble;
+            deltaPhase -= twoPiDouble;
 
         aveSum += mag * deltaPhase;
         weightSum += mag;
@@ -240,7 +242,7 @@ void FFTFrame::addConstantGroupDelay(double sampleFrameDelay)
     float* realP = realData();
     float* imagP = imagData();
 
-    const double kSamplePhaseDelay = (2.0 * piDouble) / double(fftSize());
+    const double kSamplePhaseDelay = (twoPiDouble) / double(fftSize());
 
     double phaseAdj = -sampleFrameDelay * kSamplePhaseDelay;
 
@@ -257,6 +259,27 @@ void FFTFrame::addConstantGroupDelay(double sampleFrameDelay)
         realP[i] = static_cast<float>(c2.real());
         imagP[i] = static_cast<float>(c2.imag());
     }
+}
+
+void FFTFrame::multiply(const FFTFrame& frame)
+{
+    FFTFrame& frame1 = *this;
+    FFTFrame& frame2 = const_cast<FFTFrame&>(frame);
+
+    float* realP1 = frame1.realData();
+    float* imagP1 = frame1.imagData();
+    const float* realP2 = frame2.realData();
+    const float* imagP2 = frame2.imagData();
+
+    unsigned halfSize = fftSize() / 2;
+    float real0 = realP1[0];
+    float imag0 = imagP1[0];
+
+    VectorMath::zvmul(realP1, imagP1, realP2, imagP2, realP1, imagP1, halfSize);
+
+    // Multiply the packed DC/nyquist component
+    realP1[0] = real0 * realP2[0];
+    imagP1[0] = imag0 * imagP2[0];
 }
 
 #ifndef NDEBUG

@@ -29,6 +29,7 @@
 #define HTMLCanvasElement_h
 
 #include "core/html/HTMLElement.h"
+#include "core/html/canvas/CanvasImageSource.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Canvas2DLayerBridge.h"
@@ -59,7 +60,7 @@ public:
     virtual void canvasDestroyed(HTMLCanvasElement*) = 0;
 };
 
-class HTMLCanvasElement FINAL : public HTMLElement, public DocumentVisibilityObserver {
+class HTMLCanvasElement FINAL : public HTMLElement, public DocumentVisibilityObserver, public CanvasImageSource {
 public:
     static PassRefPtr<HTMLCanvasElement> create(Document&);
     virtual ~HTMLCanvasElement();
@@ -115,8 +116,8 @@ public:
     void clearPresentationCopy();
 
     SecurityOrigin* securityOrigin() const;
-    void setOriginTainted() { m_originClean = false; }
     bool originClean() const { return m_originClean; }
+    void setOriginTainted() { m_originClean = false; }
 
     AffineTransform baseTransform() const;
 
@@ -130,6 +131,11 @@ public:
 
     // DocumentVisibilityObserver implementation
     virtual void didChangeVisibilityState(PageVisibilityState) OVERRIDE;
+
+    // CanvasImageSource implementation
+    virtual PassRefPtr<Image> getSourceImageForCanvas(SourceImageMode, SourceImageStatus*) const OVERRIDE;
+    virtual bool wouldTaintOrigin(SecurityOrigin*) const OVERRIDE;
+    virtual FloatSize sourceSize() const OVERRIDE;
 
 protected:
     virtual void didMoveToNewDocument(Document& oldDocument) OVERRIDE;
@@ -152,7 +158,7 @@ private:
 
     bool paintsIntoCanvasBuffer() const;
 
-    void setExternallyAllocatedMemory(intptr_t);
+    void updateExternallyAllocatedMemory() const;
 
     HashSet<CanvasObserver*> m_observers;
 
@@ -166,7 +172,7 @@ private:
     bool m_accelerationDisabled;
     FloatRect m_dirtyRect;
 
-    intptr_t m_externallyAllocatedMemory;
+    mutable intptr_t m_externallyAllocatedMemory;
 
     bool m_originClean;
 
@@ -180,8 +186,6 @@ private:
     mutable RefPtr<Image> m_presentedImage;
     mutable RefPtr<Image> m_copiedImage; // FIXME: This is temporary for platforms that have to copy the image buffer to render (and for CSSCanvasValue).
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLCanvasElement, hasTagName(HTMLNames::canvasTag));
 
 } //namespace
 

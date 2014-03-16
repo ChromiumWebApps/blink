@@ -55,8 +55,8 @@ public:
     // Used by BisonCSSParser when constructing a new StyleKeyframe.
     void setKeys(PassOwnPtr<Vector<double> >);
 
-    const StylePropertySet* properties() const { return m_properties.get(); }
-    MutableStylePropertySet* mutableProperties();
+    const StylePropertySet& properties() const { return *m_properties; }
+    MutableStylePropertySet& mutableProperties();
     void setProperties(PassRefPtr<StylePropertySet>);
 
     String cssText() const;
@@ -84,6 +84,8 @@ public:
     void setKeyText(const String& s) { m_keyframe->setKeyText(s); }
 
     CSSStyleDeclaration* style() const;
+
+    virtual void trace(Visitor* visitor) OVERRIDE { CSSRule::trace(visitor); }
 
 private:
     CSSKeyframeRule(StyleKeyframe*, CSSKeyframesRule* parent);

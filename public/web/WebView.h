@@ -44,12 +44,10 @@ class WebAXObject;
 class WebAutofillClient;
 class WebDevToolsAgent;
 class WebDevToolsAgentClient;
-class WebDocument;
 class WebDragData;
 class WebFrame;
 class WebFrameClient;
 class WebGraphicsContext3D;
-class WebHelperPlugin;
 class WebHitTestResult;
 class WebNode;
 class WebPageOverlay;
@@ -180,10 +178,10 @@ public:
     // Focus the first (last if reverse is true) focusable node.
     virtual void setInitialFocus(bool reverse) = 0;
 
-    // Clears the focused node (and selection if a text field is focused)
+    // Clears the focused element (and selection if a text field is focused)
     // to ensure that a text field on the page is not eating keystrokes we
     // send it.
-    virtual void clearFocusedNode() = 0;
+    virtual void clearFocusedElement() = 0;
 
     // Scrolls the node currently in focus into view.
     virtual void scrollFocusedNodeIntoView() = 0;
@@ -312,11 +310,6 @@ public:
     // Performs the specified media player action on the node at the given location.
     virtual void performMediaPlayerAction(
         const WebMediaPlayerAction&, const WebPoint& location) = 0;
-
-    // Creates a Helper Plugin of |pluginType| for |hostDocument|. Caller owns
-    // the returned object, and must call closeAndDeleteSoon() to free the Plugin.
-    virtual WebHelperPlugin* createHelperPlugin(
-        const WebString& pluginType, const WebDocument& hostDocument) = 0;
 
     // Performs the specified plugin action on the node at the given location.
     virtual void performPluginAction(
@@ -478,6 +471,11 @@ public:
     virtual void setShowFPSCounter(bool) = 0;
     virtual void setContinuousPaintingEnabled(bool) = 0;
     virtual void setShowScrollBottleneckRects(bool) = 0;
+
+    // Compute the bounds of the root element of the current selection and fills
+    // the out-parameter on success. |bounds| coordinates will be relative to
+    // the contents window and will take into account the current scale level.
+    virtual void getSelectionRootBounds(WebRect& bounds) const = 0;
 
     // Visibility -----------------------------------------------------------
 

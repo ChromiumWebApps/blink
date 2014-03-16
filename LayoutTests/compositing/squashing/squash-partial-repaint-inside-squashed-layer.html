@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<head>
+<style>
+.composited {
+-webkit-transform: translatez(0);
+}
+
+.box {
+  width: 100px;
+  height: 100px;
+}
+
+.behind {
+  position: absolute;
+  z-index: 1;
+  top: 100px;
+  left: 100px;
+  background-color: blue;
+}
+
+.middle {
+  position: absolute;
+  z-index: 1;
+  top: 180px;
+  left: 180px;
+  background-color: lime;
+}
+
+.repaintdiv {
+  position: absolute;
+  z-index: 1;
+  top: 260px;
+  left: 260px;
+  width: 182px;
+  height: 29px;
+  background-color:red;
+}
+
+.top {
+  position: absolute;
+  z-index: 1;
+  top: 280px;
+  left: 340px;
+  background-color: cyan;
+}
+
+div:hover {
+  background-color: green;
+  -webkit-transform:translatez(0);
+}
+
+</style>
+<script>
+    if (window.internals)
+        internals.settings.setLayerSquashingEnabled(true);
+    if (window.testRunner)
+        testRunner.dumpAsText();
+
+    function runTest()
+    {
+        if (!window.internals)
+            return;
+        document.body.offsetTop;
+        window.internals.startTrackingRepaints(document);
+        document.getElementById('repaintdiv').style.background = 'salmon';
+        document.getElementById('testResults').textContent = window.internals.layerTreeAsText(document, internals.LAYER_TREE_INCLUDES_REPAINT_RECTS);
+        window.internals.stopTrackingRepaints(document);
+
+        // Display the test results only after test is done so that it does not affect repaint rect results.
+        document.getElementById('testResults').style.display = "block";
+    }
+</script>
+</head>
+<body onload="runTest()">
+    <div class="composited box behind"></div>
+    <div class="box middle"></div>
+    <img id="repaintdiv" class="repaintdiv"></img>
+    <div class="box top"></div>
+
+    <pre id="testResults" style="display:none">
+    </div>
+</body>

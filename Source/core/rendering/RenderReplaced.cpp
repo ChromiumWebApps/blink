@@ -198,8 +198,8 @@ bool RenderReplaced::shouldPaint(PaintInfo& paintInfo, const LayoutPoint& paintO
     LayoutUnit top = adjustedPaintOffset.y() + visualOverflowRect().y();
     LayoutUnit bottom = adjustedPaintOffset.y() + visualOverflowRect().maxY();
     if (isSelected() && inlineBoxWrapper()) {
-        LayoutUnit selTop = paintOffset.y() + inlineBoxWrapper()->root()->selectionTop();
-        LayoutUnit selBottom = paintOffset.y() + selTop + inlineBoxWrapper()->root()->selectionHeight();
+        LayoutUnit selTop = paintOffset.y() + inlineBoxWrapper()->root().selectionTop();
+        LayoutUnit selBottom = paintOffset.y() + selTop + inlineBoxWrapper()->root().selectionHeight();
         top = min(selTop, top);
         bottom = max(selBottom, bottom);
     }
@@ -225,7 +225,9 @@ static inline RenderBlock* firstContainingBlockWithLogicalWidth(const RenderRepl
         return 0;
 
     for (; !containingBlock->isRenderView() && !containingBlock->isBody(); containingBlock = containingBlock->containingBlock()) {
-        if (containingBlock->style()->logicalWidth().isSpecified())
+        if (containingBlock->style()->logicalWidth().isSpecified()
+            && containingBlock->style()->logicalMinWidth().isSpecified()
+            && (containingBlock->style()->logicalMaxWidth().isSpecified() || containingBlock->style()->logicalMaxWidth().isUndefined()))
             return containingBlock;
     }
 
@@ -371,7 +373,7 @@ void RenderReplaced::computeIntrinsicRatioInformation(FloatSize& intrinsicSize, 
     // If there's an embeddedContentBox() of a remote, referenced document available, this code-path should never be used.
     ASSERT(!embeddedContentBox());
     isPercentageIntrinsicSize = false;
-    intrinsicSize = FloatSize(intrinsicLogicalWidth(), intrinsicLogicalHeight());
+    intrinsicSize = FloatSize(intrinsicLogicalWidth().toFloat(), intrinsicLogicalHeight().toFloat());
 
     // Figure out if we need to compute an intrinsic ratio.
     if (intrinsicSize.isEmpty() || !rendererHasAspectRatio(this))
@@ -418,10 +420,19 @@ LayoutUnit RenderReplaced::computeReplacedLogicalWidth(ShouldComputePreferred sh
                 // The aforementioned 'constraint equation' used for block-level, non-replaced elements in normal flow:
                 // 'margin-left' + 'border-left-width' + 'padding-left' + 'width' + 'padding-right' + 'border-right-width' + 'margin-right' = width of containing block
                 LayoutUnit logicalWidth;
-                if (RenderBlock* blockWithWidth = firstContainingBlockWithLogicalWidth(this))
+                // FIXME: This walking up the containgBlock chain to find the first one with a specified width is bonkers.
+                // If nothing else, it requires making sure that computeReplacedLogicalWidthRespectingMinMaxWidth cannot
+                // depend on the width of the replaced element or we infinite loop. Right now we do that in
+                // firstContainingBlockWithLogicalWidth by checking that width/min-width/max-width are all specified.
+                //
+                // Firefox 27 seems to only do this if the <svg> has a viewbox.
+                if (RenderBlock* blockWithWidth = firstContainingBlockWithLogicalWidth(this)) {
                     logicalWidth = blockWithWidth->computeReplacedLogicalWidthRespectingMinMaxWidth(blockWithWidth->computeReplacedLogicalWidthUsing(blockWithWidth->style()->logicalWidth()), shouldComputePreferred);
-                else
+                } else {
+                    // FIXME: If shouldComputePreferred == ComputePreferred, then we're reading this during preferred width
+                    // computation, at which point this is reading stale data from a previous layout.
                     logicalWidth = containingBlock()->availableLogicalWidth();
+                }
 
                 // This solves above equation for 'width' (== logicalWidth).
                 LayoutUnit marginStart = minimumValueForLength(style()->marginStart(), logicalWidth);
@@ -523,7 +534,7 @@ PositionWithAffinity RenderReplaced::positionForPoint(const LayoutPoint& point)
 {
     // FIXME: This code is buggy if the replaced element is relative positioned.
     InlineBox* box = inlineBoxWrapper();
-    RootInlineBox* rootBox = box ? box->root() : 0;
+    RootInlineBox* rootBox = box ? &box->root() : 0;
 
     LayoutUnit top = rootBox ? rootBox->selectionTop() : logicalTop();
     LayoutUnit bottom = rootBox ? rootBox->selectionBottom() : logicalBottom();
@@ -571,11 +582,11 @@ LayoutRect RenderReplaced::localSelectionRect(bool checkWhetherSelected) const
         // We're a block-level replaced element.  Just return our own dimensions.
         return LayoutRect(LayoutPoint(), size());
 
-    RootInlineBox* root = inlineBoxWrapper()->root();
-    LayoutUnit newLogicalTop = root->block()->style()->isFlippedBlocksWritingMode() ? inlineBoxWrapper()->logicalBottom() - root->selectionBottom() : root->selectionTop() - inlineBoxWrapper()->logicalTop();
-    if (root->block()->style()->isHorizontalWritingMode())
-        return LayoutRect(0, newLogicalTop, width(), root->selectionHeight());
-    return LayoutRect(newLogicalTop, 0, root->selectionHeight(), height());
+    RootInlineBox& root = inlineBoxWrapper()->root();
+    LayoutUnit newLogicalTop = root.block().style()->isFlippedBlocksWritingMode() ? inlineBoxWrapper()->logicalBottom() - root.selectionBottom() : root.selectionTop() - inlineBoxWrapper()->logicalTop();
+    if (root.block().style()->isHorizontalWritingMode())
+        return LayoutRect(0, newLogicalTop, width(), root.selectionHeight());
+    return LayoutRect(newLogicalTop, 0, root.selectionHeight(), height());
 }
 
 void RenderReplaced::setSelectionState(SelectionState state)
@@ -584,8 +595,7 @@ void RenderReplaced::setSelectionState(SelectionState state)
     RenderBox::setSelectionState(state);
 
     if (inlineBoxWrapper() && canUpdateSelectionOnRootLineBoxes())
-        if (RootInlineBox* root = inlineBoxWrapper()->root())
-            root->setHasSelectedChildren(isSelected());
+        inlineBoxWrapper()->root().setHasSelectedChildren(isSelected());
 }
 
 bool RenderReplaced::isSelected() const
@@ -601,7 +611,7 @@ bool RenderReplaced::isSelected() const
     if (s == SelectionStart)
         return selectionStart == 0;
 
-    int end = node()->hasChildNodes() ? node()->childNodeCount() : 1;
+    int end = node()->hasChildren() ? node()->countChildren() : 1;
     if (s == SelectionEnd)
         return selectionEnd == end;
     if (s == SelectionBoth)

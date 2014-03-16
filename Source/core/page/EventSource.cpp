@@ -42,9 +42,9 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
 #include "core/events/MessageEvent.h"
-#include "core/frame/ContentSecurityPolicy.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/loader/ThreadableLoader.h"
 #include "platform/network/ResourceError.h"
@@ -72,7 +72,7 @@ inline EventSource::EventSource(ExecutionContext* context, const KURL& url, cons
     eventSourceInit.get("withCredentials", m_withCredentials);
 }
 
-PassRefPtr<EventSource> EventSource::create(ExecutionContext* context, const String& url, const Dictionary& eventSourceInit, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<EventSource> EventSource::create(ExecutionContext* context, const String& url, const Dictionary& eventSourceInit, ExceptionState& exceptionState)
 {
     if (url.isEmpty()) {
         exceptionState.throwDOMException(SyntaxError, "Cannot open an EventSource to an empty URL.");
@@ -97,7 +97,7 @@ PassRefPtr<EventSource> EventSource::create(ExecutionContext* context, const Str
         return nullptr;
     }
 
-    RefPtr<EventSource> source = adoptRef(new EventSource(context, fullURL, eventSourceInit));
+    RefPtrWillBeRawPtr<EventSource> source = adoptRefWillBeRefCountedGarbageCollected(new EventSource(context, fullURL, eventSourceInit));
 
     source->setPendingActivity(source.get());
     source->scheduleInitialConnect();
@@ -117,7 +117,7 @@ void EventSource::scheduleInitialConnect()
     ASSERT(m_state == CONNECTING);
     ASSERT(!m_requestInFlight);
 
-    m_connectTimer.startOneShot(0);
+    m_connectTimer.startOneShot(0, FROM_HERE);
 }
 
 void EventSource::connect()
@@ -166,7 +166,7 @@ void EventSource::networkRequestEnded()
 void EventSource::scheduleReconnect()
 {
     m_state = CONNECTING;
-    m_connectTimer.startOneShot(m_reconnectDelay / 1000.0);
+    m_connectTimer.startOneShot(m_reconnectDelay / 1000.0, FROM_HERE);
     dispatchEvent(Event::create(EventTypeNames::error));
 }
 

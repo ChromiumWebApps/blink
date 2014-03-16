@@ -258,7 +258,7 @@ void RenderGrid::layoutBlock(bool relayoutChildren)
     // FIXME: Much of this method is boiler plate that matches RenderBox::layoutBlock and Render*FlexibleBox::layoutBlock.
     // It would be nice to refactor some of the duplicate code.
     LayoutRepainter repainter(*this, checkForRepaintDuringLayout());
-    LayoutStateMaintainer statePusher(this, locationOffset());
+    LayoutStateMaintainer statePusher(*this, locationOffset());
 
     RenderFlowThread* flowThread = flowThreadContainingBlock();
     if (updateRegionsAndShapesLogicalSize(flowThread))
@@ -341,9 +341,9 @@ void RenderGrid::computeUsedBreadthOfGridTracks(GridTrackSizingDirection directi
     computeUsedBreadthOfGridTracks(direction, sizingData, availableLogicalSpace);
 }
 
-static bool gridElementIsShrinkToFit(const RenderStyle& style)
+bool RenderGrid::gridElementIsShrinkToFit()
 {
-    return style.isFloating() || style.position() == AbsolutePosition;
+    return isFloatingOrOutOfFlowPositioned();
 }
 
 void RenderGrid::computeUsedBreadthOfGridTracks(GridTrackSizingDirection direction, GridSizingData& sizingData, LayoutUnit& availableLogicalSpace)
@@ -379,7 +379,7 @@ void RenderGrid::computeUsedBreadthOfGridTracks(GridTrackSizingDirection directi
         availableLogicalSpace -= tracks[i].m_usedBreadth;
     }
 
-    const bool hasUndefinedRemainingSpace = (direction == ForRows) ? style()->logicalHeight().isAuto() : gridElementIsShrinkToFit(*style());
+    const bool hasUndefinedRemainingSpace = (direction == ForRows) ? style()->logicalHeight().isAuto() : gridElementIsShrinkToFit();
 
     if (!hasUndefinedRemainingSpace && availableLogicalSpace <= 0)
         return;
@@ -970,13 +970,21 @@ GridSpan RenderGrid::resolveGridPositionsFromAutoPlacementPosition(const RenderB
 
 PassOwnPtr<GridSpan> RenderGrid::resolveGridPositionsFromStyle(const RenderBox* gridItem, GridTrackSizingDirection direction) const
 {
-    const GridPosition& initialPosition = (direction == ForColumns) ? gridItem->style()->gridColumnStart() : gridItem->style()->gridRowStart();
+    GridPosition initialPosition = (direction == ForColumns) ? gridItem->style()->gridColumnStart() : gridItem->style()->gridRowStart();
     const GridPositionSide initialPositionSide = (direction == ForColumns) ? ColumnStartSide : RowStartSide;
-    const GridPosition& finalPosition = (direction == ForColumns) ? gridItem->style()->gridColumnEnd() : gridItem->style()->gridRowEnd();
+    GridPosition finalPosition = (direction == ForColumns) ? gridItem->style()->gridColumnEnd() : gridItem->style()->gridRowEnd();
     const GridPositionSide finalPositionSide = (direction == ForColumns) ? ColumnEndSide : RowEndSide;
 
-    // We should NEVER see both spans as they should have been handled during style resolve.
-    ASSERT(!initialPosition.isSpan() || !finalPosition.isSpan());
+    // We must handle the placement error handling code here instead of in the StyleAdjuster because we don't want to
+    // overwrite the specified values.
+    if (initialPosition.isSpan() && finalPosition.isSpan())
+        finalPosition.setAutoPosition();
+
+    if (initialPosition.isNamedGridArea() && !style()->namedGridArea().contains(initialPosition.namedGridLine()))
+        initialPosition.setAutoPosition();
+
+    if (finalPosition.isNamedGridArea() && !style()->namedGridArea().contains(finalPosition.namedGridLine()))
+        finalPosition.setAutoPosition();
 
     if (initialPosition.shouldBeResolvedAgainstOppositePosition() && finalPosition.shouldBeResolvedAgainstOppositePosition()) {
         if (style()->gridAutoFlow() == AutoFlowNone)

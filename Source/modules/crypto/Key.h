@@ -42,11 +42,10 @@
 
 namespace WebCore {
 
-class Algorithm;
-class ExceptionState;
+class CryptoResult;
+class KeyAlgorithm;
 
-class Key : public RefCountedWillBeGarbageCollectedFinalized<Key>,  public ScriptWrappable {
-    DECLARE_GC_INFO;
+class Key : public RefCountedWillBeGarbageCollectedFinalized<Key>, public ScriptWrappable {
 public:
     static PassRefPtrWillBeRawPtr<Key> create(const blink::WebCryptoKey& key)
     {
@@ -57,17 +56,18 @@ public:
 
     String type() const;
     bool extractable() const;
-    Algorithm* algorithm();
+    KeyAlgorithm* algorithm();
     Vector<String> usages() const;
 
     const blink::WebCryptoKey& key() const { return m_key; }
 
     // If the key cannot be used with the indicated algorithm, returns false
-    // and fills the provided String with error details.
-    bool canBeUsedForAlgorithm(const blink::WebCryptoAlgorithm&, AlgorithmOperation, String&) const;
+    // and completes the CryptoResult with an error.
+    bool canBeUsedForAlgorithm(const blink::WebCryptoAlgorithm&, AlgorithmOperation, CryptoResult*) const;
 
-    static bool parseFormat(const String&, blink::WebCryptoKeyFormat&, ExceptionState&);
-    static bool parseUsageMask(const Vector<String>&, blink::WebCryptoKeyUsageMask&, ExceptionState&);
+    // On failure, these return false and complete the CryptoResult with an error.
+    static bool parseFormat(const String&, blink::WebCryptoKeyFormat&, CryptoResult*);
+    static bool parseUsageMask(const Vector<String>&, blink::WebCryptoKeyUsageMask&, CryptoResult*);
 
     void trace(Visitor*);
 
@@ -75,7 +75,7 @@ protected:
     explicit Key(const blink::WebCryptoKey&);
 
     const blink::WebCryptoKey m_key;
-    RefPtrWillBeMember<Algorithm> m_algorithm;
+    RefPtrWillBeMember<KeyAlgorithm> m_algorithm;
 };
 
 } // namespace WebCore

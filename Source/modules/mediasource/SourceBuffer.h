@@ -58,7 +58,6 @@ class Stream;
 class TimeRanges;
 
 class SourceBuffer FINAL : public RefCountedWillBeRefCountedGarbageCollected<SourceBuffer>, public ActiveDOMObject, public EventTargetWithInlineData, public ScriptWrappable, public FileReaderLoaderClient {
-    DECLARE_GC_INFO;
     DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<SourceBuffer>);
 public:
     static PassRefPtrWillBeRawPtr<SourceBuffer> create(PassOwnPtr<blink::WebSourceBuffer>, MediaSource*, GenericEventQueue*);
@@ -76,8 +75,8 @@ public:
     void setTimestampOffset(double, ExceptionState&);
     void appendBuffer(PassRefPtr<ArrayBuffer> data, ExceptionState&);
     void appendBuffer(PassRefPtr<ArrayBufferView> data, ExceptionState&);
-    void appendStream(PassRefPtr<Stream>, ExceptionState&);
-    void appendStream(PassRefPtr<Stream>, unsigned long long maxSize, ExceptionState&);
+    void appendStream(PassRefPtrWillBeRawPtr<Stream>, ExceptionState&);
+    void appendStream(PassRefPtrWillBeRawPtr<Stream>, unsigned long long maxSize, ExceptionState&);
     void abort(ExceptionState&);
     void remove(double start, double end, ExceptionState&);
     double appendWindowStart() const;
@@ -111,7 +110,7 @@ private:
 
     void removeAsyncPart();
 
-    void appendStreamInternal(PassRefPtr<Stream>, ExceptionState&);
+    void appendStreamInternal(PassRefPtrWillBeRawPtr<Stream>, ExceptionState&);
     void appendStreamAsyncPart();
     void appendStreamDone(bool success);
     void clearAppendStreamState();
@@ -142,7 +141,7 @@ private:
     bool m_streamMaxSizeValid;
     unsigned long long m_streamMaxSize;
     AsyncMethodRunner<SourceBuffer> m_appendStreamAsyncPartRunner;
-    RefPtr<Stream> m_stream;
+    RefPtrWillBeMember<Stream> m_stream;
     OwnPtr<FileReaderLoader> m_loader;
 };
 

@@ -38,7 +38,7 @@
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/ShadowRootRareData.h"
 #include "core/editing/markup.h"
-#include "core/html/shadow/HTMLShadowElement.h"
+#include "core/html/HTMLShadowElement.h"
 #include "public/platform/Platform.h"
 
 namespace WebCore {
@@ -49,12 +49,6 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope, public 
 };
 
 COMPILE_ASSERT(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
-
-enum ShadowRootUsageOriginType {
-    ShadowRootUsageOriginWeb = 0,
-    ShadowRootUsageOriginNotWeb,
-    ShadowRootUsageOriginMax
-};
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
     : DocumentFragment(0, CreateShadowRoot)
@@ -69,11 +63,6 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
     , m_descendantInsertionPointsIsValid(false)
 {
     ScriptWrappable::init(this);
-
-    if (type == ShadowRoot::AuthorShadowRoot) {
-        ShadowRootUsageOriginType usageType = document.url().protocolIsInHTTPFamily() ? ShadowRootUsageOriginWeb : ShadowRootUsageOriginNotWeb;
-        blink::Platform::current()->histogramEnumeration("WebCore.ShadowRoot.constructor", usageType, ShadowRootUsageOriginMax);
-    }
 }
 
 ShadowRoot::~ShadowRoot()

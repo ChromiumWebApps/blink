@@ -48,7 +48,6 @@
 #include "WebNavigationPolicy.h"
 #include "WebView.h"
 #include "core/page/PagePopupDriver.h"
-#include "platform/Timer.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -65,13 +64,12 @@
 namespace WebCore {
 class DataObject;
 class Color;
-class Frame;
+class LocalFrame;
 class GraphicsLayerFactory;
 class HistoryItem;
 class HitTestResult;
 class KeyboardEvent;
 class Page;
-class PageGroup;
 class PagePopup;
 class PagePopupClient;
 class PlatformKeyboardEvent;
@@ -86,7 +84,6 @@ class ContextMenuClientImpl;
 class GeolocationClientProxy;
 class LinkHighlight;
 class MIDIClientProxy;
-class PinchViewports;
 class PopupContainer;
 class PrerendererClientImpl;
 class SpeechInputClientImpl;
@@ -97,11 +94,8 @@ class WebAXObject;
 class WebActiveGestureAnimation;
 class WebDevToolsAgentClient;
 class WebDevToolsAgentPrivate;
-class WebDocument;
 class WebFrameImpl;
 class WebGestureEvent;
-class WebHelperPlugin;
-class WebHelperPluginImpl;
 class WebImage;
 class WebKeyboardEvent;
 class WebLayerTreeView;
@@ -205,7 +199,7 @@ public:
     virtual WebFrame* focusedFrame() OVERRIDE;
     virtual void setFocusedFrame(WebFrame*) OVERRIDE;
     virtual void setInitialFocus(bool reverse) OVERRIDE;
-    virtual void clearFocusedNode() OVERRIDE;
+    virtual void clearFocusedElement() OVERRIDE;
     virtual void scrollFocusedNodeIntoView() OVERRIDE;
     virtual void scrollFocusedNodeIntoRect(const WebRect&) OVERRIDE;
     virtual void zoomToFindInPageRect(const WebRect&) OVERRIDE;
@@ -241,9 +235,6 @@ public:
     virtual void performMediaPlayerAction(
         const WebMediaPlayerAction& action,
         const WebPoint& location) OVERRIDE;
-    virtual WebHelperPlugin* createHelperPlugin(
-        const WebString& pluginType,
-        const WebDocument& hostDocument) OVERRIDE;
     virtual void performPluginAction(
         const WebPluginAction&,
         const WebPoint&) OVERRIDE;
@@ -302,6 +293,7 @@ public:
     virtual void setShowFPSCounter(bool) OVERRIDE;
     virtual void setContinuousPaintingEnabled(bool) OVERRIDE;
     virtual void setShowScrollBottleneckRects(bool) OVERRIDE;
+    virtual void getSelectionRootBounds(WebRect& bounds) const OVERRIDE;
 
     // WebViewImpl
 
@@ -324,7 +316,7 @@ public:
         return m_lastMouseDownPoint;
     }
 
-    WebCore::Frame* focusedWebCoreFrame() const;
+    WebCore::LocalFrame* focusedWebCoreFrame() const;
 
     // Returns the currently focused Element or null if no element has focus.
     WebCore::Element* focusedElement() const;
@@ -429,7 +421,7 @@ public:
 
     // Start a system drag and drop operation.
     void startDragging(
-        WebCore::Frame*,
+        WebCore::LocalFrame*,
         const WebDragData& dragData,
         WebDragOperationsMask mask,
         const WebImage& dragImage,
@@ -600,23 +592,16 @@ private:
     void pointerLockMouseEvent(const WebInputEvent&);
 
     // PageWidgetEventHandler functions
-    virtual void handleMouseLeave(WebCore::Frame&, const WebMouseEvent&) OVERRIDE;
-    virtual void handleMouseDown(WebCore::Frame&, const WebMouseEvent&) OVERRIDE;
-    virtual void handleMouseUp(WebCore::Frame&, const WebMouseEvent&) OVERRIDE;
-    virtual bool handleMouseWheel(WebCore::Frame&, const WebMouseWheelEvent&) OVERRIDE;
+    virtual void handleMouseLeave(WebCore::LocalFrame&, const WebMouseEvent&) OVERRIDE;
+    virtual void handleMouseDown(WebCore::LocalFrame&, const WebMouseEvent&) OVERRIDE;
+    virtual void handleMouseUp(WebCore::LocalFrame&, const WebMouseEvent&) OVERRIDE;
+    virtual bool handleMouseWheel(WebCore::LocalFrame&, const WebMouseWheelEvent&) OVERRIDE;
     virtual bool handleGestureEvent(const WebGestureEvent&) OVERRIDE;
     virtual bool handleKeyEvent(const WebKeyboardEvent&) OVERRIDE;
     virtual bool handleCharEvent(const WebKeyboardEvent&) OVERRIDE;
 
-    friend class WebHelperPluginImpl;
-    // Take ownership of the Helper Plugin and destroy it asynchronously.
-    // Called by WebHelperPluginImpl::closeAndDeleteSoon() to ensure the Helper
-    // Plugin is closed at the correct time.
-    void closeAndDeleteHelperPluginSoon(WebHelperPluginImpl*);
-    void closePendingHelperPlugins(WebCore::Timer<WebViewImpl>*);
-
     WebCore::InputMethodContext* inputMethodContext();
-    WebPlugin* focusedPluginIfInputMethodSupported(WebCore::Frame*);
+    WebPlugin* focusedPluginIfInputMethodSupported(WebCore::LocalFrame*);
 
     WebViewClient* m_client; // Can be 0 (e.g. unittests, shared workers, etc.)
     WebAutofillClient* m_autofillClient;
@@ -649,7 +634,7 @@ private:
     OwnPtr<WebSettingsImpl> m_webSettings;
 
     // A copy of the web drop data object we received from the browser.
-    RefPtr<WebCore::DataObject> m_currentDragData;
+    RefPtrWillBePersistent<WebCore::DataObject> m_currentDragData;
 
     // The point relative to the client area where the mouse was last pressed
     // down. This is used by the drag client to determine what was under the
@@ -754,7 +739,6 @@ private:
     // If true, the graphics context is being restored.
     bool m_recreatingGraphicsContext;
     static const WebInputEvent* m_currentInputEvent;
-    OwnPtr<PinchViewports> m_pinchViewports;
 
 #if ENABLE(INPUT_SPEECH)
     OwnPtr<SpeechInputClientImpl> m_speechInputClient;
@@ -783,9 +767,6 @@ private:
     WebColor m_baseBackgroundColor;
     WebColor m_backgroundColorOverride;
     float m_zoomFactorOverride;
-
-    WebCore::Timer<WebViewImpl> m_helperPluginCloseTimer;
-    Vector<WebHelperPluginImpl*> m_helperPluginsPendingClose;
 };
 
 // We have no ways to check if the specified WebView is an instance of

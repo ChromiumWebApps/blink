@@ -106,7 +106,9 @@ WebInspector.CSSMetadata.canonicalPropertyName = function(name)
     if (!name || name.length < 9 || name.charAt(0) !== "-")
         return name.toLowerCase();
     var match = name.match(/(?:-webkit-)(.+)/);
-    if (!match)
+    var propertiesSet = WebInspector.CSSMetadata.cssPropertiesMetainfoKeySet();
+    var hasSupportedProperties = WebInspector.CSSMetadata.cssPropertiesMetainfo._values.length > 0;
+    if (!match || (hasSupportedProperties && !propertiesSet.hasOwnProperty(match[1].toLowerCase())))
         return name.toLowerCase();
     return match[1].toLowerCase();
 }
@@ -249,6 +251,9 @@ WebInspector.CSSMetadata._propertyDataMap = {
     ] },
     "border-width": { values: [
         "medium", "thick", "thin"
+    ] },
+    "border-style": { values: [
+        "none", "hidden", "inset", "groove", "ridge", "outset", "dotted", "dashed", "solid", "double"
     ] },
     "size": { values: [
         "a3", "a4", "a5", "b4", "b5", "landscape", "ledger", "legal", "letter", "portrait"

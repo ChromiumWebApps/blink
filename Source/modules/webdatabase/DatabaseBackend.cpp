@@ -47,6 +47,11 @@ DatabaseBackend::DatabaseBackend(PassRefPtr<DatabaseContext> databaseContext, co
 {
 }
 
+void DatabaseBackend::trace(Visitor* visitor)
+{
+    DatabaseBackendBase::trace(visitor);
+}
+
 bool DatabaseBackend::openAndVerifyVersion(bool setVersionInNewDatabase, DatabaseError& error, String& errorMessage)
 {
     DatabaseTaskSynchronizer synchronizer;
@@ -99,7 +104,7 @@ void DatabaseBackend::close()
     databaseContext()->databaseThread()->recordDatabaseClosed(this);
 }
 
-PassRefPtr<SQLTransactionBackend> DatabaseBackend::runTransaction(PassRefPtr<SQLTransaction> transaction,
+PassRefPtr<SQLTransactionBackend> DatabaseBackend::runTransaction(PassRefPtrWillBeRawPtr<SQLTransaction> transaction,
     bool readOnly, const ChangeVersionData* data)
 {
     MutexLocker locker(m_transactionInProgressMutex);

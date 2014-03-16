@@ -558,13 +558,13 @@ void RenderInline::generateCulledLineBoxRects(GeneratorContext& yield, const Ren
         if (curr->isBox()) {
             RenderBox* currBox = toRenderBox(curr);
             if (currBox->inlineBoxWrapper()) {
-                RootInlineBox* rootBox = currBox->inlineBoxWrapper()->root();
-                int logicalTop = rootBox->logicalTop() + (rootBox->renderer()->style(rootBox->isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox->isFirstLineStyle())->font().fontMetrics().ascent());
-                int logicalHeight = container->style(rootBox->isFirstLineStyle())->font().fontMetrics().height();
+                RootInlineBox& rootBox = currBox->inlineBoxWrapper()->root();
+                int logicalTop = rootBox.logicalTop() + (rootBox.renderer().style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent());
+                int logicalHeight = container->style(rootBox.isFirstLineStyle())->font().fontMetrics().height();
                 if (isHorizontal)
-                    yield(FloatRect(currBox->inlineBoxWrapper()->x() - currBox->marginLeft(), logicalTop, currBox->width() + currBox->marginWidth(), logicalHeight));
+                    yield(FloatRect(currBox->inlineBoxWrapper()->x() - currBox->marginLeft(), logicalTop, (currBox->width() + currBox->marginWidth()).toFloat(), logicalHeight));
                 else
-                    yield(FloatRect(logicalTop, currBox->inlineBoxWrapper()->y() - currBox->marginTop(), logicalHeight, currBox->height() + currBox->marginHeight()));
+                    yield(FloatRect(logicalTop, currBox->inlineBoxWrapper()->y() - currBox->marginTop(), logicalHeight, (currBox->height() + currBox->marginHeight()).toFloat()));
             }
         } else if (curr->isRenderInline()) {
             // If the child doesn't need line boxes either, then we can recur.
@@ -573,9 +573,9 @@ void RenderInline::generateCulledLineBoxRects(GeneratorContext& yield, const Ren
                 currInline->generateCulledLineBoxRects(yield, container);
             else {
                 for (InlineFlowBox* childLine = currInline->firstLineBox(); childLine; childLine = childLine->nextLineBox()) {
-                    RootInlineBox* rootBox = childLine->root();
-                    int logicalTop = rootBox->logicalTop() + (rootBox->renderer()->style(rootBox->isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox->isFirstLineStyle())->font().fontMetrics().ascent());
-                    int logicalHeight = container->style(rootBox->isFirstLineStyle())->font().fontMetrics().height();
+                    RootInlineBox& rootBox = childLine->root();
+                    int logicalTop = rootBox.logicalTop() + (rootBox.renderer().style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent());
+                    int logicalHeight = container->style(rootBox.isFirstLineStyle())->font().fontMetrics().height();
                     if (isHorizontal)
                         yield(FloatRect(childLine->x() - childLine->marginLogicalLeft(),
                             logicalTop,
@@ -591,9 +591,9 @@ void RenderInline::generateCulledLineBoxRects(GeneratorContext& yield, const Ren
         } else if (curr->isText()) {
             RenderText* currText = toRenderText(curr);
             for (InlineTextBox* childText = currText->firstTextBox(); childText; childText = childText->nextTextBox()) {
-                RootInlineBox* rootBox = childText->root();
-                int logicalTop = rootBox->logicalTop() + (rootBox->renderer()->style(rootBox->isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox->isFirstLineStyle())->font().fontMetrics().ascent());
-                int logicalHeight = container->style(rootBox->isFirstLineStyle())->font().fontMetrics().height();
+                RootInlineBox& rootBox = childText->root();
+                int logicalTop = rootBox.logicalTop() + (rootBox.renderer().style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent());
+                int logicalHeight = container->style(rootBox.isFirstLineStyle())->font().fontMetrics().height();
                 if (isHorizontal)
                     yield(FloatRect(childText->x(), logicalTop, childText->logicalWidth(), logicalHeight));
                 else
@@ -980,12 +980,12 @@ LayoutRect RenderInline::linesVisualOverflowBoundingBox() const
         logicalRightSide = max(logicalRightSide, curr->logicalRightVisualOverflow());
     }
 
-    RootInlineBox* firstRootBox = firstLineBox()->root();
-    RootInlineBox* lastRootBox = lastLineBox()->root();
+    RootInlineBox& firstRootBox = firstLineBox()->root();
+    RootInlineBox& lastRootBox = lastLineBox()->root();
 
-    LayoutUnit logicalTop = firstLineBox()->logicalTopVisualOverflow(firstRootBox->lineTop());
+    LayoutUnit logicalTop = firstLineBox()->logicalTopVisualOverflow(firstRootBox.lineTop());
     LayoutUnit logicalWidth = logicalRightSide - logicalLeftSide;
-    LayoutUnit logicalHeight = lastLineBox()->logicalBottomVisualOverflow(lastRootBox->lineBottom()) - logicalTop;
+    LayoutUnit logicalHeight = lastLineBox()->logicalBottomVisualOverflow(lastRootBox.lineBottom()) - logicalTop;
 
     LayoutRect rect(logicalLeftSide, logicalTop, logicalWidth, logicalHeight);
     if (!style()->isHorizontalWritingMode())
@@ -1246,16 +1246,16 @@ void RenderInline::dirtyLineBoxes(bool fullLayout)
             if (curr->isBox() && !curr->needsLayout()) {
                 RenderBox* currBox = toRenderBox(curr);
                 if (currBox->inlineBoxWrapper())
-                    currBox->inlineBoxWrapper()->root()->markDirty();
+                    currBox->inlineBoxWrapper()->root().markDirty();
             } else if (!curr->selfNeedsLayout()) {
                 if (curr->isRenderInline()) {
                     RenderInline* currInline = toRenderInline(curr);
                     for (InlineFlowBox* childLine = currInline->firstLineBox(); childLine; childLine = childLine->nextLineBox())
-                        childLine->root()->markDirty();
+                        childLine->root().markDirty();
                 } else if (curr->isText()) {
                     RenderText* currText = toRenderText(curr);
                     for (InlineTextBox* childText = currText->firstTextBox(); childText; childText = childText->nextTextBox())
-                        childText->root()->markDirty();
+                        childText->root().markDirty();
                 }
             }
         }
@@ -1270,7 +1270,7 @@ void RenderInline::deleteLineBoxTree()
 
 InlineFlowBox* RenderInline::createInlineFlowBox()
 {
-    return new InlineFlowBox(this);
+    return new InlineFlowBox(*this);
 }
 
 InlineFlowBox* RenderInline::createAndAppendInlineFlowBox()
@@ -1299,7 +1299,7 @@ int RenderInline::baselinePosition(FontBaseline baselineType, bool firstLine, Li
     return fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2;
 }
 
-LayoutSize RenderInline::offsetForInFlowPositionedInline(const RenderBox* child) const
+LayoutSize RenderInline::offsetForInFlowPositionedInline(const RenderBox& child) const
 {
     // FIXME: This function isn't right with mixed writing modes.
 
@@ -1322,18 +1322,18 @@ LayoutSize RenderInline::offsetForInFlowPositionedInline(const RenderBox* child)
         blockPosition = layer()->staticBlockPosition();
     }
 
-    if (!child->style()->hasStaticInlinePosition(style()->isHorizontalWritingMode()))
+    if (!child.style()->hasStaticInlinePosition(style()->isHorizontalWritingMode()))
         logicalOffset.setWidth(inlinePosition);
 
     // This is not terribly intuitive, but we have to match other browsers.  Despite being a block display type inside
     // an inline, we still keep our x locked to the left of the relative positioned inline.  Arguably the correct
     // behavior would be to go flush left to the block that contains the inline, but that isn't what other browsers
     // do.
-    else if (!child->style()->isOriginalDisplayInlineType())
+    else if (!child.style()->isOriginalDisplayInlineType())
         // Avoid adding in the left border/padding of the containing block twice.  Subtract it out.
-        logicalOffset.setWidth(inlinePosition - child->containingBlock()->borderAndPaddingLogicalLeft());
+        logicalOffset.setWidth(inlinePosition - child.containingBlock()->borderAndPaddingLogicalLeft());
 
-    if (!child->style()->hasStaticBlockPosition(style()->isHorizontalWritingMode()))
+    if (!child.style()->hasStaticBlockPosition(style()->isHorizontalWritingMode()))
         logicalOffset.setHeight(blockPosition);
 
     return style()->isHorizontalWritingMode() ? logicalOffset : logicalOffset.transposedSize();
@@ -1424,9 +1424,9 @@ void RenderInline::paintOutline(PaintInfo& paintInfo, const LayoutPoint& paintOf
 
     rects.append(LayoutRect());
     for (InlineFlowBox* curr = firstLineBox(); curr; curr = curr->nextLineBox()) {
-        RootInlineBox* root = curr->root();
-        LayoutUnit top = max<LayoutUnit>(root->lineTop(), curr->logicalTop());
-        LayoutUnit bottom = min<LayoutUnit>(root->lineBottom(), curr->logicalBottom());
+        RootInlineBox& root = curr->root();
+        LayoutUnit top = max<LayoutUnit>(root.lineTop(), curr->logicalTop());
+        LayoutUnit bottom = min<LayoutUnit>(root.lineBottom(), curr->logicalBottom());
         rects.append(LayoutRect(curr->x(), top, curr->logicalWidth(), bottom - top));
     }
     rects.append(LayoutRect());

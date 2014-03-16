@@ -28,6 +28,7 @@
 #include "core/clipboard/ClipboardAccessPolicy.h"
 #include "core/fetch/ResourcePtr.h"
 #include "core/page/DragActions.h"
+#include "heap/Handle.h"
 #include "platform/geometry/IntPoint.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
@@ -42,13 +43,13 @@ class DragImage;
 class Element;
 class ExceptionState;
 class FileList;
-class Frame;
+class LocalFrame;
 class ImageResource;
 class Node;
 class Range;
 
 // State available during IE's events for drag and drop and copy/paste
-class Clipboard : public RefCounted<Clipboard>, public ScriptWrappable {
+class Clipboard : public RefCountedWillBeGarbageCollectedFinalized<Clipboard>, public ScriptWrappable {
 public:
     // Whether this clipboard is serving a drag-drop or copy-paste request.
     enum ClipboardType {
@@ -56,7 +57,7 @@ public:
         DragAndDrop,
     };
 
-    static PassRefPtr<Clipboard> create(ClipboardType, ClipboardAccessPolicy, PassRefPtr<DataObject>);
+    static PassRefPtrWillBeRawPtr<Clipboard> create(ClipboardType, ClipboardAccessPolicy, PassRefPtrWillBeRawPtr<DataObject>);
     ~Clipboard();
 
     bool isForCopyAndPaste() const { return m_clipboardType == CopyAndPaste; }
@@ -74,7 +75,7 @@ public:
 
     // extensions beyond IE's API
     Vector<String> types() const;
-    PassRefPtr<FileList> files() const;
+    PassRefPtrWillBeRawPtr<FileList> files() const;
 
     IntPoint dragLocation() const { return m_dragLoc; }
     void setDragImage(Element*, int x, int y, ExceptionState&);
@@ -83,10 +84,10 @@ public:
     Node* dragImageElement() const { return m_dragImageElement.get(); }
     void setDragImageElement(Node*, const IntPoint&);
 
-    PassOwnPtr<DragImage> createDragImage(IntPoint& dragLocation, Frame*) const;
+    PassOwnPtr<DragImage> createDragImage(IntPoint& dragLocation, LocalFrame*) const;
     void declareAndWriteDragImage(Element*, const KURL&, const String& title);
     void writeURL(const KURL&, const String&);
-    void writeRange(Range*, Frame*);
+    void writeRange(Range*, LocalFrame*);
     void writePlainText(const String&);
 
     bool hasData();
@@ -108,12 +109,14 @@ public:
 
     bool hasDropZoneType(const String&);
 
-    PassRefPtr<DataTransferItemList> items();
+    PassRefPtrWillBeRawPtr<DataTransferItemList> items();
 
-    PassRefPtr<DataObject> dataObject() const;
+    PassRefPtrWillBeRawPtr<DataObject> dataObject() const;
+
+    void trace(Visitor*);
 
 private:
-    Clipboard(ClipboardType, ClipboardAccessPolicy, PassRefPtr<DataObject>);
+    Clipboard(ClipboardType, ClipboardAccessPolicy, PassRefPtrWillBeRawPtr<DataObject>);
 
     void setDragImage(ImageResource*, Node*, const IntPoint&);
 
@@ -125,7 +128,7 @@ private:
     String m_dropEffect;
     String m_effectAllowed;
     ClipboardType m_clipboardType;
-    RefPtr<DataObject> m_dataObject;
+    RefPtrWillBeMember<DataObject> m_dataObject;
 
     IntPoint m_dragLoc;
     ResourcePtr<ImageResource> m_dragImage;

@@ -103,6 +103,11 @@ void ScrollableArea::setScrollOrigin(const IntPoint& origin)
     }
 }
 
+GraphicsLayer* ScrollableArea::layerForContainer() const
+{
+    return layerForScrolling() ? layerForScrolling()->parent() : 0;
+}
+
 bool ScrollableArea::scroll(ScrollDirection direction, ScrollGranularity granularity, float delta)
 {
     ScrollbarOrientation orientation;
@@ -319,22 +324,25 @@ void ScrollableArea::contentsResized()
 
 bool ScrollableArea::hasOverlayScrollbars() const
 {
-    return (verticalScrollbar() && verticalScrollbar()->isOverlayScrollbar())
-        || (horizontalScrollbar() && horizontalScrollbar()->isOverlayScrollbar());
+    Scrollbar* vScrollbar = verticalScrollbar();
+    if (vScrollbar && vScrollbar->isOverlayScrollbar())
+        return true;
+    Scrollbar* hScrollbar = horizontalScrollbar();
+    return hScrollbar && hScrollbar->isOverlayScrollbar();
 }
 
 void ScrollableArea::setScrollbarOverlayStyle(ScrollbarOverlayStyle overlayStyle)
 {
     m_scrollbarOverlayStyle = overlayStyle;
 
-    if (horizontalScrollbar()) {
-        ScrollbarTheme::theme()->updateScrollbarOverlayStyle(horizontalScrollbar());
-        horizontalScrollbar()->invalidate();
+    if (Scrollbar* scrollbar = horizontalScrollbar()) {
+        ScrollbarTheme::theme()->updateScrollbarOverlayStyle(scrollbar);
+        scrollbar->invalidate();
     }
 
-    if (verticalScrollbar()) {
-        ScrollbarTheme::theme()->updateScrollbarOverlayStyle(verticalScrollbar());
-        verticalScrollbar()->invalidate();
+    if (Scrollbar* scrollbar = verticalScrollbar()) {
+        ScrollbarTheme::theme()->updateScrollbarOverlayStyle(scrollbar);
+        scrollbar->invalidate();
     }
 }
 

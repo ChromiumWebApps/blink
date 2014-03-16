@@ -12,6 +12,7 @@ Attr
 Audio
 AudioBuffer
 AudioBufferSourceNode
+AudioContext
 AudioDestinationNode
 AudioListener
 AudioNode
@@ -48,7 +49,6 @@ ChannelSplitterNode
 CharacterData
 ClientRect
 ClientRectList
-Clipboard
 CloseEvent
 Comment
 CompositionEvent
@@ -62,6 +62,7 @@ DOMSettableTokenList
 DOMStringList
 DOMStringMap
 DOMTokenList
+DataTransfer
 DataTransferItemList
 DataView
 Date
@@ -86,9 +87,11 @@ FileReader
 Float32Array
 Float64Array
 FocusEvent
+FontFace
 FormData
 Function
 GainNode
+Gamepad
 HTMLAllCollection
 HTMLAnchorElement
 HTMLAppletElement
@@ -216,6 +219,7 @@ Notification
 Number
 Object
 OfflineAudioCompletionEvent
+OfflineAudioContext
 Option
 OscillatorNode
 OverflowEvent
@@ -384,6 +388,7 @@ SVGZoomEvent
 Screen
 ScriptProcessorNode
 Selection
+ShadowRoot
 SharedWorker
 SpeechInputEvent
 SpeechSynthesisEvent
@@ -435,6 +440,7 @@ WebKitCSSFilterRule
 WebKitCSSFilterValue
 WebKitCSSMatrix
 WebKitCSSTransformValue
+WebKitGamepad
 WebKitMediaSource
 WebKitMutationObserver
 WebKitPoint

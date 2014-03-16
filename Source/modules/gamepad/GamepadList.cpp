@@ -28,7 +28,10 @@
 
 namespace WebCore {
 
-DEFINE_GC_INFO(GamepadList);
+GamepadList::GamepadList()
+{
+    ScriptWrappable::init(this);
+}
 
 GamepadList::~GamepadList()
 {
@@ -36,14 +39,9 @@ GamepadList::~GamepadList()
 
 void GamepadList::set(unsigned index, PassRefPtrWillBeRawPtr<Gamepad> gamepad)
 {
-    if (index >= kMaximumGamepads)
+    if (index >= blink::WebGamepads::itemsLengthCap)
         return;
     m_items[index] = gamepad;
-}
-
-unsigned GamepadList::length() const
-{
-    return kMaximumGamepads;
 }
 
 Gamepad* GamepadList::item(unsigned index)
@@ -53,7 +51,7 @@ Gamepad* GamepadList::item(unsigned index)
 
 void GamepadList::trace(Visitor* visitor)
 {
-    for (unsigned index = 0; index < kMaximumGamepads; index++) {
+    for (unsigned index = 0; index < blink::WebGamepads::itemsLengthCap; index++) {
         visitor->trace(m_items[index]);
     }
 }

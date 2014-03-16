@@ -42,6 +42,7 @@
 #include "wtf/ListHashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefPtr.h"
+#include "wtf/TypeTraits.h"
 
 #ifndef NDEBUG
 #define DEBUG_ONLY(x) x
@@ -59,11 +60,6 @@ template<typename T> class WeakMember;
 class Visitor;
 
 template<bool needsTracing, bool isWeak, bool markWeakMembersStrongly, typename T, typename Traits> struct CollectionBackingTraceTrait;
-
-typedef void (*FinalizationCallback)(void*);
-typedef void (*VisitorCallback)(Visitor*, void* self);
-typedef VisitorCallback TraceCallback;
-typedef VisitorCallback WeakPointerCallback;
 
 // The TraceMethodDelegate is used to convert a trace method for type T to a TraceCallback.
 // This allows us to pass a type's trace method as a parameter to the PersistentNode
@@ -85,23 +81,9 @@ struct TraceMethodDelegate {
 // inherits from GarbageCollected or GarbageCollectedFinalized.
 struct GCInfo {
     bool hasFinalizer() const { return m_nonTrivialFinalizer; }
-    const char* m_typeMarker;
     TraceCallback m_trace;
     FinalizationCallback m_finalize;
     bool m_nonTrivialFinalizer;
-};
-
-// Template struct to detect whether type T inherits from
-// GarbageCollectedFinalized.
-template<typename T>
-struct IsGarbageCollectedFinalized {
-    typedef char TrueType;
-    struct FalseType {
-        char dummy[2];
-    };
-    template<typename U> static TrueType has(GarbageCollectedFinalized<U>*);
-    static FalseType has(...);
-    static bool const value = sizeof(has(static_cast<T*>(0))) == sizeof(TrueType);
 };
 
 // The FinalizerTraitImpl specifies how to finalize objects. Object
@@ -130,41 +112,31 @@ struct FinalizerTraitImpl<T, false> {
 // behavior is not desired.
 template<typename T>
 struct FinalizerTrait {
-    static const bool nonTrivialFinalizer = IsGarbageCollectedFinalized<T>::value;
+    static const bool nonTrivialFinalizer = WTF::IsSubclassOfTemplate<T, GarbageCollectedFinalized>::value;
     static void finalize(void* obj) { FinalizerTraitImpl<T, nonTrivialFinalizer>::finalize(obj); }
 };
 
-// Macros to declare and define GCInfo structures for objects
-// allocated in the Blink garbage-collected heap.
-#define DECLARE_GC_INFO                                                       \
-public:                                                                       \
-    static const GCInfo s_gcInfo;                                             \
-    template<typename Any> friend struct FinalizerTrait;                      \
-private:                                                                      \
-
-#define DEFINE_GC_INFO(Type)                                                  \
-const GCInfo Type::s_gcInfo = {                                               \
-    #Type,                                                                    \
-    TraceTrait<Type>::trace,                                                  \
-    FinalizerTrait<Type>::finalize,                                           \
-    FinalizerTrait<Type>::nonTrivialFinalizer,                                \
-};                                                                            \
-
 // Trait to get the GCInfo structure for types that have their
 // instances allocated in the Blink garbage-collected heap.
+template<typename T> struct GCInfoTrait;
+
+template<typename T> class GarbageCollected;
+class GarbageCollectedMixin;
+template<typename T, bool = WTF::IsSubclassOfTemplate<T, GarbageCollected>::value> class NeedsAdjustAndMark;
+
 template<typename T>
-struct GCInfoTrait {
-    static const GCInfo* get()
-    {
-        return &T::s_gcInfo;
-    }
+class NeedsAdjustAndMark<T, true> {
+public:
+    static const bool value = false;
 };
 
 template<typename T>
-const char* getTypeMarker()
-{
-    return GCInfoTrait<T>::get()->m_typeMarker;
-}
+class NeedsAdjustAndMark<T, false> {
+public:
+    static const bool value = WTF::IsSubclass<T, GarbageCollectedMixin>::value;
+};
+
+template<typename T, bool = NeedsAdjustAndMark<T>::value> class DefaultTraceTrait;
 
 // The TraceTrait is used to specify how to mark an object pointer and
 // how to trace all of the pointers in the object.
@@ -187,10 +159,16 @@ public:
         static_cast<T*>(self)->trace(visitor);
     }
 
-    static void mark(Visitor*, const T*);
+    static void mark(Visitor* visitor, const T* t)
+    {
+        DefaultTraceTrait<T>::mark(visitor, t);
+    }
 
 #ifndef NDEBUG
-    static void checkTypeMarker(Visitor*, const T*);
+    static void checkGCInfo(Visitor* visitor, const T* t)
+    {
+        DefaultTraceTrait<T>::checkGCInfo(visitor, t);
+    }
 #endif
 };
 
@@ -220,6 +198,8 @@ struct ObjectAliveTrait<Member<T> > {
 // contained pointers and push them on the marking stack.
 class HEAP_EXPORT Visitor {
 public:
+    virtual ~Visitor() { }
+
     // One-argument templated mark method. This uses the static type of
     // the argument to get the TraceTrait. By default, the mark method
     // of the TraceTrait just calls the virtual two-argument mark method on this
@@ -230,7 +210,7 @@ public:
         if (!t)
             return;
 #ifndef NDEBUG
-        TraceTrait<T>::checkTypeMarker(this, t);
+        TraceTrait<T>::checkGCInfo(this, t);
 #endif
         TraceTrait<T>::mark(this, t);
     }
@@ -304,7 +284,8 @@ public:
     template<typename T>
     void trace(const OwnPtr<T>& t)
     {
-        t->trace(this);
+        if (t)
+            t->trace(this);
     }
 
     // This trace method is to trace a RefPtrWillBeMember when ENABLE(OILPAN)
@@ -351,7 +332,16 @@ public:
     // the GC heap. Note that even removing things from HeapHashSet or
     // HeapHashMap can cause an allocation if the backing store resizes, but
     // these collections know to remove WeakMember elements safely.
-    virtual void registerWeakMembers(const void*, WeakPointerCallback) = 0;
+    //
+    // The weak pointer callbacks are run on the thread that owns the
+    // object and other threads are not stopped during the
+    // callbacks. Since isAlive is used in the callback to determine
+    // if objects pointed to are alive it is crucial that the object
+    // pointed to belong to the same thread as the object receiving
+    // the weak callback. Since other threads have been resumed the
+    // mark bits are not valid for objects from other threads.
+    virtual void registerWeakMembers(const void* object, WeakPointerCallback callback) { registerWeakMembers(object, object, callback); }
+    virtual void registerWeakMembers(const void*, const void*, WeakPointerCallback) = 0;
 
     template<typename T, void (T::*method)(Visitor*)>
     void registerWeakMembers(const T* obj)
@@ -364,10 +354,14 @@ public:
     // callback for each cell that needs to be zeroed, so if you have a lot of
     // weak cells in your object you should still consider using
     // registerWeakMembers above.
+    //
+    // In contrast to registerWeakMembers, the weak cell callbacks are
+    // run on the thread performing garbage collection. Therefore, all
+    // threads are stopped during weak cell callbacks.
     template<typename T>
     void registerWeakCell(T** cell)
     {
-        registerWeakMembers(reinterpret_cast<const void*>(cell), &handleWeakCell<T>);
+        registerWeakCell(reinterpret_cast<void**>(cell), &handleWeakCell<T>);
     }
 
     virtual bool isMarked(const void*) = 0;
@@ -379,17 +373,20 @@ public:
     }
 
 #ifndef NDEBUG
-    void checkTypeMarker(const void*, const char* marker);
+    void checkGCInfo(const void*, const GCInfo*);
 #endif
 
     // Macro to declare methods needed for each typed heap.
 #define DECLARE_VISITOR_METHODS(Type)                                  \
-    DEBUG_ONLY(void checkTypeMarker(const Type*, const char* marker);) \
+    DEBUG_ONLY(void checkGCInfo(const Type*, const GCInfo*);)          \
     virtual void mark(const Type*, TraceCallback) = 0;                 \
     virtual bool isMarked(const Type*) = 0;
 
     FOR_EACH_TYPED_HEAP(DECLARE_VISITOR_METHODS)
 #undef DECLARE_VISITOR_METHODS
+
+protected:
+    virtual void registerWeakCell(void**, WeakPointerCallback) = 0;
 
 private:
     template<typename T>
@@ -409,9 +406,10 @@ struct OffHeapCollectionTraceTrait<WTF::HashSet<T, HashFunctions, Traits, WTF::D
     {
         if (set.isEmpty())
             return;
-        if (WTF::NeedsTracing<T>::value) {
-            for (typename HashSet::const_iterator it = set.begin(), end = set.end(); it != end; ++it)
-                CollectionBackingTraceTrait<Traits::needsTracing, Traits::isWeak, false, T, Traits>::mark(visitor, *it);
+        if (WTF::ShouldBeTraced<Traits>::value) {
+            HashSet& iterSet = const_cast<HashSet&>(set);
+            for (typename HashSet::iterator it = iterSet.begin(), end = iterSet.end(); it != end; ++it)
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, false, T, Traits>::mark(visitor, *it);
         }
         COMPILE_ASSERT(!Traits::isWeak, WeakOffHeapCollectionsConsideredDangerous0);
     }
@@ -425,7 +423,8 @@ struct OffHeapCollectionTraceTrait<WTF::ListHashSet<T, inlineCapacity, HashFunct
     {
         if (set.isEmpty())
             return;
-        for (typename ListHashSet::const_iterator it = set.begin(), end = set.end(); it != end; ++it)
+        ListHashSet& iterSet = const_cast<ListHashSet&>(set);
+        for (typename ListHashSet::iterator it = iterSet.begin(), end = iterSet.end(); it != end; ++it)
             visitor->trace(*it);
     }
 };
@@ -438,10 +437,11 @@ struct OffHeapCollectionTraceTrait<WTF::HashMap<Key, Value, HashFunctions, KeyTr
     {
         if (map.isEmpty())
             return;
-        if (WTF::NeedsTracing<Key>::value || WTF::NeedsTracing<Value>::value) {
-            for (typename HashMap::const_iterator it = map.begin(), end = map.end(); it != end; ++it) {
-                CollectionBackingTraceTrait<KeyTraits::needsTracing, KeyTraits::isWeak, false, Key, KeyTraits>::mark(visitor, it->key);
-                CollectionBackingTraceTrait<ValueTraits::needsTracing, ValueTraits::isWeak, false, Value, ValueTraits>::mark(visitor, it->value);
+        if (WTF::ShouldBeTraced<KeyTraits>::value || WTF::ShouldBeTraced<ValueTraits>::value) {
+            HashMap& iterMap = const_cast<HashMap&>(map);
+            for (typename HashMap::iterator it = iterMap.begin(), end = iterMap.end(); it != end; ++it) {
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<KeyTraits>::value, KeyTraits::isWeak, false, Key, KeyTraits>::mark(visitor, it->key);
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<ValueTraits>::value, ValueTraits::isWeak, false, Value, ValueTraits>::mark(visitor, it->value);
             }
         }
         COMPILE_ASSERT(!KeyTraits::isWeak, WeakOffHeapCollectionsConsideredDangerous1);
@@ -497,7 +497,7 @@ inline void doNothingTrace(Visitor*, void*) { }
     template<>                                                       \
     class TraceTrait<type> {                                         \
     public:                                                          \
-        static void checkTypeMarker(Visitor*, const void*) { }       \
+        static void checkGCInfo(Visitor*, const void*) { }       \
         static void mark(Visitor* visitor, const type* p) {          \
             visitor->mark(p, reinterpret_cast<TraceCallback>(0));    \
         }                                                            \
@@ -520,30 +520,147 @@ ITERATE_DO_NOTHING_TYPES(DECLARE_DO_NOTHING_TRAIT)
 
 #undef DECLARE_DO_NOTHING_TRAIT
 
-#ifndef NDEBUG
-template<typename T> void TraceTrait<T>::checkTypeMarker(Visitor* visitor, const T* t)
-{
-    visitor->checkTypeMarker(const_cast<T*>(t), getTypeMarker<T>());
-}
-#endif
+template<typename T>
+class DefaultTraceTrait<T, false> {
+public:
+    static void mark(Visitor* visitor, const T* t)
+    {
+        // Default mark method of the trait just calls the two-argument mark
+        // method on the visitor. The second argument is the static trace method
+        // of the trait, which by default calls the instance method
+        // trace(Visitor*) on the object.
+        visitor->mark(const_cast<T*>(t), &TraceTrait<T>::trace);
+    }
 
-template<typename T> void TraceTrait<T>::mark(Visitor* visitor, const T* t)
-{
-    // Default mark method of the trait just calls the two-argument mark
-    // method on the visitor. The second argument is the static trace method
-    // of the trait, which by default calls the instance method
-    // trace(Visitor*) on the object.
-    visitor->mark(const_cast<T*>(t), &trace);
-}
+#ifndef NDEBUG
+    static void checkGCInfo(Visitor* visitor, const T* t)
+    {
+        visitor->checkGCInfo(const_cast<T*>(t), GCInfoTrait<T>::get());
+    }
+#endif
+};
+
+template<typename T>
+class DefaultTraceTrait<T, true> {
+public:
+    static void mark(Visitor* visitor, const T* self)
+    {
+        self->adjustAndMark(visitor);
+    }
+
+#ifndef NDEBUG
+    static void checkGCInfo(Visitor*, const T*) { }
+#endif
+};
+
+template<typename T, bool = NeedsAdjustAndMark<T>::value> class DefaultObjectAliveTrait;
+
+template<typename T>
+class DefaultObjectAliveTrait<T, false> {
+public:
+    static bool isAlive(Visitor* visitor, T obj)
+    {
+        return visitor->isMarked(obj);
+    }
+};
+
+template<typename T>
+class DefaultObjectAliveTrait<T, true> {
+public:
+    static bool isAlive(Visitor* visitor, T obj)
+    {
+        return obj->isAlive(visitor);
+    }
+};
 
 template<typename T> bool ObjectAliveTrait<T>::isAlive(Visitor* visitor, T obj)
 {
-    return visitor->isMarked(obj);
+    return DefaultObjectAliveTrait<T>::isAlive(visitor, obj);
 }
 template<typename T> bool ObjectAliveTrait<Member<T> >::isAlive(Visitor* visitor, const Member<T>& obj)
 {
     return visitor->isMarked(obj.get());
 }
+
+// The GarbageCollectedMixin interface and helper macro
+// USING_GARBAGE_COLLECTED_MIXIN can be used to automatically define
+// TraceTrait/ObjectAliveTrait on non-leftmost deriving classes
+// which need to be garbage collected.
+//
+// Consider the following case:
+// class B {};
+// class A : public GarbageCollected, public B {};
+//
+// We can't correctly handle "Member<B> p = &a" as we can't compute addr of
+// object header statically. This can be solved by using GarbageCollectedMixin:
+// class B : public GarbageCollectedMixin {};
+// class A : public GarbageCollected, public B {
+//   USING_GARBAGE_COLLECTED_MIXIN(A)
+// };
+//
+// With the helper, as long as we are using Member<B>, TypeTrait<B> will
+// dispatch adjustAndMark dynamically to find collect addr of the object header.
+// Note that this is only enabled for Member<B>. For Member<A> which we can
+// compute the object header addr statically, this dynamic dispatch is not used.
+
+class GarbageCollectedMixin {
+public:
+    virtual void adjustAndMark(Visitor*) const = 0;
+    virtual bool isAlive(Visitor*) const = 0;
+};
+
+#define USING_GARBAGE_COLLECTED_MIXIN(TYPE) \
+public: \
+    virtual void adjustAndMark(Visitor* visitor) const OVERRIDE \
+    { \
+        typedef WTF::IsSubclassOfTemplate<TYPE, WebCore::GarbageCollected> IsSubclassOfGarbageCollected; \
+        COMPILE_ASSERT(IsSubclassOfGarbageCollected::value, OnlyGarbageCollectedObjectsCanHaveGarbageCollectedMixins); \
+        visitor->mark(this, &TraceTrait<TYPE>::trace);\
+    } \
+    virtual bool isAlive(Visitor* visitor) const OVERRIDE \
+    { \
+        return visitor->isAlive(this); \
+    }
+
+#if ENABLE(OILPAN)
+#define WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(TYPE) USING_GARBAGE_COLLECTED_MIXIN(TYPE)
+#else
+#define WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(TYPE)
+#endif
+
+template<typename T>
+struct GCInfoAtBase {
+    static const GCInfo* get()
+    {
+        static const GCInfo gcInfo = {
+            TraceTrait<T>::trace,
+            FinalizerTrait<T>::finalize,
+            FinalizerTrait<T>::nonTrivialFinalizer,
+        };
+        return &gcInfo;
+    }
+};
+
+template<typename T> class GarbageCollected;
+template<typename T, bool = WTF::IsSubclassOfTemplate<T, GarbageCollected>::value> struct GetGarbageCollectedBase;
+
+template<typename T>
+struct GetGarbageCollectedBase<T, true> {
+    typedef typename T::GarbageCollectedBase type;
+};
+
+template<typename T>
+struct GetGarbageCollectedBase<T, false> {
+    typedef T type;
+};
+
+template<typename T>
+struct GCInfoTrait {
+    static const GCInfo* get()
+    {
+        return GCInfoAtBase<typename GetGarbageCollectedBase<T>::type>::get();
+    }
+};
 
 }
 

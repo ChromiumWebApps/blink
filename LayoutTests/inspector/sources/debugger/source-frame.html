@@ -17,7 +17,7 @@ function methodForBreakpoint()
 
 function test()
 {
-    WebInspector.showPanel("resources");
+    WebInspector.inspectorView.showPanel("resources");
     InspectorTest.runDebuggerTestSuite([
         function testSetBreakpoint(next)
         {
@@ -55,7 +55,7 @@ function test()
             {
                 if (this !== shownSourceFrame)
                     return;
-                InspectorTest.addResult("Message added to source frame: " + message.message);
+                InspectorTest.addResult("Message added to source frame: " + message.messageText);
                 WebInspector.console.requestClearMessages();
             }
 
@@ -70,7 +70,7 @@ function test()
 
         function testShowResource(next)
         {
-            WebInspector.showPanel("network");
+            WebInspector.inspectorView.showPanel("network");
 
             InspectorTest.addSniffer(WebInspector.SourceFrame.prototype, "show", didShowSourceFrame);
 

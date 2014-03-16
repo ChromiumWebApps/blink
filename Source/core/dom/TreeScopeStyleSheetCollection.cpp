@@ -59,10 +59,10 @@ void TreeScopeStyleSheetCollection::addStyleSheetCandidateNode(Node* node, bool 
     else
         m_styleSheetCandidateNodes.add(node);
 
-    if (!node->hasTagName(HTMLNames::styleTag))
+    if (!isHTMLStyleElement(*node))
         return;
 
-    ContainerNode* scopingNode = toHTMLStyleElement(node)->scopingNode();
+    ContainerNode* scopingNode = toHTMLStyleElement(*node).scopingNode();
     if (!isTreeScopeRoot(scopingNode))
         m_scopingNodesForStyleScoped.add(scopingNode);
 }
@@ -75,7 +75,7 @@ void TreeScopeStyleSheetCollection::removeStyleSheetCandidateNode(Node* node, Co
         m_scopingNodesForStyleScoped.remove(scopingNode);
 }
 
-TreeScopeStyleSheetCollection::StyleResolverUpdateType TreeScopeStyleSheetCollection::compareStyleSheets(const Vector<RefPtr<CSSStyleSheet> >& oldStyleSheets, const Vector<RefPtr<CSSStyleSheet> >& newStylesheets, Vector<StyleSheetContents*>& addedSheets)
+TreeScopeStyleSheetCollection::StyleResolverUpdateType TreeScopeStyleSheetCollection::compareStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& oldStyleSheets, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& newStylesheets, WillBeHeapVector<RawPtrWillBeMember<StyleSheetContents> >& addedSheets)
 {
     unsigned newStyleSheetCount = newStylesheets.size();
     unsigned oldStyleSheetCount = oldStyleSheets.size();
@@ -104,7 +104,7 @@ TreeScopeStyleSheetCollection::StyleResolverUpdateType TreeScopeStyleSheetCollec
     return hasInsertions ? Reset : Additive;
 }
 
-bool TreeScopeStyleSheetCollection::activeLoadingStyleSheetLoaded(const Vector<RefPtr<CSSStyleSheet> >& newStyleSheets)
+bool TreeScopeStyleSheetCollection::activeLoadingStyleSheetLoaded(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& newStyleSheets)
 {
     // StyleSheets of <style> elements that @import stylesheets are active but loading. We need to trigger a full recalc when such loads are done.
     bool hasActiveLoadingStylesheet = false;
@@ -121,7 +121,7 @@ bool TreeScopeStyleSheetCollection::activeLoadingStyleSheetLoaded(const Vector<R
     return false;
 }
 
-static bool findFontFaceRulesFromStyleSheetContents(Vector<StyleSheetContents*> sheets, Vector<const StyleRuleFontFace*>& fontFaceRules)
+static bool findFontFaceRulesFromStyleSheetContents(const WillBeHeapVector<RawPtrWillBeMember<StyleSheetContents> >& sheets, WillBeHeapVector<RawPtrWillBeMember<const StyleRuleFontFace> >& fontFaceRules)
 {
     bool hasFontFaceRule = false;
 
@@ -145,7 +145,7 @@ void TreeScopeStyleSheetCollection::analyzeStyleSheetChange(StyleResolverUpdateM
         return;
 
     // Find out which stylesheets are new.
-    Vector<StyleSheetContents*> addedSheets;
+    WillBeHeapVector<RawPtrWillBeMember<StyleSheetContents> > addedSheets;
     if (m_activeAuthorStyleSheets.size() <= newCollection.activeAuthorStyleSheets().size()) {
         change.styleResolverUpdateType = compareStyleSheets(m_activeAuthorStyleSheets, newCollection.activeAuthorStyleSheets(), addedSheets);
     } else {
@@ -204,7 +204,7 @@ void TreeScopeStyleSheetCollection::resetAllRuleSetsInTreeScope(StyleResolver* s
     styleResolver->resetAuthorStyle(toContainerNode(&m_treeScope.rootNode()));
 }
 
-static bool styleSheetsUseRemUnits(const Vector<RefPtr<CSSStyleSheet> >& sheets)
+static bool styleSheetsUseRemUnits(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& sheets)
 {
     for (unsigned i = 0; i < sheets.size(); ++i) {
         if (sheets[i]->contents()->usesRemUnits())

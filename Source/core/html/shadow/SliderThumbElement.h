@@ -79,7 +79,7 @@ inline PassRefPtr<Element> SliderThumbElement::cloneElementWithoutAttributesAndC
 }
 
 // FIXME: There are no ways to check if a node is a SliderThumbElement.
-DEFINE_NODE_TYPE_CASTS(SliderThumbElement, isHTMLElement());
+DEFINE_ELEMENT_TYPE_CASTS(SliderThumbElement, isHTMLElement());
 
 // --------------------------------
 
@@ -90,7 +90,6 @@ public:
 
 private:
     virtual bool isSliderThumb() const OVERRIDE;
-    virtual bool supportsPartialLayout() const OVERRIDE { return false; }
 };
 
 // --------------------------------

@@ -40,7 +40,7 @@
 
 namespace WebCore {
 
-class Frame;
+class LocalFrame;
 class HistoryEntry;
 class Page;
 
@@ -93,18 +93,18 @@ class Page;
 
 class HistoryNode {
 public:
-    static PassOwnPtr<HistoryNode> create(HistoryEntry*, HistoryItem*);
+    static PassOwnPtr<HistoryNode> create(HistoryEntry*, HistoryItem*, int64_t frameID);
     ~HistoryNode() { }
 
-    HistoryNode* addChild(PassRefPtr<HistoryItem>);
-    PassOwnPtr<HistoryNode> cloneAndReplace(HistoryEntry*, HistoryItem* newItem, bool clipAtTarget, Frame* targetFrame, Frame* currentFrame);
+    HistoryNode* addChild(PassRefPtr<HistoryItem>, int64_t frameID);
+    PassOwnPtr<HistoryNode> cloneAndReplace(HistoryEntry*, HistoryItem* newItem, bool clipAtTarget, LocalFrame* targetFrame, LocalFrame* currentFrame);
     HistoryItem* value() { return m_value.get(); }
     void updateValue(PassRefPtr<HistoryItem> item) { m_value = item; }
     const Vector<OwnPtr<HistoryNode> >& children() const { return m_children; }
     void removeChildren();
 
 private:
-    HistoryNode(HistoryEntry*, HistoryItem*);
+    HistoryNode(HistoryEntry*, HistoryItem*, int64_t frameID);
 
     HistoryEntry* m_entry;
     Vector<OwnPtr<HistoryNode> > m_children;
@@ -114,11 +114,11 @@ private:
 
 class HistoryEntry {
 public:
-    static PassOwnPtr<HistoryEntry> create(HistoryItem* root);
-    PassOwnPtr<HistoryEntry> cloneAndReplace(HistoryItem* newItem, bool clipAtTarget, Frame* targetFrame, Page*);
+    static PassOwnPtr<HistoryEntry> create(HistoryItem* root, int64_t frameID);
+    PassOwnPtr<HistoryEntry> cloneAndReplace(HistoryItem* newItem, bool clipAtTarget, LocalFrame* targetFrame, Page*);
 
-    HistoryNode* historyNodeForFrame(Frame*);
-    HistoryItem* itemForFrame(Frame*);
+    HistoryNode* historyNodeForFrame(LocalFrame*);
+    HistoryItem* itemForFrame(LocalFrame*);
     HistoryItem* root() const { return m_root->value(); }
     HistoryNode* rootHistoryNode() const { return m_root.get(); }
 
@@ -126,7 +126,7 @@ private:
     friend class HistoryNode;
 
     HistoryEntry() { }
-    explicit HistoryEntry(HistoryItem* root);
+    explicit HistoryEntry(HistoryItem* root, int64_t frameID);
 
     OwnPtr<HistoryNode> m_root;
     HashMap<uint64_t, HistoryNode*> m_framesToItems;
@@ -143,33 +143,27 @@ public:
     // navigation, call FrameLoaderClient::navigateBackForward().
     void goToItem(HistoryItem*, ResourceRequestCachePolicy);
 
-    void updateBackForwardListForFragmentScroll(Frame*, HistoryItem*);
-    void updateForCommit(Frame*, HistoryItem*, HistoryCommitType);
+    void updateBackForwardListForFragmentScroll(LocalFrame*, HistoryItem*);
+    void updateForCommit(LocalFrame*, HistoryItem*, HistoryCommitType);
 
     PassRefPtr<HistoryItem> currentItemForExport();
     PassRefPtr<HistoryItem> previousItemForExport();
-    HistoryItem* itemForNewChildFrame(Frame*) const;
-    void removeChildrenForRedirect(Frame*);
-
-    void setDefersLoading(bool);
+    HistoryItem* itemForNewChildFrame(LocalFrame*) const;
+    void removeChildrenForRedirect(LocalFrame*);
 
 private:
     void goToEntry(PassOwnPtr<HistoryEntry>, ResourceRequestCachePolicy);
-    typedef HashMap<RefPtr<Frame>, RefPtr<HistoryItem> > HistoryFrameLoadSet;
-    void recursiveGoToEntry(Frame*, HistoryFrameLoadSet& sameDocumentLoads, HistoryFrameLoadSet& differentDocumentLoads);
+    typedef HashMap<RefPtr<LocalFrame>, RefPtr<HistoryItem> > HistoryFrameLoadSet;
+    void recursiveGoToEntry(LocalFrame*, HistoryFrameLoadSet& sameDocumentLoads, HistoryFrameLoadSet& differentDocumentLoads);
 
-    void updateForInitialLoadInChildFrame(Frame*, HistoryItem*);
-    void createNewBackForwardItem(Frame*, HistoryItem*, bool doClip);
+    void updateForInitialLoadInChildFrame(LocalFrame*, HistoryItem*);
+    void createNewBackForwardItem(LocalFrame*, HistoryItem*, bool doClip);
 
     Page* m_page;
 
     OwnPtr<HistoryEntry> m_currentEntry;
     OwnPtr<HistoryEntry> m_previousEntry;
     OwnPtr<HistoryEntry> m_provisionalEntry;
-
-    bool m_defersLoading;
-    RefPtr<HistoryItem> m_deferredItem;
-    ResourceRequestCachePolicy m_deferredCachePolicy;
 };
 
 } // namespace WebCore

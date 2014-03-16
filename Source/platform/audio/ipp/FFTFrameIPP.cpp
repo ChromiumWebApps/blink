@@ -35,8 +35,6 @@
 
 #include "platform/audio/FFTFrame.h"
 
-#include "platform/audio/VectorMath.h"
-
 #include "wtf/MathExtras.h"
 
 namespace WebCore {
@@ -101,46 +99,12 @@ FFTFrame::~FFTFrame()
     ippsDFTFree_R_32f(m_DFTSpec);
 }
 
-void FFTFrame::multiply(const FFTFrame& frame)
-{
-    FFTFrame& frame1 = *this;
-    FFTFrame& frame2 = const_cast<FFTFrame&>(frame);
-
-    float* realP1 = frame1.realData();
-    float* imagP1 = frame1.imagData();
-    const float* realP2 = frame2.realData();
-    const float* imagP2 = frame2.imagData();
-
-    unsigned halfSize = fftSize() / 2;
-    float real0 = realP1[0];
-    float imag0 = imagP1[0];
-
-    VectorMath::zvmul(realP1, imagP1, realP2, imagP2, realP1, imagP1, halfSize);
-
-    // Multiply the packed DC/nyquist component
-    realP1[0] = real0 * realP2[0];
-    imagP1[0] = imag0 * imagP2[0];
-
-    // Scale accounts the peculiar scaling of vecLib on the Mac.
-    // This ensures the right scaling all the way back to inverse FFT.
-    // FIXME: if we change the scaling on the Mac then this scale
-    // factor will need to change too.
-    float scale = 0.5f;
-
-    VectorMath::vsmul(realP1, 1, &scale, realP1, 1, halfSize);
-    VectorMath::vsmul(imagP1, 1, &scale, imagP1, 1, halfSize);
-}
-
 void FFTFrame::doFFT(const float* data)
 {
     Ipp32f* complexP = m_complexData.data();
 
     // Compute Forward transform to perm format.
     ippsDFTFwd_RToPerm_32f(reinterpret_cast<Ipp32f*>(const_cast<float*>(data)), complexP, m_DFTSpec, m_buffer);
-
-    const Ipp32f scale = 2.0f;
-
-    ippsMulC_32f_I(scale, complexP, m_FFTSize);
 
     Ipp32f* realP = m_realData.data();
     Ipp32f* imagP = m_imagData.data();
@@ -155,7 +119,7 @@ void FFTFrame::doInverseFFT(float* data)
     ippsDFTInv_PermToR_32f(complexP, reinterpret_cast<Ipp32f*>(data), m_DFTSpec, m_buffer);
 
     // Scale so that a forward then inverse FFT yields exactly the original data.
-    const float scale = 1.0 / (2 * m_FFTSize);
+    const float scale = 1.0 / m_FFTSize;
 
     ippsMulC_32f_I(scale, reinterpret_cast<Ipp32f*>(data), m_FFTSize);
 }

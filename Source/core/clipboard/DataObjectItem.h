@@ -32,6 +32,7 @@
 #define DataObjectItem_h
 
 #include "core/fileapi/File.h"
+#include "heap/Handle.h"
 #include "platform/SharedBuffer.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/RefCounted.h"
@@ -42,30 +43,32 @@ namespace WebCore {
 
 class Blob;
 
-class DataObjectItem : public RefCounted<DataObjectItem> {
+class DataObjectItem : public RefCountedWillBeGarbageCollectedFinalized<DataObjectItem> {
 public:
     enum Kind {
         StringKind,
         FileKind
     };
 
-    static PassRefPtr<DataObjectItem> createFromString(const String& type, const String& data);
-    static PassRefPtr<DataObjectItem> createFromFile(PassRefPtr<File>);
-    static PassRefPtr<DataObjectItem> createFromURL(const String& url, const String& title);
-    static PassRefPtr<DataObjectItem> createFromHTML(const String& html, const KURL& baseURL);
-    static PassRefPtr<DataObjectItem> createFromSharedBuffer(const String& filename, PassRefPtr<SharedBuffer>);
-    static PassRefPtr<DataObjectItem> createFromPasteboard(const String& type, uint64_t sequenceNumber);
+    static PassRefPtrWillBeRawPtr<DataObjectItem> createFromString(const String& type, const String& data);
+    static PassRefPtrWillBeRawPtr<DataObjectItem> createFromFile(PassRefPtrWillBeRawPtr<File>);
+    static PassRefPtrWillBeRawPtr<DataObjectItem> createFromURL(const String& url, const String& title);
+    static PassRefPtrWillBeRawPtr<DataObjectItem> createFromHTML(const String& html, const KURL& baseURL);
+    static PassRefPtrWillBeRawPtr<DataObjectItem> createFromSharedBuffer(const String& filename, PassRefPtr<SharedBuffer>);
+    static PassRefPtrWillBeRawPtr<DataObjectItem> createFromPasteboard(const String& type, uint64_t sequenceNumber);
 
     Kind kind() const { return m_kind; }
     String type() const { return m_type; }
     String getAsString() const;
-    PassRefPtr<Blob> getAsFile() const;
+    PassRefPtrWillBeRawPtr<Blob> getAsFile() const;
 
     // Used to support legacy DataTransfer APIs and renderer->browser serialization.
     PassRefPtr<SharedBuffer> sharedBuffer() const { return m_sharedBuffer; }
     String title() const { return m_title; }
     KURL baseURL() const { return m_baseURL; }
     bool isFilename() const;
+
+    void trace(Visitor*);
 
 private:
     enum DataSource {
@@ -81,7 +84,7 @@ private:
     String m_type;
 
     String m_data;
-    RefPtr<File> m_file;
+    RefPtrWillBeMember<File> m_file;
     RefPtr<SharedBuffer> m_sharedBuffer;
     // Optional metadata. Currently used for URL, HTML, and dragging files in.
     String m_title;

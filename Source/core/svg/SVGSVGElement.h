@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
  * Copyright (C) 2004, 2005, 2006, 2007, 2010 Rob Buis <buis@kde.org>
+ * Copyright (C) 2014 Google, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -133,8 +134,6 @@ private:
     explicit SVGSVGElement(Document&);
     virtual ~SVGSVGElement();
 
-    virtual bool isSVGSVGElement() const OVERRIDE { return true; }
-
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
 
     virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE;
@@ -151,19 +150,18 @@ private:
 
     void updateCurrentTranslate();
 
-    enum CollectIntersectionOrEnclosure {
-        CollectIntersectionList,
-        CollectEnclosureList
+    enum CheckIntersectionOrEnclosure {
+        CheckIntersection,
+        CheckEnclosure
     };
 
-    PassRefPtr<NodeList> collectIntersectionOrEnclosureList(const FloatRect&, SVGElement*, CollectIntersectionOrEnclosure) const;
+    bool checkIntersectionOrEnclosure(const SVGElement&, const FloatRect&, CheckIntersectionOrEnclosure) const;
+    PassRefPtr<NodeList> collectIntersectionOrEnclosureList(const FloatRect&, SVGElement*, CheckIntersectionOrEnclosure) const;
 
     RefPtr<SVGAnimatedLength> m_x;
     RefPtr<SVGAnimatedLength> m_y;
     RefPtr<SVGAnimatedLength> m_width;
     RefPtr<SVGAnimatedLength> m_height;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGSVGElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
     virtual AffineTransform localCoordinateSpaceTransform(SVGElement::CTMScope) const OVERRIDE;
 
@@ -174,13 +172,6 @@ private:
 
     friend class SVGCurrentTranslateTearOff;
 };
-
-inline bool isSVGSVGElement(const Node& node)
-{
-    return node.isSVGElement() && toSVGElement(node).isSVGSVGElement();
-}
-
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGSVGElement);
 
 } // namespace WebCore
 

@@ -31,20 +31,22 @@
 /**
  * @constructor
  * @extends {WebInspector.SplitView}
- * @param {!WebInspector.TimelineView} timelineView
+ * @param {!WebInspector.TimelineModeViewDelegate} delegate
  * @param {!WebInspector.TimelineModel} model
  */
-WebInspector.MemoryStatistics = function(timelineView, model)
+WebInspector.MemoryStatistics = function(delegate, model)
 {
     WebInspector.SplitView.call(this, true, false);
 
     this.element.id = "memory-graphs-container";
 
-    this._timelineView = timelineView;
+    this._delegate = delegate;
+    this._model = model;
+    this._calculator = new WebInspector.TimelineCalculator(this._model);
 
     this._graphsContainer = this.mainElement();
     this._createCurrentValuesBar();
-    this._canvasView = new WebInspector.ViewWithResizeCallback(this._resize.bind(this));
+    this._canvasView = new WebInspector.VBoxWithResizeCallback(this._resize.bind(this));
     this._canvasView.show(this._graphsContainer);
     this._canvasContainer = this._canvasView.element;
     this._canvasContainer.id = "memory-graphs-canvas-container";
@@ -61,7 +63,7 @@ WebInspector.MemoryStatistics = function(timelineView, model)
 
     // Populate sidebar
     this.sidebarElement().createChild("div", "sidebar-tree sidebar-tree-section").textContent = WebInspector.UIString("COUNTERS");
-    this._createAllCounters();
+    this.createAllCounters();
 }
 
 /**
@@ -102,9 +104,8 @@ WebInspector.MemoryStatistics.Counter.prototype = {
      */
     _calculateVisibleIndexes: function(calculator)
     {
-        // FIXME: these 1000 constants shouldn't be here.
-        var start = calculator.minimumBoundary() * 1000;
-        var end = calculator.maximumBoundary() * 1000;
+        var start = calculator.minimumBoundary();
+        var end = calculator.maximumBoundary();
 
         // Maximum index of element whose time <= start.
         this._minimumIndex = Number.constrain(this.times.upperBound(start) - 1, 0, this.times.length - 1);
@@ -250,13 +251,13 @@ WebInspector.MemoryStatistics.prototype = {
         throw new Error("Not implemented");
     },
 
-    _createAllCounters: function()
+    createAllCounters: function()
     {
         throw new Error("Not implemented");
     },
 
     /**
-     * @param {!TimelineAgent.TimelineEvent} record
+     * @param {!WebInspector.TimelineModel.Record} record
      */
     addRecord: function(record)
     {
@@ -279,11 +280,18 @@ WebInspector.MemoryStatistics.prototype = {
         var parentElement = this._canvas.parentElement;
         this._canvas.width = parentElement.clientWidth;
         this._canvas.height = parentElement.clientHeight;
+        var timelinePaddingLeft = 15;
+        this._calculator.setDisplayWindow(timelinePaddingLeft, this._canvas.width);
         this.refresh();
     },
 
-    setWindowTimes: function()
+    /**
+     * @param {number} startTime
+     * @param {number} endTime
+     */
+    setWindowTimes: function(startTime, endTime)
     {
+        this._calculator.setWindow(startTime, endTime);
         this.scheduleRefresh();
     },
 
@@ -294,18 +302,10 @@ WebInspector.MemoryStatistics.prototype = {
         this._refreshTimer = setTimeout(this.refresh.bind(this), 300);
     },
 
-    /**
-     * @return {boolean}
-     */
-    supportsGlueParentMode: function()
-    {
-        return true;
-    },
-
     draw: function()
     {
         for (var i = 0; i < this._counters.length; ++i) {
-            this._counters[i]._calculateVisibleIndexes(this._timelineView.calculator);
+            this._counters[i]._calculateVisibleIndexes(this._calculator);
             this._counters[i]._calculateXValues(this._canvas.width);
         }
         this._clear();
@@ -317,7 +317,7 @@ WebInspector.MemoryStatistics.prototype = {
      */
     _onClick: function(event)
     {
-        var x = event.x - this._canvasContainer.offsetParent.offsetLeft;
+        var x = event.x - this._canvasContainer.totalOffsetLeft();
         var minDistance = Infinity;
         var bestTime;
         for (var i = 0; i < this._counterUI.length; ++i) {
@@ -332,7 +332,28 @@ WebInspector.MemoryStatistics.prototype = {
             }
         }
         if (bestTime !== undefined)
-            this._timelineView.revealRecordAt(bestTime / 1000);
+            this._revealRecordAt(bestTime);
+    },
+
+    /**
+     * @param {number} time
+     */
+    _revealRecordAt: function(time)
+    {
+        var recordToReveal;
+        function findRecordToReveal(record)
+        {
+            if (record.startTime <= time && time <= record.endTime) {
+                recordToReveal = record;
+                return true;
+            }
+            // If there is no record containing the time than use the latest one before that time.
+            if (!recordToReveal || record.endTime < time && recordToReveal.endTime < record.endTime)
+                recordToReveal = record;
+            return false;
+        }
+        this._model.forAllRecords(null, findRecordToReveal);
+        this._delegate.selectRecord(recordToReveal);
     },
 
     /**
@@ -355,7 +376,7 @@ WebInspector.MemoryStatistics.prototype = {
      */
     _onMouseMove: function(event)
     {
-        var x = event.x - this._canvasContainer.offsetParent.offsetLeft;
+        var x = event.x - this._canvasContainer.totalOffsetLeft();
         this._markerXPosition = x;
         this._refreshCurrentValues();
     },
@@ -371,13 +392,17 @@ WebInspector.MemoryStatistics.prototype = {
     refresh: function()
     {
         delete this._refreshTimer;
-        this._timelineGrid.updateDividers(this._timelineView.calculator);
+        this._timelineGrid.updateDividers(this._calculator);
         this.draw();
         this._refreshCurrentValues();
     },
 
     refreshRecords: function()
     {
+        this.reset();
+        var records = this._model.records();
+        for (var i = 0; i < records.length; ++i)
+            this.addRecord(records[i]);
     },
 
     /**
@@ -394,6 +419,22 @@ WebInspector.MemoryStatistics.prototype = {
     {
         var ctx = this._canvas.getContext("2d");
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    },
+
+    /**
+     * @param {?WebInspector.TimelineModel.Record} record
+     * @param {string=} regex
+     * @param {boolean=} selectRecord
+     */
+    highlightSearchResult: function(record, regex, selectRecord)
+    {
+    },
+
+    /**
+     * @param {?WebInspector.TimelineModel.Record} record
+     */
+    setSelectedRecord: function(record)
+    {
     },
 
     __proto__: WebInspector.SplitView.prototype

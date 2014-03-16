@@ -50,23 +50,16 @@ WebInspector.TimelineFrameOverview = function(model, frameModel)
     this._actualOuterBarWidth = this._maxInnerBarWidth + this._actualPadding;
 
     this._fillStyles = {};
-    var categories = WebInspector.TimelinePresentationModel.categories();
+    var categories = WebInspector.TimelineUIUtils.categories();
     for (var category in categories)
-        this._fillStyles[category] = WebInspector.TimelinePresentationModel.createFillStyleForCategory(this._context, this._maxInnerBarWidth, 0, categories[category]);
+        this._fillStyles[category] = WebInspector.TimelineUIUtils.createFillStyleForCategory(this._context, this._maxInnerBarWidth, 0, categories[category]);
+
     this._frameTopShadeGradient = this._context.createLinearGradient(0, 0, 0, this._topPadding);
     this._frameTopShadeGradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
     this._frameTopShadeGradient.addColorStop(1, "rgba(255, 255, 255, 0.2)");
 }
 
 WebInspector.TimelineFrameOverview.prototype = {
-    /**
-     * @return {!Object.<string, !CanvasGradient>}
-     */
-    categoryFillStyles: function()
-    {
-        return this._fillStyles;
-    },
-
     reset: function()
     {
         this._recordsPerBar = 1;
@@ -86,29 +79,11 @@ WebInspector.TimelineFrameOverview.prototype = {
 
         this._context.save();
         var scale = (this._canvas.height - this._topPadding) / this._computeTargetFrameLength(visibleFrames);
-        this._renderBars(frames, scale, this._canvas.height);
+        this._renderBars(visibleFrames, scale, this._canvas.height);
         this._context.fillStyle = this._frameTopShadeGradient;
         this._context.fillRect(0, 0, this._canvas.width, this._topPadding);
         this._drawFPSMarks(scale, this._canvas.height);
         this._context.restore();
-    },
-
-    /**
-     * @param {number} x0
-     * @param {number} y0
-     * @param {number} width
-     * @param {number} height
-     */
-    _setCanvasWindow: function(x0, y0, width, height)
-    {
-        this._context.translate(x0, y0);
-        this._context.beginPath();
-        this._context.moveTo(0, 0);
-        this._context.lineTo(width, 0);
-        this._context.lineTo(width, height);
-        this._context.lineTo(0, height);
-        this._context.lineTo(0, 0);
-        this._context.clip();
     },
 
     /**
@@ -157,7 +132,7 @@ WebInspector.TimelineFrameOverview.prototype = {
         // Optimize appearance for 30fps, but leave some space so it's evident when a frame overflows.
         // However, if at least half frames won't fit at this scale, fall back to using autoscale.
         const targetFPS = 20;
-        var result = 1.0 / targetFPS;
+        var result = 1000.0 / targetFPS;
         if (result >= medianFrameLength)
             return result;
 
@@ -214,7 +189,7 @@ WebInspector.TimelineFrameOverview.prototype = {
         for (var i = 0; i < fpsMarks.length; ++i) {
             var fps = fpsMarks[i];
             // Draw lines one pixel above they need to be, so 60pfs line does not cross most of the frames tops.
-            var y = height - Math.floor(1.0 / fps * scale) - 0.5;
+            var y = height - Math.floor(1000.0 / fps * scale) - 0.5;
             var label = WebInspector.UIString("%d\u2009fps", fps);
             var labelWidth = this._context.measureText(label).width + 2 * labelPadding;
             var labelX = this._canvas.width;
@@ -248,7 +223,7 @@ WebInspector.TimelineFrameOverview.prototype = {
      */
     _renderBar: function(left, width, windowHeight, frame, scale)
     {
-        var categories = Object.keys(WebInspector.TimelinePresentationModel.categories());
+        var categories = Object.keys(WebInspector.TimelineUIUtils.categories());
         var x = Math.floor(left) + 0.5;
         width = Math.floor(width);
 
@@ -270,7 +245,7 @@ WebInspector.TimelineFrameOverview.prototype = {
             this._context.scale(width / this._maxInnerBarWidth, 1);
             this._context.fillStyle = this._fillStyles[category];
             this._context.fillRect(0, y, this._maxInnerBarWidth, Math.floor(height));
-            this._context.strokeStyle = WebInspector.TimelinePresentationModel.categories()[category].borderColor;
+            this._context.strokeStyle = WebInspector.TimelineUIUtils.categories()[category].borderColor;
             this._context.beginPath();
             this._context.moveTo(0, y);
             this._context.lineTo(this._maxInnerBarWidth, y);

@@ -60,7 +60,7 @@ ErrorEvent::ErrorEvent(const AtomicString& type, const ErrorEventInit& initializ
     ScriptWrappable::init(this);
 }
 
-ErrorEvent::ErrorEvent(const String& message, const String& fileName, unsigned lineNumber, unsigned columnNumber, PassRefPtr<DOMWrapperWorld> world)
+ErrorEvent::ErrorEvent(const String& message, const String& fileName, unsigned lineNumber, unsigned columnNumber, DOMWrapperWorld* world)
     : Event(EventTypeNames::error, false, true)
     , m_sanitizedMessage(message)
     , m_fileName(fileName)
@@ -84,6 +84,11 @@ ErrorEvent::~ErrorEvent()
 const AtomicString& ErrorEvent::interfaceName() const
 {
     return EventNames::ErrorEvent;
+}
+
+void ErrorEvent::trace(Visitor* visitor)
+{
+    Event::trace(visitor);
 }
 
 } // namespace WebCore

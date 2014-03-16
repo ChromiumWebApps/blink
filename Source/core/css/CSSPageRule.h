@@ -23,6 +23,7 @@
 #define CSSPageRule_h
 
 #include "core/css/CSSRule.h"
+#include "heap/Handle.h"
 
 namespace WebCore {
 
@@ -33,7 +34,10 @@ class StyleRuleCSSStyleDeclaration;
 
 class CSSPageRule FINAL : public CSSRule {
 public:
-    static PassRefPtr<CSSPageRule> create(StyleRulePage* rule, CSSStyleSheet* sheet) { return adoptRef(new CSSPageRule(rule, sheet)); }
+    static PassRefPtrWillBeRawPtr<CSSPageRule> create(StyleRulePage* rule, CSSStyleSheet* sheet)
+    {
+        return adoptRefWillBeNoop(new CSSPageRule(rule, sheet));
+    }
 
     virtual ~CSSPageRule();
 
@@ -46,10 +50,12 @@ public:
     String selectorText() const;
     void setSelectorText(const String&);
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     CSSPageRule(StyleRulePage*, CSSStyleSheet*);
 
-    RefPtr<StyleRulePage> m_pageRule;
+    RefPtrWillBeMember<StyleRulePage> m_pageRule;
     mutable RefPtr<StyleRuleCSSStyleDeclaration> m_propertiesCSSOMWrapper;
 };
 

@@ -61,6 +61,8 @@ discretionary-ligatures
 no-discretionary-ligatures
 historical-ligatures
 no-historical-ligatures
+contextual
+no-contextual
 
 //
 // CSS_PROP_FONT_WEIGHT:
@@ -779,6 +781,7 @@ ease-in
 ease-out
 ease-in-out
 step-start
+step-middle
 step-end
 
 //
@@ -1008,6 +1011,7 @@ script
 // touch-action
 pan-x
 pan-y
+manipulation
 
 // justify-self
 // auto

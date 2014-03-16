@@ -37,7 +37,7 @@ WebInspector.Popover = function(popoverHelper)
 {
     WebInspector.View.call(this);
     this.markAsRoot();
-    this.element.className = "popover custom-popup-vertical-scroll custom-popup-horizontal-scroll";
+    this.element.className = "popover custom-popup-vertical-scroll custom-popup-horizontal-scroll"; // Override
 
     this._popupArrowElement = document.createElement("div");
     this._popupArrowElement.className = "arrow";
@@ -154,7 +154,7 @@ WebInspector.Popover.prototype = {
         // Skinny tooltips are not pretty, their arrow location is not nice.
         preferredWidth = Math.max(preferredWidth, 50);
         // Position relative to main DevTools element.
-        const container = WebInspector.inspectorView.devtoolsElement();
+        const container = WebInspector.Dialog.modalHostView().element;
         const totalWidth = container.offsetWidth;
         const totalHeight = container.offsetHeight;
 

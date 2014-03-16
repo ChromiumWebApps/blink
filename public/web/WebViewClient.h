@@ -62,7 +62,6 @@ class WebFrame;
 class WebGeolocationClient;
 class WebGeolocationService;
 class WebGestureEvent;
-class WebHelperPlugin;
 class WebHitTestResult;
 class WebImage;
 class WebInputElement;
@@ -82,7 +81,6 @@ class WebView;
 class WebWidget;
 struct WebColorSuggestion;
 struct WebConsoleMessage;
-struct WebContextMenuData;
 struct WebDateTimeChooserParams;
 struct WebPoint;
 struct WebPopupMenuInfo;
@@ -147,10 +145,6 @@ public:
     // files in the directory. Returns false if the WebFileChooserCompletion
     // will never be called.
     virtual bool enumerateChosenDirectory(const WebString& path, WebFileChooserCompletion*) { return false; }
-
-    // Creates the main WebFrame for the specified WebHelperPlugin.
-    // Called by WebHelperPlugin to provide the WebFrameClient interface for the WebFrame.
-    virtual void initializeHelperPluginWebFrame(WebHelperPlugin*) { }
 
     // Navigational --------------------------------------------------------
 
@@ -261,14 +255,6 @@ public:
 
     // Called when keyboard focus switches to an anchor with the given URL.
     virtual void setKeyboardFocusURL(const WebURL&) { }
-
-    // Shows a context menu with commands relevant to a specific element on
-    // the given frame. Additional context data is supplied.
-    virtual void showContextMenu(WebFrame*, const WebContextMenuData&) { }
-
-    // Called when the data attached to the currently displayed context menu is
-    // invalidated. The context menu may be closed if possible.
-    virtual void clearContextMenu() { }
 
     // Called when a drag-n-drop operation should begin.
     virtual void startDragging(WebFrame*, const WebDragData&, WebDragOperationsMask, const WebImage&, const WebPoint& dragImageOffset) { }

@@ -32,12 +32,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGImageElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGImageElement::SVGImageElement(Document& document)
     : SVGGraphicsElement(SVGNames::imageTag, document)
     , SVGURIReference(this)
@@ -47,6 +41,7 @@ inline SVGImageElement::SVGImageElement(Document& document)
     , m_height(SVGAnimatedLength::create(this, SVGNames::heightAttr, SVGLength::create(LengthModeHeight)))
     , m_preserveAspectRatio(SVGAnimatedPreserveAspectRatio::create(this, SVGNames::preserveAspectRatioAttr, SVGPreserveAspectRatio::create()))
     , m_imageLoader(this)
+    , m_needsLoaderURIUpdate(true)
 {
     ScriptWrappable::init(this);
 
@@ -54,9 +49,7 @@ inline SVGImageElement::SVGImageElement(Document& document)
     addToPropertyMap(m_y);
     addToPropertyMap(m_width);
     addToPropertyMap(m_height);
-
     addToPropertyMap(m_preserveAspectRatio);
-    registerAnimatedPropertiesForSVGImageElement();
 }
 
 PassRefPtr<SVGImageElement> SVGImageElement::create(Document& document)
@@ -149,7 +142,10 @@ void SVGImageElement::svgAttributeChanged(const QualifiedName& attrName)
         updateRelativeLengthsInformation();
 
     if (SVGURIReference::isKnownAttribute(attrName)) {
-        m_imageLoader.updateFromElementIgnoringPreviousError();
+        if (inDocument())
+            m_imageLoader.updateFromElementIgnoringPreviousError();
+        else
+            m_needsLoaderURIUpdate = true;
         return;
     }
 
@@ -186,7 +182,7 @@ RenderObject* SVGImageElement::createRenderer(RenderStyle*)
 
 bool SVGImageElement::haveLoadedRequiredResources()
 {
-    return !m_imageLoader.hasPendingActivity();
+    return !m_needsLoaderURIUpdate && !m_imageLoader.hasPendingActivity();
 }
 
 void SVGImageElement::attach(const AttachContext& context)
@@ -206,9 +202,19 @@ Node::InsertionNotificationRequest SVGImageElement::insertedInto(ContainerNode* 
     SVGGraphicsElement::insertedInto(rootParent);
     if (!rootParent->inDocument())
         return InsertionDone;
-    // Update image loader, as soon as we're living in the tree.
-    // We can only resolve base URIs properly, after that!
-    m_imageLoader.updateFromElement();
+
+    // We can only resolve base URIs properly after tree insertion - hence, URI mutations while
+    // detached are deferred until this point.
+    if (m_needsLoaderURIUpdate) {
+        m_imageLoader.updateFromElementIgnoringPreviousError();
+        m_needsLoaderURIUpdate = false;
+    } else {
+        // A previous loader update may have failed to actually fetch the image if the document
+        // was inactive. In that case, force a re-update (but don't clear previous errors).
+        if (!m_imageLoader.image())
+            m_imageLoader.updateFromElement();
+    }
+
     return InsertionDone;
 }
 

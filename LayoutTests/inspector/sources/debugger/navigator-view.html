@@ -7,7 +7,7 @@
 <script>
 function test()
 {
-    WebInspector.showPanel("sources");
+    WebInspector.inspectorView.showPanel("sources");
     InspectorTest.createWorkspace(true);
     var panel = new WebInspector.SourcesPanel(InspectorTest.testWorkspace);
     var navigator = panel._navigator;
@@ -88,7 +88,7 @@ function test()
 
     InspectorTest.addResult("Removing all resources:");
     for (var i = 0; i < uiSourceCodes.length; ++i)
-        navigator.removeUISourceCode(uiSourceCodes[i]);
+        navigator._removeUISourceCode(uiSourceCodes[i]);
     dumpNavigator();
 
     InspectorTest.completeTest();

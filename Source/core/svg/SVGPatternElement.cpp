@@ -32,11 +32,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGPatternElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGPatternElement::SVGPatternElement(Document& document)
     : SVGElement(SVGNames::patternTag, document)
     , SVGURIReference(this)
@@ -59,7 +54,6 @@ inline SVGPatternElement::SVGPatternElement(Document& document)
     addToPropertyMap(m_patternTransform);
     addToPropertyMap(m_patternUnits);
     addToPropertyMap(m_patternContentUnits);
-    registerAnimatedPropertiesForSVGPatternElement();
 }
 
 PassRefPtr<SVGPatternElement> SVGPatternElement::create(Document& document)
@@ -198,8 +192,8 @@ void SVGPatternElement::collectPatternAttributes(PatternAttributes& attributes) 
 
         // Respect xlink:href, take attributes from referenced element
         Node* refNode = SVGURIReference::targetElementFromIRIString(current->hrefString(), document());
-        if (refNode && refNode->hasTagName(SVGNames::patternTag)) {
-            current = toSVGPatternElement(const_cast<const Node*>(refNode));
+        if (isSVGPatternElement(refNode)) {
+            current = toSVGPatternElement(refNode);
 
             // Cycle detection
             if (processedPatterns.contains(current))

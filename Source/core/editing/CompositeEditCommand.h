@@ -42,7 +42,7 @@ class EditCommandComposition FINAL : public UndoStep {
 public:
     static PassRefPtr<EditCommandComposition> create(Document*, const VisibleSelection&, const VisibleSelection&, EditAction);
 
-    virtual bool belongsTo(const Frame&) const OVERRIDE;
+    virtual bool belongsTo(const LocalFrame&) const OVERRIDE;
     virtual void unapply() OVERRIDE;
     virtual void reapply() OVERRIDE;
     virtual EditAction editingAction() const OVERRIDE { return m_editAction; }
@@ -121,7 +121,7 @@ protected:
     void removeNodePreservingChildren(PassRefPtr<Node>, ShouldAssumeContentIsAlwaysEditable = DoNotAssumeContentIsAlwaysEditable);
     void removeNodeAndPruneAncestors(PassRefPtr<Node>, Node* excludeNode = 0);
     void moveRemainingSiblingsToNewParent(Node*, Node* pastLastNodeToMove, PassRefPtr<Element> prpNewParent);
-    void updatePositionForNodeRemovalPreservingChildren(Position&, Node*);
+    void updatePositionForNodeRemovalPreservingChildren(Position&, Node&);
     void prune(PassRefPtr<Node>, Node* excludeNode = 0);
     void replaceTextInNode(PassRefPtr<Text>, unsigned offset, unsigned count, const String& replacementText);
     Position replaceSelectedTextInNode(const String&);
@@ -152,7 +152,7 @@ protected:
     void moveParagraph(const VisiblePosition&, const VisiblePosition&, const VisiblePosition&, bool preserveSelection = false, bool preserveStyle = true, Node* constrainingAncestor = 0);
     void moveParagraphs(const VisiblePosition&, const VisiblePosition&, const VisiblePosition&, bool preserveSelection = false, bool preserveStyle = true, Node* constrainingAncestor = 0);
     void moveParagraphWithClones(const VisiblePosition& startOfParagraphToMove, const VisiblePosition& endOfParagraphToMove, Element* blockElement, Node* outerNode);
-    void cloneParagraphUnderNewElement(Position& start, Position& end, Node* outerNode, Element* blockElement);
+    void cloneParagraphUnderNewElement(const Position& start, const Position& end, Node* outerNode, Element* blockElement);
     void cleanupAfterDeletion(VisiblePosition destination = VisiblePosition());
 
     bool breakOutOfEmptyListItem();

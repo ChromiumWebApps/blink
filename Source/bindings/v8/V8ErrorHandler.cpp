@@ -34,12 +34,13 @@
 #include "V8ErrorEvent.h"
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/V8Binding.h"
+#include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/V8ScriptRunner.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/ThreadLocalEventNames.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 
 namespace WebCore {
 
@@ -65,14 +66,14 @@ v8::Local<v8::Value> V8ErrorHandler::callListenerFunction(ExecutionContext* cont
         v8::Local<v8::Function> callFunction = v8::Local<v8::Function>::Cast(listener);
         v8::Local<v8::Object> thisValue = isolate->GetCurrentContext()->Global();
 
-        v8::Local<v8::Value> error = getHiddenValue(isolate, jsEvent->ToObject(), "error");
+        v8::Local<v8::Value> error = V8HiddenValue::getHiddenValue(isolate, jsEvent->ToObject(), V8HiddenValue::error(isolate));
         if (error.IsEmpty())
             error = v8::Null(isolate);
 
         v8::Handle<v8::Value> parameters[5] = { v8String(isolate, errorEvent->message()), v8String(isolate, errorEvent->filename()), v8::Integer::New(isolate, errorEvent->lineno()), v8::Integer::New(isolate, errorEvent->colno()), error };
         v8::TryCatch tryCatch;
         tryCatch.SetVerbose(true);
-        if (worldType(isolate) == WorkerWorld)
+        if (DOMWrapperWorld::current(isolate)->isWorkerWorld())
             returnValue = V8ScriptRunner::callFunction(callFunction, context, thisValue, WTF_ARRAY_LENGTH(parameters), parameters, isolate);
         else
             returnValue = ScriptController::callFunction(context, callFunction, thisValue, WTF_ARRAY_LENGTH(parameters), parameters, isolate);
@@ -86,7 +87,7 @@ void V8ErrorHandler::storeExceptionOnErrorEventWrapper(ErrorEvent* event, v8::Ha
     v8::Local<v8::Value> wrappedEvent = toV8(event, v8::Handle<v8::Object>(), isolate);
     if (!wrappedEvent.IsEmpty()) {
         ASSERT(wrappedEvent->IsObject());
-        setHiddenValue(isolate, v8::Local<v8::Object>::Cast(wrappedEvent), "error", data);
+        V8HiddenValue::setHiddenValue(isolate, v8::Local<v8::Object>::Cast(wrappedEvent), V8HiddenValue::error(isolate), data);
     }
 }
 

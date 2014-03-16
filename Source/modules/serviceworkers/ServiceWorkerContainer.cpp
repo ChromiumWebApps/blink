@@ -33,15 +33,12 @@
 #include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/CallbackPromiseAdapter.h"
 #include "bindings/v8/ScriptPromiseResolver.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/frame/Frame.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "modules/serviceworkers/RegistrationOptionList.h"
 #include "modules/serviceworkers/ServiceWorker.h"
+#include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "public/platform/WebServiceWorkerProvider.h"
-#include "public/platform/WebServiceWorkerProviderClient.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 
@@ -49,21 +46,29 @@ using blink::WebServiceWorkerProvider;
 
 namespace WebCore {
 
-PassRefPtr<ServiceWorkerContainer> ServiceWorkerContainer::create()
+PassRefPtr<ServiceWorkerContainer> ServiceWorkerContainer::create(ExecutionContext* executionContext)
 {
-    return adoptRef(new ServiceWorkerContainer());
+    return adoptRef(new ServiceWorkerContainer(executionContext));
 }
 
 ServiceWorkerContainer::~ServiceWorkerContainer()
 {
 }
 
+void ServiceWorkerContainer::detachClient()
+{
+    if (m_provider) {
+        m_provider->setClient(0);
+        m_provider = 0;
+    }
+}
+
 ScriptPromise ServiceWorkerContainer::registerServiceWorker(ExecutionContext* executionContext, const String& url, const Dictionary& dictionary)
 {
     RegistrationOptionList options(dictionary);
     ASSERT(RuntimeEnabledFeatures::serviceWorkerEnabled());
-    ScriptPromise promise = ScriptPromise::createPending(executionContext);
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, executionContext);
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(executionContext);
+    ScriptPromise promise = resolver->promise();
 
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
     KURL patternURL = executionContext->completeURL(options.scope);
@@ -78,15 +83,15 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ExecutionContext* ex
         return promise;
     }
 
-    ensureProvider(executionContext)->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorker, ServiceWorkerError>(resolver, executionContext));
+    m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorker, ServiceWorkerError>(resolver, executionContext));
     return promise;
 }
 
 ScriptPromise ServiceWorkerContainer::unregisterServiceWorker(ExecutionContext* executionContext, const String& pattern)
 {
     ASSERT(RuntimeEnabledFeatures::serviceWorkerEnabled());
-    ScriptPromise promise = ScriptPromise::createPending(executionContext);
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, executionContext);
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(executionContext);
+    ScriptPromise promise = resolver->promise();
 
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
     KURL patternURL = executionContext->completeURL(pattern);
@@ -96,22 +101,15 @@ ScriptPromise ServiceWorkerContainer::unregisterServiceWorker(ExecutionContext* 
         return promise;
     }
 
-    ensureProvider(executionContext)->unregisterServiceWorker(patternURL, new CallbackPromiseAdapter<ServiceWorker, ServiceWorkerError>(resolver, executionContext));
+    m_provider->unregisterServiceWorker(patternURL, new CallbackPromiseAdapter<ServiceWorker, ServiceWorkerError>(resolver, executionContext));
     return promise;
 }
 
-ServiceWorkerContainer::ServiceWorkerContainer()
+ServiceWorkerContainer::ServiceWorkerContainer(ExecutionContext* executionContext)
+    : m_provider(ServiceWorkerContainerClient::from(executionContext)->provider())
 {
     ScriptWrappable::init(this);
-}
-
-WebServiceWorkerProvider* ServiceWorkerContainer::ensureProvider(ExecutionContext* executionContext)
-{
-    if (!m_provider) {
-        // FIXME: This is temporarily hooked up here until we hook up to the loading process, or should be replaced with an interface that is dedicated for scripting.
-        m_provider = toDocument(executionContext)->frame()->loader().client()->createServiceWorkerProvider(nullptr);
-    }
-    return m_provider.get();
+    m_provider->setClient(this);
 }
 
 } // namespace WebCore

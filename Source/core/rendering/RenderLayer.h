@@ -45,7 +45,7 @@
 #ifndef RenderLayer_h
 #define RenderLayer_h
 
-#include "core/rendering/CompositedLayerMappingPtr.h"
+#include "core/rendering/compositing/CompositedLayerMappingPtr.h"
 #include "core/rendering/LayerPaintingInfo.h"
 #include "core/rendering/RenderBox.h"
 #include "core/rendering/RenderLayerBlendInfo.h"
@@ -99,6 +99,7 @@ private:
 };
 
 class RenderLayer {
+    WTF_MAKE_NONCOPYABLE(RenderLayer);
 public:
     friend class RenderReplica;
     // FIXME: Needed until we move all the necessary bits to the new class.
@@ -130,15 +131,16 @@ public:
     void styleChanged(StyleDifference, const RenderStyle* oldStyle);
 
     bool isSelfPaintingLayer() const { return m_isSelfPaintingLayer; }
+    bool isOverflowOnlyLayer() const { return m_layerType == OverflowClipLayer; }
+    bool isForcedLayer() const { return m_layerType == ForcedLayer; }
 
-    bool isOverflowOnlyLayer() const { return m_isOverflowOnlyLayer; }
-    void setIsOverflowOnlyLayer(bool isOverflowOnlyLayer) { m_isOverflowOnlyLayer = isOverflowOnlyLayer; }
+    void setLayerType(LayerType layerType) { m_layerType = layerType; }
 
     bool cannotBlitToWindow() const;
 
     bool isTransparent() const;
     RenderLayer* transparentPaintingAncestor();
-    void beginTransparencyLayers(GraphicsContext*, const RenderLayer* rootLayer, const LayoutRect& paintDirtyRect, PaintBehavior);
+    void beginTransparencyLayers(GraphicsContext*, const RenderLayer* rootLayer, const LayoutRect& paintDirtyRect, const LayoutSize& subPixelAccumulation, PaintBehavior);
 
     bool isReflection() const { return renderer()->isReplica(); }
     RenderLayerReflectionInfo* reflectionInfo() { return m_reflectionInfo.get(); }
@@ -356,7 +358,7 @@ public:
     // compositing state may legally be read.
     bool isAllowedToQueryCompositingState() const;
 
-    CompositedLayerMappingPtr compositedLayerMapping() const { return m_compositedLayerMapping.get(); }
+    CompositedLayerMappingPtr compositedLayerMapping() const;
     CompositedLayerMappingPtr ensureCompositedLayerMapping();
 
     // NOTE: If you are using hasCompositedLayerMapping to determine the state of compositing for this layer,
@@ -424,11 +426,17 @@ public:
     bool isInTopLayerSubtree() const;
 
     enum ViewportConstrainedNotCompositedReason {
-        NoNotCompositedReason,
+        NoNotCompositedReason = 0,
         NotCompositedForBoundsOutOfView,
         NotCompositedForNonViewContainer,
         NotCompositedForNoVisibleContent,
         NotCompositedForUnscrollableAncestors,
+        NumNotCompositedReasons,
+
+        // This is the number of bits used to store the viewport constrained not composited
+        // reasons. We define this constant since sizeof won't return the number of bits, and we
+        // shouldn't duplicate the constant.
+        ViewportConstrainedNotCompositedReasonBits = 3
     };
 
     void setViewportConstrainedNotCompositedReason(ViewportConstrainedNotCompositedReason reason) { m_compositingProperties.viewportConstrainedNotCompositedReason = reason; }
@@ -482,8 +490,7 @@ private:
     void setAncestorChainHasOutOfFlowPositionedDescendant();
     void dirtyAncestorChainHasOutOfFlowPositionedDescendantStatus();
 
-    void clipToRect(RenderLayer* rootLayer, GraphicsContext*, const LayoutRect& paintDirtyRect, const ClipRect&,
-                    BorderRadiusClippingRule = IncludeSelfForBorderRadius);
+    void clipToRect(const LayerPaintingInfo&, GraphicsContext*, const ClipRect&, BorderRadiusClippingRule = IncludeSelfForBorderRadius);
     void restoreClip(GraphicsContext*, const LayoutRect& paintDirtyRect, const ClipRect&);
 
     void updateSelfPaintingLayer();
@@ -595,7 +602,7 @@ private:
     void updateOrRemoveFilterClients();
     void updateOrRemoveFilterEffectRenderer();
 
-    LayoutRect paintingExtent(const RenderLayer* rootLayer, const LayoutRect& paintDirtyRect, PaintBehavior);
+    LayoutRect paintingExtent(const RenderLayer* rootLayer, const LayoutRect& paintDirtyRect, const LayoutSize& subPixelAccumulation, PaintBehavior);
 
     RenderLayer* enclosingTransformedAncestor() const;
 
@@ -616,19 +623,20 @@ private:
     bool lostGroupedMapping() const { return m_compositingProperties.lostGroupedMapping; }
     void setLostGroupedMapping(bool b) { m_compositingProperties.lostGroupedMapping = b; }
 
-    void setCompositingReasons(CompositingReasons reasons) { m_compositingProperties.compositingReasons = reasons; }
+    void setCompositingReasons(CompositingReasons);
     CompositingReasons compositingReasons() const { return m_compositingProperties.compositingReasons; }
 
     friend class CompositedLayerMapping;
     friend class RenderLayerCompositor;
     friend class RenderLayerModelObject;
 
-protected:
+private:
+    LayerType m_layerType;
+
     // Self-painting layer is an optimization where we avoid the heavy RenderLayer painting
     // machinery for a RenderLayer allocated only to handle the overflow clip case.
     // FIXME(crbug.com/332791): Self-painting layer should be merged into the overflow-only concept.
     unsigned m_isSelfPaintingLayer : 1;
-    unsigned m_isOverflowOnlyLayer : 1;
 
     // If have no self-painting descendants, we don't have to walk our children during painting. This can lead to
     // significant savings, especially if the tree has lots of non-self-painting layers grouped together (e.g. table cells).
@@ -732,7 +740,7 @@ protected:
         bool lostGroupedMapping : 1;
 
         // The reason, if any exists, that a fixed-position layer is chosen not to be composited.
-        unsigned viewportConstrainedNotCompositedReason : 2;
+        unsigned viewportConstrainedNotCompositedReason : ViewportConstrainedNotCompositedReasonBits;
 
         // Once computed, indicates all that a layer needs to become composited using the CompositingReasons enum bitfield.
         CompositingReasons compositingReasons;
@@ -743,7 +751,6 @@ protected:
 
     CompositingProperties m_compositingProperties;
 
-private:
     IntRect m_blockSelectionGapsBounds;
 
     OwnPtr<CompositedLayerMapping> m_compositedLayerMapping;

@@ -71,8 +71,6 @@ private:
     RefPtr<SVGAnimatedTransformList> m_gradientTransform;
     RefPtr<SVGAnimatedEnumeration<SVGSpreadMethodType> > m_spreadMethod;
     RefPtr<SVGAnimatedEnumeration<SVGUnitTypes::SVGUnitType> > m_gradientUnits;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGGradientElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
 
 inline bool isSVGGradientElement(const Node& node)
@@ -80,7 +78,7 @@ inline bool isSVGGradientElement(const Node& node)
     return node.hasTagName(SVGNames::radialGradientTag) || node.hasTagName(SVGNames::linearGradientTag);
 }
 
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGGradientElement);
+DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(SVGGradientElement);
 
 } // namespace WebCore
 

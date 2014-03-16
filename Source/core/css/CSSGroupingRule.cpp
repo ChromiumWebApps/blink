@@ -50,11 +50,13 @@ CSSGroupingRule::CSSGroupingRule(StyleRuleGroup* groupRule, CSSStyleSheet* paren
 
 CSSGroupingRule::~CSSGroupingRule()
 {
+#if !ENABLE(OILPAN)
     ASSERT(m_childRuleCSSOMWrappers.size() == m_groupRule->childRules().size());
     for (unsigned i = 0; i < m_childRuleCSSOMWrappers.size(); ++i) {
         if (m_childRuleCSSOMWrappers[i])
             m_childRuleCSSOMWrappers[i]->setParentRule(0);
     }
+#endif
 }
 
 unsigned CSSGroupingRule::insertRule(const String& ruleString, unsigned index, ExceptionState& exceptionState)
@@ -69,7 +71,7 @@ unsigned CSSGroupingRule::insertRule(const String& ruleString, unsigned index, E
     CSSStyleSheet* styleSheet = parentStyleSheet();
     CSSParserContext context(parserContext(), UseCounter::getFrom(styleSheet));
     BisonCSSParser parser(context);
-    RefPtr<StyleRuleBase> newRule = parser.parseRule(styleSheet ? styleSheet->contents() : 0, ruleString);
+    RefPtrWillBeRawPtr<StyleRuleBase> newRule = parser.parseRule(styleSheet ? styleSheet->contents() : 0, ruleString);
     if (!newRule) {
         exceptionState.throwDOMException(SyntaxError, "the rule '" + ruleString + "' is invalid and cannot be parsed.");
         return 0;
@@ -86,7 +88,7 @@ unsigned CSSGroupingRule::insertRule(const String& ruleString, unsigned index, E
 
     m_groupRule->wrapperInsertRule(index, newRule);
 
-    m_childRuleCSSOMWrappers.insert(index, RefPtr<CSSRule>());
+    m_childRuleCSSOMWrappers.insert(index, RefPtrWillBeMember<CSSRule>(nullptr));
     return index;
 }
 
@@ -128,7 +130,7 @@ CSSRule* CSSGroupingRule::item(unsigned index) const
     if (index >= length())
         return 0;
     ASSERT(m_childRuleCSSOMWrappers.size() == m_groupRule->childRules().size());
-    RefPtr<CSSRule>& rule = m_childRuleCSSOMWrappers[index];
+    RefPtrWillBeMember<CSSRule>& rule = m_childRuleCSSOMWrappers[index];
     if (!rule)
         rule = m_groupRule->childRules()[index]->createCSSOMWrapper(const_cast<CSSGroupingRule*>(this));
     return rule.get();
@@ -137,7 +139,7 @@ CSSRule* CSSGroupingRule::item(unsigned index) const
 CSSRuleList* CSSGroupingRule::cssRules() const
 {
     if (!m_ruleListCSSOMWrapper)
-        m_ruleListCSSOMWrapper = adoptPtr(new LiveCSSRuleList<CSSGroupingRule>(const_cast<CSSGroupingRule*>(this)));
+        m_ruleListCSSOMWrapper = LiveCSSRuleList<CSSGroupingRule>::create(const_cast<CSSGroupingRule*>(this));
     return m_ruleListCSSOMWrapper.get();
 }
 
@@ -149,6 +151,16 @@ void CSSGroupingRule::reattach(StyleRuleBase* rule)
         if (m_childRuleCSSOMWrappers[i])
             m_childRuleCSSOMWrappers[i]->reattach(m_groupRule->childRules()[i].get());
     }
+}
+
+void CSSGroupingRule::trace(Visitor* visitor)
+{
+    CSSRule::trace(visitor);
+#if ENABLE(OILPAN)
+    visitor->trace(m_childRuleCSSOMWrappers);
+#endif
+    visitor->trace(m_groupRule);
+    visitor->trace(m_ruleListCSSOMWrapper);
 }
 
 } // namespace WebCore

@@ -82,8 +82,6 @@ private:
     RefPtr<SVGAnimatedLength> m_textLength;
     bool m_textLengthIsSpecifiedByUser;
     RefPtr<SVGAnimatedEnumeration<SVGLengthAdjustType> > m_lengthAdjust;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGTextContentElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
 
 inline bool isSVGTextContentElement(const Node& node)
@@ -91,7 +89,7 @@ inline bool isSVGTextContentElement(const Node& node)
     return node.isSVGElement() && toSVGElement(node).isTextContent();
 }
 
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGTextContentElement);
+DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(SVGTextContentElement);
 
 } // namespace WebCore
 

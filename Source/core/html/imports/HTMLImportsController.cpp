@@ -33,6 +33,7 @@
 
 #include "core/dom/Document.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/imports/HTMLImportChild.h"
 #include "core/html/imports/HTMLImportChildClient.h"
 
@@ -69,7 +70,7 @@ void HTMLImportsController::clear()
 
 HTMLImportChild* HTMLImportsController::createChild(const KURL& url, HTMLImport* parent, HTMLImportChildClient* client)
 {
-    OwnPtr<HTMLImportChild> loader = adoptPtr(new HTMLImportChild(url, client->isCreatedByParser()));
+    OwnPtr<HTMLImportChild> loader = adoptPtr(new HTMLImportChild(*m_master, url, client->isSync()));
     loader->setClient(client);
     parent->appendChild(loader.get());
     m_imports.append(loader.release());
@@ -150,11 +151,21 @@ bool HTMLImportsController::isDone() const
     return !m_master->parsing();
 }
 
+void HTMLImportsController::stateDidChange()
+{
+    HTMLImport::stateDidChange();
+
+    if (!state().isReady())
+        return;
+    if (LocalFrame* frame = m_master->frame())
+        frame->loader().checkCompleted();
+}
+
 void HTMLImportsController::scheduleRecalcState()
 {
     if (m_recalcTimer.isActive())
         return;
-    m_recalcTimer.startOneShot(0);
+    m_recalcTimer.startOneShot(0, FROM_HERE);
 }
 
 void HTMLImportsController::recalcTimerFired(Timer<HTMLImportsController>*)

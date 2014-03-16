@@ -112,7 +112,6 @@ DatabaseContext::DatabaseContext(ExecutionContext* context)
 
 DatabaseContext::~DatabaseContext()
 {
-    stopDatabases();
     ASSERT(!m_databaseThread || m_databaseThread->terminationRequested());
 
     // For debug accounting only. We must call this last. The assertions assume
@@ -132,7 +131,12 @@ void DatabaseContext::contextDestroyed()
     deref(); // paired with the ref() call on create().
 }
 
-// stop() is from stopActiveDOMObjects() which indicates that the owner Frame
+void DatabaseContext::willStop()
+{
+    DatabaseManager::manager().interruptAllDatabasesForContext(this);
+}
+
+// stop() is from stopActiveDOMObjects() which indicates that the owner LocalFrame
 // or WorkerThread is shutting down. Initiate the orderly shutdown by stopping
 // the associated databases.
 void DatabaseContext::stop()
@@ -164,8 +168,42 @@ DatabaseThread* DatabaseContext::databaseThread()
     return m_databaseThread.get();
 }
 
-bool DatabaseContext::stopDatabases(DatabaseTaskSynchronizer* cleanupSync)
+void DatabaseContext::didOpenDatabase(DatabaseBackendBase& database)
 {
+    if (!database.isSyncDatabase())
+        return;
+    ASSERT(isContextThread());
+    m_openSyncDatabases.add(&database);
+}
+
+void DatabaseContext::didCloseDatabase(DatabaseBackendBase& database)
+{
+    if (!database.isSyncDatabase())
+        return;
+    ASSERT(isContextThread());
+    m_openSyncDatabases.remove(&database);
+}
+
+void DatabaseContext::stopSyncDatabases()
+{
+    // SQLite is "multi-thread safe", but each database handle can only be used
+    // on a single thread at a time.
+    //
+    // For DatabaseBackendSync, we open the SQLite database on the script
+    // context thread. And hence we should also close it on that same
+    // thread. This means that the SQLite database need to be closed here in the
+    // destructor.
+    ASSERT(isContextThread());
+    Vector<DatabaseBackendBase*> syncDatabases;
+    copyToVector(m_openSyncDatabases, syncDatabases);
+    m_openSyncDatabases.clear();
+    for (size_t i = 0; i < syncDatabases.size(); ++i)
+        syncDatabases[i]->closeImmediately();
+}
+
+void DatabaseContext::stopDatabases()
+{
+    stopSyncDatabases();
     if (m_isRegistered) {
         DatabaseManager::manager().unregisterDatabaseContext(this);
         m_isRegistered = false;
@@ -182,11 +220,11 @@ bool DatabaseContext::stopDatabases(DatabaseTaskSynchronizer* cleanupSync)
     // DatabaseThread.
 
     if (m_databaseThread && !m_hasRequestedTermination) {
-        m_databaseThread->requestTermination(cleanupSync);
+        DatabaseTaskSynchronizer sync;
+        m_databaseThread->requestTermination(&sync);
         m_hasRequestedTermination = true;
-        return true;
+        sync.waitForTaskCompletion();
     }
-    return false;
 }
 
 bool DatabaseContext::allowDatabaseAccess() const

@@ -41,8 +41,8 @@
 #include "core/events/BeforeTextInsertedEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/TextEvent.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameHost.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/FormDataList.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/shadow/ShadowElementNames.h"
@@ -155,7 +155,7 @@ void TextFieldInputType::setValue(const String& sanitizedValue, bool valueChange
     InputType::setValue(sanitizedValue, valueChanged, DispatchNoEvent);
 
     if (valueChanged)
-        updateView();
+        input->updateView();
 
     unsigned max = visibleValue().length();
     if (input->focused())
@@ -284,7 +284,7 @@ void TextFieldInputType::createShadowSubtree()
 {
     ASSERT(element().shadow());
     ShadowRoot* shadowRoot = element().userAgentShadowRoot();
-    ASSERT(!shadowRoot->hasChildNodes());
+    ASSERT(!shadowRoot->hasChildren());
 
     Document& document = element().document();
     bool shouldHaveSpinButton = this->shouldHaveSpinButton();
@@ -356,6 +356,8 @@ void TextFieldInputType::listAttributeTargetChanged()
             editingViewPort->appendChild(innerEditor.release());
             rpContainer->appendChild(editingViewPort.release());
             rpContainer->appendChild(DataListIndicatorElement::create(document));
+            if (element().document().focusedElement() == element())
+                element().updateFocusAppearance(true /* restore selection */);
         }
     } else {
         picker->remove(ASSERT_NO_EXCEPTION);
@@ -399,15 +401,6 @@ static bool isASCIILineBreak(UChar c)
 static String limitLength(const String& string, unsigned maxLength)
 {
     unsigned newLength = std::min(maxLength, string.length());
-    // FIXME: We should not truncate the string at a control character. It's not
-    // compatible with IE and Firefox.
-    for (unsigned i = 0; i < newLength; ++i) {
-        const UChar current = string[i];
-        if (current < ' ' && current != '\t') {
-            newLength = i;
-            break;
-        }
-    }
     if (newLength == string.length())
         return string;
     if (newLength > 0 && U16_IS_LEAD(string[newLength - 1]))
@@ -457,7 +450,7 @@ void TextFieldInputType::handleBeforeTextInsertedEvent(BeforeTextInsertedEvent* 
 
 bool TextFieldInputType::shouldRespectListAttribute()
 {
-    return InputType::themeSupportsDataListUI(this);
+    return true;
 }
 
 void TextFieldInputType::updatePlaceholderText()

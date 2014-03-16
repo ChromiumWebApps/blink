@@ -36,8 +36,9 @@
             'target_name': 'blink',
             'type': 'none',
             'dependencies': [
-                '../Source/web/web.gyp:blink_web',
                 '../Source/platform/blink_platform.gyp:blink_platform',
+                '../Source/web/web.gyp:blink_web',
+                'blink_headers.gyp:blink_headers',
                 'blink_minimal',
             ],
             'export_dependent_settings': [
@@ -61,13 +62,23 @@
             ],
         },
         {
-            'target_name': 'blink_web_test_support',
+            'target_name': 'blink_test_support',
             'type': 'none',
             'dependencies': [
                 '../Source/web/web.gyp:webkit_test_support',
             ],
             'export_dependent_settings': [
                 '../Source/web/web.gyp:webkit_test_support',
+            ],
+        },
+        {
+            'target_name': 'blink_web_test_support',
+            'type': 'none',
+            'dependencies': [
+                'blink_test_support',
+            ],
+            'export_dependent_settings': [
+                'blink_test_support',
             ],
         },
     ],

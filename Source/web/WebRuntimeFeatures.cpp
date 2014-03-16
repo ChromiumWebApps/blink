@@ -51,7 +51,10 @@ void WebRuntimeFeatures::enableExperimentalFeatures(bool enable)
 
 void WebRuntimeFeatures::enableBleedingEdgeFastPaths(bool enable)
 {
+    ASSERT(enable);
     RuntimeEnabledFeatures::setBleedingEdgeFastPathsEnabled(enable);
+    RuntimeEnabledFeatures::setSubpixelFontScalingEnabled(enable || RuntimeEnabledFeatures::subpixelFontScalingEnabled());
+    RuntimeEnabledFeatures::setCSSWillChangeEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableTestOnlyFeatures(bool enable)
@@ -131,11 +134,6 @@ void WebRuntimeFeatures::enableFastTextAutosizing(bool enable)
 void WebRuntimeFeatures::enableFileSystem(bool enable)
 {
     RuntimeEnabledFeatures::setFileSystemEnabled(enable);
-}
-
-void WebRuntimeFeatures::enableFullscreen(bool enable)
-{
-    RuntimeEnabledFeatures::setFullscreenEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableGamepad(bool enable)

@@ -30,7 +30,7 @@
 #include "core/dom/Position.h"
 #include "core/dom/StyleEngine.h"
 #include "core/fetch/ImageResourceClient.h"
-#include "core/rendering/CompositingState.h"
+#include "core/rendering/compositing/CompositingState.h"
 #include "core/rendering/PaintPhase.h"
 #include "core/rendering/RenderObjectChildList.h"
 #include "core/rendering/ScrollAlignment.h"
@@ -136,6 +136,7 @@ class RenderObject : public ImageResourceClient {
     friend class RenderLayerReflectionInfo; // For setParent
     friend class RenderLayerScrollableArea; // For setParent.
     friend class RenderObjectChildList;
+    WTF_MAKE_NONCOPYABLE(RenderObject);
 public:
     // Anonymous objects should pass the document as their node, and they will then automatically be
     // marked as anonymous in the constructor.
@@ -373,7 +374,6 @@ public:
     bool isInFlowRenderFlowThread() const { return isRenderFlowThread() && !isOutOfFlowPositioned(); }
     bool isOutOfFlowRenderFlowThread() const { return isRenderFlowThread() && isOutOfFlowPositioned(); }
 
-    virtual bool isRenderMultiColumnBlock() const { return false; }
     virtual bool isRenderMultiColumnSet() const { return false; }
 
     virtual bool isRenderScrollbarPart() const { return false; }
@@ -594,7 +594,7 @@ public:
     Node* generatingNode() const { return isPseudoElement() ? node()->parentOrShadowHostNode() : node(); }
 
     Document& document() const { return m_node->document(); }
-    Frame* frame() const { return document().frame(); }
+    LocalFrame* frame() const { return document().frame(); }
 
     bool hasOutlineAnnotation() const;
     bool hasOutline() const { return style()->hasOutline() || hasOutlineAnnotation(); }
@@ -668,9 +668,6 @@ public:
     void forceLayout();
     void forceChildLayout();
 
-    // True if we can abort layout, leaving a partially laid out tree.
-    virtual bool supportsPartialLayout() const { return false; }
-
     // used for element state updates that cannot be fixed with a
     // repaint and do not need a relayout
     virtual void updateFromElement() { }
@@ -706,6 +703,7 @@ public:
 
     // returns the containing block level element for this element.
     RenderBlock* containingBlock() const;
+    RenderObject* clippingContainer() const;
 
     bool canContainFixedPositionObjects() const
     {
@@ -782,7 +780,13 @@ public:
 
     virtual CursorDirective getCursor(const LayoutPoint&, Cursor&) const;
 
-    void getTextDecorationColors(unsigned decorations, Color& underline, Color& overline, Color& linethrough, bool quirksMode = false, bool firstlineStyle = false);
+    struct AppliedTextDecoration {
+        Color color;
+        TextDecorationStyle style;
+        AppliedTextDecoration() : color(Color::transparent), style(TextDecorationStyleSolid) { }
+    };
+
+    void getTextDecorations(unsigned decorations, AppliedTextDecoration& underline, AppliedTextDecoration& overline, AppliedTextDecoration& linethrough, bool quirksMode = false, bool firstlineStyle = false);
 
     // Return the RenderLayerModelObject in the container chain which is responsible for painting this object, or 0
     // if painting is root-relative. This is the container that should be passed to the 'forRepaint'
@@ -804,6 +808,7 @@ public:
         const LayoutRect& oldBounds, const LayoutRect& oldOutlineBox, const LayoutRect* newBoundsPtr = 0, const LayoutRect* newOutlineBoxPtr = 0);
 
     virtual void repaintOverflow();
+    void repaintOverflowIfNeeded();
 
     bool checkForRepaint() const;
     bool checkForRepaintDuringLayout() const;
@@ -922,7 +927,14 @@ public:
     void remove() { if (parent()) parent()->removeChild(this); }
 
     bool isInert() const;
-    bool visibleToHitTestRequest(const HitTestRequest& request) const { return style()->visibility() == VISIBLE && (request.ignorePointerEventsNone() || style()->pointerEvents() != PE_NONE) && !isInert(); }
+    virtual bool visibleForTouchAction() const { return false; }
+    bool visibleToHitTestRequest(const HitTestRequest& request) const
+    {
+        if (request.touchAction() && !visibleForTouchAction())
+            return false;
+        return style()->visibility() == VISIBLE && (request.ignorePointerEventsNone() || style()->pointerEvents() != PE_NONE) && !isInert();
+    }
+
     bool visibleToHitTesting() const { return style()->visibility() == VISIBLE && style()->pointerEvents() != PE_NONE && !isInert(); }
 
     // Map points and quads through elements, potentially via 3d transforms. You should never need to call these directly; use
@@ -964,7 +976,7 @@ public:
 
     bool shouldDoFullRepaintAfterLayout() const { return m_bitfields.shouldDoFullRepaintAfterLayout(); }
     void setShouldDoFullRepaintAfterLayout(bool b) { m_bitfields.setShouldDoFullRepaintAfterLayout(b); }
-    bool shouldRepaintOverflowIfNeeded() const { return m_bitfields.shouldRepaintOverflowIfNeeded(); }
+    bool shouldRepaintOverflow() const { return m_bitfields.shouldRepaintOverflow(); }
 
     void clearRepaintRects()
     {
@@ -972,7 +984,7 @@ public:
         setOldRepaintRect(LayoutRect());
 
         setShouldDoFullRepaintAfterLayout(false);
-        setShouldRepaintOverflowIfNeeded(false);
+        setShouldRepaintOverflow(false);
         setLayoutDidGetCalled(false);
     }
 
@@ -1009,7 +1021,7 @@ protected:
 
     virtual LayoutRect viewRect() const;
 
-    void adjustRectForOutlineAndShadow(LayoutRect&) const;
+    void adjustRectForOutline(LayoutRect&) const;
 
     void clearLayoutRootIfNeeded() const;
     virtual void willBeDestroyed();
@@ -1053,7 +1065,6 @@ private:
 
 #ifndef NDEBUG
     void checkBlockPositionedObjectsNeedLayout();
-    void checkNotInPartialLayout();
 #endif
 
     RefPtr<RenderStyle> m_style;
@@ -1092,7 +1103,7 @@ private:
             // Holding the layout bits until after repaint would remove the need
             // for this flag.
             , m_shouldDoFullRepaintAfterLayout(false)
-            , m_shouldRepaintOverflowIfNeeded(false)
+            , m_shouldRepaintOverflow(false)
             , m_needsPositionedMovementLayout(false)
             , m_normalChildNeedsLayout(false)
             , m_posChildNeedsLayout(false)
@@ -1127,7 +1138,7 @@ private:
         // 32 bits have been used in the first word, and 3 in the second.
         ADD_BOOLEAN_BITFIELD(selfNeedsLayout, SelfNeedsLayout);
         ADD_BOOLEAN_BITFIELD(shouldDoFullRepaintAfterLayout, ShouldDoFullRepaintAfterLayout);
-        ADD_BOOLEAN_BITFIELD(shouldRepaintOverflowIfNeeded, ShouldRepaintOverflowIfNeeded);
+        ADD_BOOLEAN_BITFIELD(shouldRepaintOverflow, ShouldRepaintOverflow);
         ADD_BOOLEAN_BITFIELD(needsPositionedMovementLayout, NeedsPositionedMovementLayout);
         ADD_BOOLEAN_BITFIELD(normalChildNeedsLayout, NormalChildNeedsLayout);
         ADD_BOOLEAN_BITFIELD(posChildNeedsLayout, PosChildNeedsLayout);
@@ -1201,7 +1212,7 @@ private:
     void setNeedsSimplifiedNormalFlowLayout(bool b) { m_bitfields.setNeedsSimplifiedNormalFlowLayout(b); }
     void setIsDragging(bool b) { m_bitfields.setIsDragging(b); }
     void setEverHadLayout(bool b) { m_bitfields.setEverHadLayout(b); }
-    void setShouldRepaintOverflowIfNeeded(bool b) { m_bitfields.setShouldRepaintOverflowIfNeeded(b); }
+    void setShouldRepaintOverflow(bool b) { m_bitfields.setShouldRepaintOverflow(b); }
 
 private:
     // Store state between styleWillChange and styleDidChange
@@ -1210,6 +1221,14 @@ private:
     LayoutRect m_oldRepaintRect;
     LayoutRect m_newRepaintRect;
 };
+
+// Allow equality comparisons of RenderObject's by reference or pointer, interchangeably.
+inline bool operator==(const RenderObject& a, const RenderObject& b) { return &a == &b; }
+inline bool operator==(const RenderObject& a, const RenderObject* b) { return &a == b; }
+inline bool operator==(const RenderObject* a, const RenderObject& b) { return a == &b; }
+inline bool operator!=(const RenderObject& a, const RenderObject& b) { return !(a == b); }
+inline bool operator!=(const RenderObject& a, const RenderObject* b) { return !(a == b); }
+inline bool operator!=(const RenderObject* a, const RenderObject& b) { return !(a == b); }
 
 inline bool RenderObject::documentBeingDestroyed() const
 {
@@ -1243,9 +1262,6 @@ inline bool RenderObject::isBeforeOrAfterContent() const
 
 inline void RenderObject::setNeedsLayout(MarkingBehavior markParents, SubtreeLayoutScope* layouter)
 {
-#ifndef NDEBUG
-    checkNotInPartialLayout();
-#endif
     ASSERT(!isSetNeedsLayoutForbidden());
     bool alreadyNeededLayout = m_bitfields.selfNeedsLayout();
     setSelfNeedsLayout(true);
@@ -1259,9 +1275,6 @@ inline void RenderObject::setNeedsLayout(MarkingBehavior markParents, SubtreeLay
 
 inline void RenderObject::clearNeedsLayout()
 {
-#ifndef NDEBUG
-    checkNotInPartialLayout();
-#endif
     setSelfNeedsLayout(false);
     setEverHadLayout(true);
     setPosChildNeedsLayout(false);

@@ -108,8 +108,8 @@ bool ImageBuffer::isValid() const
 static SkBitmap deepSkBitmapCopy(const SkBitmap& bitmap)
 {
     SkBitmap tmp;
-    if (!bitmap.deepCopyTo(&tmp, bitmap.config()))
-        bitmap.copyTo(&tmp, bitmap.config());
+    if (!bitmap.deepCopyTo(&tmp))
+        bitmap.copyTo(&tmp, bitmap.colorType());
 
     return tmp;
 }
@@ -235,7 +235,7 @@ void ImageBuffer::transformColorSpace(ColorSpace srcColorSpace, ColorSpace dstCo
     if (bitmap.isNull())
         return;
 
-    ASSERT(bitmap.config() == SkBitmap::kARGB_8888_Config);
+    ASSERT(bitmap.colorType() == kPMColor_SkColorType);
     IntSize size = m_surface->size();
     SkAutoLockPixels bitmapLock(bitmap);
     for (int y = 0; y < size.height(); ++y) {
@@ -280,8 +280,7 @@ PassRefPtr<Uint8ClampedArray> getImageData(const IntRect& rect, GraphicsContext*
 
     unsigned destBytesPerRow = 4 * rect.width();
     SkBitmap destBitmap;
-    destBitmap.setConfig(SkBitmap::kARGB_8888_Config, rect.width(), rect.height(), destBytesPerRow);
-    destBitmap.setPixels(data);
+    destBitmap.installPixels(SkImageInfo::MakeN32Premul(rect.width(), rect.height()), data, destBytesPerRow);
 
     SkCanvas::Config8888 config8888;
     if (multiplied == Premultiplied)
@@ -322,11 +321,6 @@ void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, c
     ASSERT(originX >= 0);
     ASSERT(originX < sourceRect.maxX());
 
-    int endX = destPoint.x() + sourceRect.maxX();
-    ASSERT(endX <= m_surface->size().width());
-
-    int numColumns = endX - destX;
-
     int originY = sourceRect.y();
     int destY = destPoint.y() + sourceRect.y();
     ASSERT(destY >= 0);
@@ -334,22 +328,12 @@ void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, c
     ASSERT(originY >= 0);
     ASSERT(originY < sourceRect.maxY());
 
-    int endY = destPoint.y() + sourceRect.maxY();
-    ASSERT(endY <= m_surface->size().height());
-    int numRows = endY - destY;
+    const size_t srcBytesPerRow = 4 * sourceSize.width();
+    const void* srcAddr = source->data() + originY * srcBytesPerRow + originX * 4;
+    const SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
+    SkImageInfo info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(), kRGBA_8888_SkColorType, alphaType);
 
-    unsigned srcBytesPerRow = 4 * sourceSize.width();
-    SkBitmap srcBitmap;
-    srcBitmap.setConfig(SkBitmap::kARGB_8888_Config, numColumns, numRows, srcBytesPerRow);
-    srcBitmap.setPixels(source->data() + originY * srcBytesPerRow + originX * 4);
-
-    SkCanvas::Config8888 config8888;
-    if (multiplied == Premultiplied)
-        config8888 = SkCanvas::kRGBA_Premul_Config8888;
-    else
-        config8888 = SkCanvas::kRGBA_Unpremul_Config8888;
-
-    context()->writePixels(srcBitmap, destX, destY, config8888);
+    context()->writePixels(info, srcAddr, srcBytesPerRow, destX, destY);
 }
 
 template <typename T>

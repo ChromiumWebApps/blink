@@ -13,6 +13,8 @@ CASE 1, original layer tree
               (position 100.00 100.00)
               (bounds 100.00 100.00)
               (contentsOpaque 1)
+              (drawsContent 1)
+              (backgroundColor #0000FF)
             )
             (GraphicsLayer
               (position 5.00 5.00)
@@ -40,6 +42,8 @@ CASE 2, hovering over the outer div
               (position 100.00 100.00)
               (bounds 100.00 100.00)
               (contentsOpaque 1)
+              (drawsContent 1)
+              (backgroundColor #0000FF)
             )
             (GraphicsLayer
               (position 5.00 5.00)
@@ -49,7 +53,6 @@ CASE 2, hovering over the outer div
                 (rect 0.00 0.00 131.00 131.00)
                 (rect 0.00 0.00 131.00 131.00)
                 (rect 0.00 0.00 131.00 131.00)
-                (rect 0.00 0.00 275.09 275.09)
               )
             )
           )
@@ -73,6 +76,8 @@ CASE 3, hovering over the inner div
               (position 100.00 100.00)
               (bounds 100.00 100.00)
               (contentsOpaque 1)
+              (drawsContent 1)
+              (backgroundColor #0000FF)
             )
             (GraphicsLayer
               (position 5.00 5.00)
@@ -85,7 +90,6 @@ CASE 3, hovering over the inner div
                 (rect 17.00 20.00 87.00 87.00)
                 (rect 17.00 20.00 87.00 87.00)
                 (rect 17.00 20.00 87.00 87.00)
-                (rect 0.00 0.00 275.09 275.09)
               )
             )
           )

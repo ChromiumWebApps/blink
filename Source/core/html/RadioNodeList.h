@@ -34,7 +34,7 @@ namespace WebCore {
 
 class RadioNodeList FINAL : public LiveNodeList {
 public:
-    static PassRefPtr<RadioNodeList> create(ContainerNode* ownerNode, CollectionType type, const AtomicString& name)
+    static PassRefPtr<RadioNodeList> create(ContainerNode& ownerNode, CollectionType type, const AtomicString& name)
     {
         ASSERT_UNUSED(type, type == RadioNodeListType || type == RadioImgNodeListType);
         return adoptRef(new RadioNodeList(ownerNode, name, type));
@@ -46,11 +46,11 @@ public:
     void setValue(const String&);
 
 private:
-    RadioNodeList(ContainerNode*, const AtomicString& name, CollectionType);
+    RadioNodeList(ContainerNode&, const AtomicString& name, CollectionType);
 
     bool checkElementMatchesRadioNodeListFilter(const Element&) const;
 
-    virtual bool nodeMatches(const Element&) const OVERRIDE;
+    virtual bool elementMatches(const Element&) const OVERRIDE;
 
     AtomicString m_name;
     const bool m_onlyMatchImgElements;

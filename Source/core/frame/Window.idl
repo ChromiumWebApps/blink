@@ -182,8 +182,6 @@
     [RuntimeEnabled=CSSAnimationUnprefixed] attribute EventHandler onanimationend;
     [RuntimeEnabled=CSSAnimationUnprefixed] attribute EventHandler onanimationiteration;
     [RuntimeEnabled=CSSAnimationUnprefixed] attribute EventHandler onanimationstart;
-    [RuntimeEnabled=DeviceMotion] attribute EventHandler ondevicemotion;
-    [RuntimeEnabled=DeviceOrientation] attribute EventHandler ondeviceorientation;
     [RuntimeEnabled=OrientationEvent] attribute EventHandler onorientationchange;
     attribute EventHandler onsearch;
     [RuntimeEnabled=Touch] attribute EventHandler ontouchcancel;
@@ -197,13 +195,13 @@
     attribute EventHandler onwebkittransitionend;
     [PerWorldBindings, ActivityLogging=SetterForIsolatedWorlds] attribute EventHandler onwheel;
 
-    [DeprecateAs=CaptureEvents] void captureEvents();
-    [DeprecateAs=ReleaseEvents] void releaseEvents();
+    [MeasureAs=WindowCaptureEvents] void captureEvents();
+    [MeasureAs=WindowReleaseEvents] void releaseEvents();
 
     // Additional constructors.
     attribute TransitionEventConstructor WebKitTransitionEvent;
     [RuntimeEnabled=CSSAnimationUnprefixed] attribute WebKitAnimationEventConstructor AnimationEvent;
-    attribute URLConstructor webkitURL; // FIXME: deprecate this.
+    [MeasureAs=PrefixedWindowURL] attribute URLConstructor webkitURL; // FIXME: deprecate this.
     attribute MutationObserverConstructor WebKitMutationObserver; // FIXME: Add metrics to determine when we can remove this.
     attribute IDBCursorConstructor webkitIDBCursor;
     attribute IDBDatabaseConstructor webkitIDBDatabase;
@@ -217,8 +215,12 @@
     // Constructors whose name does not match the interface name.
     // FIXME: Remove these once [ImplementedAs] is used and once constructor names match interface names.
     [RuntimeEnabled=MediaStream] attribute MediaStreamConstructor webkitMediaStream;
+
+    // Support both unprefixed and prefixed AudioContext and OfflineAudioContext
     [Conditional=WEB_AUDIO, RuntimeEnabled=WebAudio] attribute AudioContextConstructor webkitAudioContext;
     [Conditional=WEB_AUDIO, RuntimeEnabled=WebAudio] attribute OfflineAudioContextConstructor webkitOfflineAudioContext;
+    [Conditional=WEB_AUDIO, RuntimeEnabled=WebAudio] attribute AudioContextConstructor AudioContext;
+    [Conditional=WEB_AUDIO, RuntimeEnabled=WebAudio] attribute OfflineAudioContextConstructor OfflineAudioContext;
     [RuntimeEnabled=PeerConnection] attribute RTCPeerConnectionConstructor webkitRTCPeerConnection;
     [RuntimeEnabled=ScriptedSpeech] attribute SpeechGrammarConstructor webkitSpeechGrammar;
     [RuntimeEnabled=ScriptedSpeech] attribute SpeechGrammarListConstructor webkitSpeechGrammarList;

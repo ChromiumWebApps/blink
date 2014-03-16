@@ -50,8 +50,7 @@ namespace {
 class IDBTransactionTest : public testing::Test {
 public:
     IDBTransactionTest()
-        : m_handleScope(v8::Isolate::GetCurrent())
-        , m_scope(v8::Context::New(v8::Isolate::GetCurrent()))
+        : m_scope(V8ExecutionScope::create(v8::Isolate::GetCurrent()))
         , m_document(Document::create())
     {
     }
@@ -62,8 +61,7 @@ public:
     }
 
 private:
-    v8::HandleScope m_handleScope;
-    v8::Context::Scope m_scope;
+    OwnPtr<V8ExecutionScope> m_scope;
     RefPtr<Document> m_document;
 };
 
@@ -84,7 +82,7 @@ public:
     static PassRefPtr<FakeIDBDatabaseCallbacks> create() { return adoptRef(new FakeIDBDatabaseCallbacks()); }
     virtual void onVersionChange(int64_t oldVersion, int64_t newVersion) OVERRIDE { }
     virtual void onForcedClose() OVERRIDE { }
-    virtual void onAbort(int64_t transactionId, PassRefPtr<DOMError> error) OVERRIDE { }
+    virtual void onAbort(int64_t transactionId, PassRefPtrWillBeRawPtr<DOMError> error) OVERRIDE { }
     virtual void onComplete(int64_t transactionId) OVERRIDE { }
 private:
     FakeIDBDatabaseCallbacks() { }

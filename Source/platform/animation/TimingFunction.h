@@ -38,14 +38,13 @@
 #include "wtf/text/WTFString.h"
 #include <algorithm>
 
-
 namespace WebCore {
 
 class PLATFORM_EXPORT TimingFunction : public RefCounted<TimingFunction> {
 public:
 
     enum Type {
-        LinearFunction, CubicBezierFunction, StepsFunction, ChainedFunction
+        LinearFunction, CubicBezierFunction, StepsFunction
     };
 
     virtual ~TimingFunction() { }
@@ -56,7 +55,7 @@ public:
 
     // Evaluates the timing function at the given fraction. The accuracy parameter provides a hint as to the required
     // accuracy and is not guaranteed.
-    virtual double evaluate(double fraction, double accuracy) const =0;
+    virtual double evaluate(double fraction, double accuracy) const = 0;
 
 protected:
     TimingFunction(Type type)
@@ -70,9 +69,10 @@ private:
 
 class PLATFORM_EXPORT LinearTimingFunction FINAL : public TimingFunction {
 public:
-    static PassRefPtr<LinearTimingFunction> create()
+    static LinearTimingFunction* preset()
     {
-        return adoptRef(new LinearTimingFunction);
+        DEFINE_STATIC_REF(LinearTimingFunction, linear, (adoptRef(new LinearTimingFunction())));
+        return linear;
     }
 
     virtual ~LinearTimingFunction() { }
@@ -87,9 +87,6 @@ private:
     {
     }
 };
-
-// Forward declare so we can friend it below. Don't use in production code!
-class ChainedTimingFunctionTestHelper;
 
 class PLATFORM_EXPORT CubicBezierTimingFunction FINAL : public TimingFunction {
 public:
@@ -172,12 +169,19 @@ public:
     enum SubType {
         Start,
         End,
+        Middle,
         Custom
     };
 
-    static PassRefPtr<StepsTimingFunction> create(int steps, bool stepAtStart)
+    enum StepAtPosition {
+        StepAtStart,
+        StepAtMiddle,
+        StepAtEnd
+    };
+
+    static PassRefPtr<StepsTimingFunction> create(int steps, StepAtPosition stepAtPosition)
     {
-        return adoptRef(new StepsTimingFunction(Custom, steps, stepAtStart));
+        return adoptRef(new StepsTimingFunction(Custom, steps, stepAtPosition));
     }
 
     static StepsTimingFunction* preset(SubType subType)
@@ -185,12 +189,17 @@ public:
         switch (subType) {
         case Start:
             {
-                DEFINE_STATIC_REF(StepsTimingFunction, start, (adoptRef(new StepsTimingFunction(Start, 1, true))));
+                DEFINE_STATIC_REF(StepsTimingFunction, start, (adoptRef(new StepsTimingFunction(Start, 1, StepAtStart))));
                 return start;
+            }
+        case Middle:
+            {
+                DEFINE_STATIC_REF(StepsTimingFunction, middle, (adoptRef(new StepsTimingFunction(Middle, 1, StepAtMiddle))));
+                return middle;
             }
         case End:
             {
-                DEFINE_STATIC_REF(StepsTimingFunction, end, (adoptRef(new StepsTimingFunction(End, 1, false))));
+                DEFINE_STATIC_REF(StepsTimingFunction, end, (adoptRef(new StepsTimingFunction(End, 1, StepAtEnd))));
                 return end;
             }
         default:
@@ -207,96 +216,30 @@ public:
     virtual double evaluate(double fraction, double) const OVERRIDE;
 
     int numberOfSteps() const { return m_steps; }
-    bool stepAtStart() const { return m_stepAtStart; }
+    StepAtPosition stepAtPosition() const { return m_stepAtPosition; }
 
     SubType subType() const { return m_subType; }
 
 private:
-    StepsTimingFunction(SubType subType, int steps, bool stepAtStart)
+    StepsTimingFunction(SubType subType, int steps, StepAtPosition stepAtPosition)
         : TimingFunction(StepsFunction)
         , m_steps(steps)
-        , m_stepAtStart(stepAtStart)
+        , m_stepAtPosition(stepAtPosition)
         , m_subType(subType)
     {
     }
 
     int m_steps;
-    bool m_stepAtStart;
+    StepAtPosition m_stepAtPosition;
     SubType m_subType;
 };
 
-class PLATFORM_EXPORT ChainedTimingFunction FINAL : public TimingFunction {
-public:
-    static PassRefPtr<ChainedTimingFunction> create()
-    {
-        return adoptRef(new ChainedTimingFunction);
-    }
+PLATFORM_EXPORT bool operator==(const LinearTimingFunction&, const TimingFunction&);
+PLATFORM_EXPORT bool operator==(const CubicBezierTimingFunction&, const TimingFunction&);
+PLATFORM_EXPORT bool operator==(const StepsTimingFunction&, const TimingFunction&);
 
-    void appendSegment(double upperBound, TimingFunction* timingFunction)
-    {
-        double max = m_segments.isEmpty() ? 0 : m_segments.last().max();
-        ASSERT(upperBound > max);
-        m_segments.append(Segment(max, upperBound, timingFunction));
-    }
-
-    virtual String toString() const OVERRIDE;
-
-    virtual double evaluate(double fraction, double accuracy) const OVERRIDE;
-
-private:
-    class Segment {
-    public:
-        Segment(double min, double max, TimingFunction* timingFunction)
-            : m_min(min)
-            , m_max(max)
-            , m_timingFunction(timingFunction)
-        { ASSERT(timingFunction); }
-
-        double max() const { return m_max; }
-        double evaluate(double fraction, double accuracy) const
-        {
-            return scaleFromLocal(m_timingFunction->evaluate(scaleToLocal(fraction), accuracy));
-        }
-
-    private:
-        double scaleToLocal(double x) const { return (x - m_min) / (m_max - m_min); }
-        double scaleFromLocal(double x) const { return blend(m_min, m_max, x); }
-
-        double m_min;
-        double m_max;
-        RefPtr<TimingFunction> m_timingFunction;
-
-        // FIXME: Come up with a public API for the segments and remove this.
-        friend class CompositorAnimationsImpl;
-        friend class CompositorAnimations;
-
-        // Allow the compositor to reverse the timing function.
-        friend class CompositorAnimationsTimingFunctionReverser;
-
-        // Allow PrintTo/operator== of the segments. Can be removed once
-        // ChainedTimingFunction has a public API for segments.
-        friend class ChainedTimingFunctionTestHelper;
-        friend class ChainedTimingFunction;
-    };
-
-    ChainedTimingFunction()
-        : TimingFunction(ChainedFunction)
-    {
-    }
-
-    Vector<Segment> m_segments;
-
-    // FIXME: Come up with a public API for the segments and remove this.
-    friend class CompositorAnimationsImpl;
-    friend class CompositorAnimations;
-
-    // Allow the compositor to reverse the timing function.
-    friend class CompositorAnimationsTimingFunctionReverser;
-
-    // Allow PrintTo/operator== of the segments. Can be removed once
-    // ChainedTimingFunction has a public API for segments.
-    friend class ChainedTimingFunctionTestHelper;
-};
+PLATFORM_EXPORT bool operator==(const TimingFunction&, const TimingFunction&);
+PLATFORM_EXPORT bool operator!=(const TimingFunction&, const TimingFunction&);
 
 #define DEFINE_TIMING_FUNCTION_TYPE_CASTS(typeName) \
     DEFINE_TYPE_CASTS( \
@@ -307,7 +250,6 @@ private:
 DEFINE_TIMING_FUNCTION_TYPE_CASTS(Linear);
 DEFINE_TIMING_FUNCTION_TYPE_CASTS(CubicBezier);
 DEFINE_TIMING_FUNCTION_TYPE_CASTS(Steps);
-DEFINE_TIMING_FUNCTION_TYPE_CASTS(Chained);
 
 } // namespace WebCore
 

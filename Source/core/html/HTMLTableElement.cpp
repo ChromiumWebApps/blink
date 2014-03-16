@@ -37,6 +37,7 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/html/HTMLTableCaptionElement.h"
+#include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLTableRowElement.h"
 #include "core/html/HTMLTableRowsCollection.h"
 #include "core/html/HTMLTableSectionElement.h"
@@ -66,11 +67,7 @@ PassRefPtr<HTMLTableElement> HTMLTableElement::create(Document& document)
 
 HTMLTableCaptionElement* HTMLTableElement::caption() const
 {
-    for (Element* child = ElementTraversal::firstWithin(*this); child; child = ElementTraversal::nextSibling(*child)) {
-        if (child->hasTagName(captionTag))
-            return toHTMLTableCaptionElement(child);
-    }
-    return 0;
+    return Traversal<HTMLTableCaptionElement>::firstChild(*this);
 }
 
 void HTMLTableElement::setCaption(PassRefPtr<HTMLTableCaptionElement> newCaption, ExceptionState& exceptionState)
@@ -195,10 +192,10 @@ PassRefPtr<HTMLElement> HTMLTableElement::insertRow(int index, ExceptionState& e
     RefPtr<HTMLTableRowElement> lastRow = nullptr;
     RefPtr<HTMLTableRowElement> row = nullptr;
     if (index == -1)
-        lastRow = HTMLTableRowsCollection::lastRow(this);
+        lastRow = HTMLTableRowsCollection::lastRow(*this);
     else {
         for (int i = 0; i <= index; ++i) {
-            row = HTMLTableRowsCollection::rowAfter(this, lastRow.get());
+            row = HTMLTableRowsCollection::rowAfter(*this, lastRow.get());
             if (!row) {
                 if (i != index) {
                     exceptionState.throwDOMException(IndexSizeError, "The index provided (" + String::number(index) + ") is greater than the number of rows in the table (" + String::number(i) + ").");
@@ -239,10 +236,10 @@ void HTMLTableElement::deleteRow(int index, ExceptionState& exceptionState)
     HTMLTableRowElement* row = 0;
     int i = 0;
     if (index == -1)
-        row = HTMLTableRowsCollection::lastRow(this);
+        row = HTMLTableRowsCollection::lastRow(*this);
     else {
         for (i = 0; i <= index; ++i) {
-            row = HTMLTableRowsCollection::rowAfter(this, row);
+            row = HTMLTableRowsCollection::rowAfter(*this, row);
             if (!row)
                 break;
         }
@@ -259,7 +256,7 @@ void HTMLTableElement::setNeedsTableStyleRecalc() const
     Element* element = ElementTraversal::next(*this, this);
     while (element) {
         element->setNeedsStyleRecalc(LocalStyleChange);
-        if (element->hasTagName(tdTag) || element->hasTagName(thTag))
+        if (isHTMLTableCellElement(*element))
             element = ElementTraversal::nextSkippingChildren(*element, this);
         else
             element = ElementTraversal::next(*element, this);
@@ -308,7 +305,7 @@ void HTMLTableElement::collectStyleForPresentationAttribute(const QualifiedName&
     else if (name == backgroundAttr) {
         String url = stripLeadingAndTrailingHTMLSpaces(value);
         if (!url.isEmpty())
-            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, CSSImageValue::create(document().completeURL(url))));
+            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, CSSImageValue::create(url, document().completeURL(url))));
     } else if (name == valignAttr) {
         if (!value.isEmpty())
             addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign, value);

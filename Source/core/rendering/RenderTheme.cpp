@@ -30,8 +30,10 @@
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/editing/FrameSelection.h"
 #include "core/fileapi/FileList.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDataListElement.h"
+#include "core/html/HTMLFormControlElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMeterElement.h"
 #include "core/html/HTMLOptionElement.h"
@@ -41,7 +43,6 @@
 #include "core/html/shadow/SpinButtonElement.h"
 #include "core/html/shadow/TextControlInnerElements.h"
 #include "core/page/FocusController.h"
-#include "core/frame/Frame.h"
 #include "core/page/Page.h"
 #include "core/frame/Settings.h"
 #include "core/rendering/PaintInfo.h"
@@ -441,13 +442,6 @@ bool RenderTheme::paintDecorations(RenderObject* o, const PaintInfo& paintInfo, 
 String RenderTheme::extraDefaultStyleSheet()
 {
     StringBuilder runtimeCSS;
-
-    runtimeCSS.appendLiteral("datalist {display: none ;}");
-
-    runtimeCSS.appendLiteral("input[type=\"color\"][list] { -webkit-appearance: menulist; width: 88px; height: 23px;}");
-    runtimeCSS.appendLiteral("input[type=\"color\"][list]::-webkit-color-swatch-wrapper { padding-left: 8px; padding-right: 24px;}");
-    runtimeCSS.appendLiteral("input[type=\"color\"][list]::-webkit-color-swatch { border-color: #000000;}");
-
     if (RuntimeEnabledFeatures::dialogElementEnabled()) {
         runtimeCSS.appendLiteral("dialog:not([open]) { display: none; }");
         runtimeCSS.appendLiteral("dialog { position: absolute; left: 0; right: 0; width: -webkit-fit-content; height: -webkit-fit-content; margin: auto; border: solid; padding: 1em; background: white; color: black;}");
@@ -745,7 +739,7 @@ bool RenderTheme::isFocused(const RenderObject* o) const
 
     node = node->focusDelegate();
     Document& document = node->document();
-    Frame* frame = document.frame();
+    LocalFrame* frame = document.frame();
     return node == document.focusedElement() && node->shouldHaveFocusAppearance() && frame && frame->selection().isFocusedAndActive();
 }
 
@@ -769,9 +763,10 @@ bool RenderTheme::isSpinUpButtonPartPressed(const RenderObject* o) const
 bool RenderTheme::isReadOnlyControl(const RenderObject* o) const
 {
     Node* node = o->node();
-    if (!node || !node->isElementNode())
+    if (!node || !node->isElementNode() || !toElement(node)->isFormControlElement())
         return false;
-    return toElement(node)->matchesReadOnlyPseudoClass();
+    HTMLFormControlElement* element = toHTMLFormControlElement(node);
+    return element->isReadOnly();
 }
 
 bool RenderTheme::isHovered(const RenderObject* o) const
@@ -1121,20 +1116,6 @@ String RenderTheme::fileListNameForWidth(Locale& locale, const FileList* fileLis
 bool RenderTheme::shouldOpenPickerWithF4Key() const
 {
     return false;
-}
-
-bool RenderTheme::supportsDataListUI(const AtomicString& type) const
-{
-    return type == InputTypeNames::text || type == InputTypeNames::search || type == InputTypeNames::url
-        || type == InputTypeNames::tel || type == InputTypeNames::email || type == InputTypeNames::number
-        || type == InputTypeNames::color
-        || type == InputTypeNames::date
-        || type == InputTypeNames::datetime
-        || type == InputTypeNames::datetime_local
-        || type == InputTypeNames::month
-        || type == InputTypeNames::week
-        || type == InputTypeNames::time
-        || type == InputTypeNames::range;
 }
 
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)

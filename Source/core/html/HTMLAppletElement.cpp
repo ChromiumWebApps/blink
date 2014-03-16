@@ -29,9 +29,9 @@
 #include "core/html/HTMLParamElement.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/frame/ContentSecurityPolicy.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/rendering/RenderApplet.h"
 #include "platform/Widget.h"
 #include "platform/weborigin/KURL.h"
@@ -114,13 +114,8 @@ void HTMLAppletElement::updateWidgetInternal()
 
     RenderEmbeddedObject* renderer = renderEmbeddedObject();
 
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     ASSERT(frame);
-
-    LayoutUnit contentWidth = renderer->style()->width().isFixed() ? LayoutUnit(renderer->style()->width().value()) :
-        renderer->width() - renderer->borderAndPaddingWidth();
-    LayoutUnit contentHeight = renderer->style()->height().isFixed() ? LayoutUnit(renderer->style()->height().value()) :
-        renderer->height() - renderer->borderAndPaddingHeight();
 
     Vector<String> paramNames;
     Vector<String> paramValues;
@@ -172,11 +167,7 @@ void HTMLAppletElement::updateWidgetInternal()
         paramValues.append(mayScript.string());
     }
 
-    for (Element* child = ElementTraversal::firstWithin(*this); child; child = ElementTraversal::nextSibling(*child)) {
-        if (!child->hasTagName(paramTag))
-            continue;
-
-        HTMLParamElement* param = toHTMLParamElement(child);
+    for (HTMLParamElement* param = Traversal<HTMLParamElement>::firstChild(*this); param; param = Traversal<HTMLParamElement>::nextSibling(*param)) {
         if (param->name().isEmpty())
             continue;
 
@@ -186,7 +177,7 @@ void HTMLAppletElement::updateWidgetInternal()
 
     RefPtr<Widget> widget;
     if (frame->loader().allowPlugins(AboutToInstantiatePlugin))
-        widget = frame->loader().client()->createJavaAppletWidget(roundedIntSize(LayoutSize(contentWidth, contentHeight)), this, baseURL, paramNames, paramValues);
+        widget = frame->loader().client()->createJavaAppletWidget(this, baseURL, paramNames, paramValues);
 
     if (!widget) {
         if (!renderer->showsUnavailablePluginIndicator())

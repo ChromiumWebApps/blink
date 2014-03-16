@@ -52,8 +52,14 @@ class PersistentNode;
 class Visitor;
 class SafePointBarrier;
 template<typename Header> class ThreadHeap;
+class CallbackStack;
 
 typedef uint8_t* Address;
+
+typedef void (*FinalizationCallback)(void*);
+typedef void (*VisitorCallback)(Visitor*, void* self);
+typedef VisitorCallback TraceCallback;
+typedef VisitorCallback WeakPointerCallback;
 
 // ThreadAffinity indicates which threads objects can be used on. We
 // distinguish between objects that can be used on the main thread
@@ -71,10 +77,24 @@ enum ThreadAffinity {
     MainThreadOnly,
 };
 
-// By default all types are considered to be used on the main thread only.
+class Node;
+class CSSValue;
+
+template<typename T, bool derivesNodeOrCSSValue = WTF::IsSubclass<T, Node>::value || WTF::IsSubclass<T, CSSValue>::value > struct DefaultThreadingTrait;
+
+template<typename T>
+struct DefaultThreadingTrait<T, false> {
+    static const ThreadAffinity Affinity = AnyThread;
+};
+
+template<typename T>
+struct DefaultThreadingTrait<T, true> {
+    static const ThreadAffinity Affinity = MainThreadOnly;
+};
+
 template<typename T>
 struct ThreadingTrait {
-    static const ThreadAffinity Affinity = MainThreadOnly;
+    static const ThreadAffinity Affinity = DefaultThreadingTrait<T>::Affinity;
 };
 
 // Marks the specified class as being used from multiple threads. When
@@ -223,15 +243,6 @@ public:
     // call thread can start using the garbage collected heap infrastructure.
     // It also has to periodically check for safepoints.
     static void attach();
-
-    // When ThreadState is detaching from non-main thread its
-    // heap is expected to be empty (because it is going away).
-    // Perform registered cleanup tasks and garbage collection
-    // to sweep away any objects that are left on this heap.
-    // We assert that nothing must remain after this cleanup.
-    // If assertion does not hold we crash as we are potentially
-    // in the dangling pointer situation.
-    void cleanup();
 
     // Disassociate attached ThreadState from the current thread. The thread
     // can no longer use the garbage collected heap after this call.
@@ -440,19 +451,15 @@ public:
     BaseHeap* heap(int index) const { return m_heaps[index]; }
 
     // Infrastructure to determine if an address is within one of the
-    // address ranges for the Blink heap.
-    HeapContainsCache* heapContainsCache() { return m_heapContainsCache; }
-    bool contains(Address);
-    bool contains(void* pointer) { return contains(reinterpret_cast<Address>(pointer)); }
-    bool contains(const void* pointer) { return contains(const_cast<void*>(pointer)); }
-
-    // Finds the Blink HeapPage in this thread-specific heap
-    // corresponding to a given address. Return 0 if the address is
-    // not contained in any of the pages.
-    BaseHeapPage* heapPageFromAddress(Address);
+    // address ranges for the Blink heap. If the address is in the Blink
+    // heap the containing heap page is returned.
+    HeapContainsCache* heapContainsCache() { return m_heapContainsCache.get(); }
+    BaseHeapPage* contains(Address);
+    BaseHeapPage* contains(void* pointer) { return contains(reinterpret_cast<Address>(pointer)); }
+    BaseHeapPage* contains(const void* pointer) { return contains(const_cast<void*>(pointer)); }
 
     // List of persistent roots allocated on the given thread.
-    PersistentNode* roots() const { return m_persistents; }
+    PersistentNode* roots() const { return m_persistents.get(); }
 
     // List of global persistent roots not owned by any particular thread.
     // globalRootsMutex must be acquired before any modifications.
@@ -468,6 +475,9 @@ public:
     // Checks a given address and if a pointer into the oilpan heap marks
     // the object to which it points.
     bool checkAndMarkPointer(Visitor*, Address);
+
+    void pushWeakObjectPointerCallback(void*, WeakPointerCallback);
+    bool popAndInvokeWeakPointerCallback(Visitor*);
 
     void getStats(HeapStats&);
     HeapStats& stats() { return m_stats; }
@@ -486,6 +496,21 @@ private:
         m_safePointStackCopy.clear();
         m_safePointScopeMarker = 0;
     }
+
+    // Finds the Blink HeapPage in this thread-specific heap
+    // corresponding to a given address. Return 0 if the address is
+    // not contained in any of the pages. This does not consider
+    // large objects.
+    BaseHeapPage* heapPageFromAddress(Address);
+
+    // When ThreadState is detaching from non-main thread its
+    // heap is expected to be empty (because it is going away).
+    // Perform registered cleanup tasks and garbage collection
+    // to sweep away any objects that are left on this heap.
+    // We assert that nothing must remain after this cleanup.
+    // If assertion does not hold we crash as we are potentially
+    // in the dangling pointer situation.
+    void cleanup();
 
     static WTF::ThreadSpecific<ThreadState*>* s_threadSpecific;
     static SafePointBarrier* s_safePointBarrier;
@@ -506,7 +531,7 @@ private:
     void trace(Visitor*);
 
     ThreadIdentifier m_thread;
-    PersistentNode* m_persistents;
+    OwnPtr<PersistentNode> m_persistents;
     StackState m_stackState;
     intptr_t* m_startOfStack;
     intptr_t* m_endOfStack;
@@ -520,12 +545,14 @@ private:
     size_t m_noAllocationCount;
     bool m_inGC;
     BaseHeap* m_heaps[NumberOfHeaps];
-    HeapContainsCache* m_heapContainsCache;
+    OwnPtr<HeapContainsCache> m_heapContainsCache;
     HeapStats m_stats;
     HeapStats m_statsAfterLastGC;
 
     Vector<OwnPtr<CleanupTask> > m_cleanupTasks;
     bool m_isCleaningUp;
+
+    CallbackStack* m_weakCallbackStack;
 };
 
 template<ThreadAffinity affinity> class ThreadStateFor;
@@ -544,38 +571,6 @@ template<> class ThreadStateFor<AnyThread> {
 public:
     static ThreadState* state() { return ThreadState::current(); }
 };
-
-// FIXME: Experiment if the threading affinity really matters for performance.
-// FIXME: Move these macros and other related structures to a separate file.
-USED_FROM_MULTIPLE_THREADS(Algorithm);
-USED_FROM_MULTIPLE_THREADS(Crypto);
-USED_FROM_MULTIPLE_THREADS(DOMParser);
-USED_FROM_MULTIPLE_THREADS(DeprecatedStorageQuota);
-USED_FROM_MULTIPLE_THREADS(Key);
-USED_FROM_MULTIPLE_THREADS(KeyPair);
-USED_FROM_MULTIPLE_THREADS(MemoryInfo);
-USED_FROM_MULTIPLE_THREADS(Notification);
-USED_FROM_MULTIPLE_THREADS(NotificationCenter);
-USED_FROM_MULTIPLE_THREADS(Performance);
-USED_FROM_MULTIPLE_THREADS(PerformanceEntry);
-USED_FROM_MULTIPLE_THREADS(PerformanceMark);
-USED_FROM_MULTIPLE_THREADS(PerformanceNavigation);
-USED_FROM_MULTIPLE_THREADS(PerformanceResourceTiming);
-USED_FROM_MULTIPLE_THREADS(PerformanceTiming);
-USED_FROM_MULTIPLE_THREADS(SubtleCrypto);
-USED_FROM_MULTIPLE_THREADS(TextDecoder);
-USED_FROM_MULTIPLE_THREADS(TextEncoder);
-USED_FROM_MULTIPLE_THREADS(UserTiming);
-USED_FROM_MULTIPLE_THREADS(WebKitNotification);
-USED_FROM_MULTIPLE_THREADS(WorkerCrypto);
-USED_FROM_MULTIPLE_THREADS(WorkerPerformance);
-USED_FROM_MULTIPLE_THREADS(XMLHttpRequest);
-USED_FROM_MULTIPLE_THREADS(XMLSerializer);
-USED_FROM_MULTIPLE_THREADS(XPathEvaluator);
-USED_FROM_MULTIPLE_THREADS(XPathExpression);
-USED_FROM_MULTIPLE_THREADS(XPathNSResolver);
-USED_FROM_MULTIPLE_THREADS(XPathResult);
-USED_FROM_MULTIPLE_THREADS(XSLTProcessor);
 
 }
 

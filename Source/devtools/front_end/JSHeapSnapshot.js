@@ -397,6 +397,84 @@ WebInspector.JSHeapSnapshot.prototype = {
         }
     },
 
+    _calculateStatistics: function()
+    {
+        var nodeFieldCount = this._nodeFieldCount;
+        var nodes = this._nodes;
+        var nodesLength = nodes.length;
+        var nodeTypeOffset = this._nodeTypeOffset;
+        var nodeSizeOffset = this._nodeSelfSizeOffset;;
+        var nodeNativeType = this._nodeNativeType;
+        var nodeCodeType = this._nodeCodeType;
+        var nodeConsStringType = this._nodeConsStringType;
+        var nodeSlicedStringType = this._nodeSlicedStringType;
+        var sizeNative = 0;
+        var sizeCode = 0;
+        var sizeStrings = 0;
+        var sizeJSArrays = 0;
+        var node = this.rootNode();
+        for (var nodeIndex = 0; nodeIndex < nodesLength; nodeIndex += nodeFieldCount) {
+            node.nodeIndex = nodeIndex;
+            var nodeType = nodes[nodeIndex + nodeTypeOffset];
+            var nodeSize = nodes[nodeIndex + nodeSizeOffset];
+            if (nodeType === nodeNativeType)
+                sizeNative += nodeSize;
+            else if (nodeType === nodeCodeType)
+                sizeCode += nodeSize;
+            else if (nodeType === nodeConsStringType || nodeType === nodeSlicedStringType || node.type() === "string")
+                sizeStrings += nodeSize;
+            else if (node.name() === "Array")
+                sizeJSArrays += this._calculateArraySize(node);
+        }
+        this._statistics = new WebInspector.HeapSnapshotCommon.Statistics();
+        this._statistics.total = this.totalSize;
+        this._statistics.v8heap = this.totalSize - sizeNative;
+        this._statistics.native = sizeNative;
+        this._statistics.code = sizeCode;
+        this._statistics.jsArrays = sizeJSArrays;
+        this._statistics.strings = sizeStrings;
+    },
+
+    /**
+     * @param {!WebInspector.HeapSnapshotNode} node
+     * @return {number}
+     */
+    _calculateArraySize: function(node)
+    {
+        var size = node.selfSize();
+        var beginEdgeIndex = node._edgeIndexesStart();
+        var endEdgeIndex = node._edgeIndexesEnd();
+        var containmentEdges = this._containmentEdges;
+        var strings = this._strings;
+        var edgeToNodeOffset = this._edgeToNodeOffset;
+        var edgeTypeOffset = this._edgeTypeOffset;
+        var edgeNameOffset = this._edgeNameOffset;
+        var edgeFieldsCount = this._edgeFieldsCount;
+        var edgeInternalType = this._edgeInternalType;
+        for (var edgeIndex = beginEdgeIndex; edgeIndex < endEdgeIndex; edgeIndex += edgeFieldsCount) {
+            var edgeType = containmentEdges[edgeIndex + edgeTypeOffset];
+            if (edgeType !== edgeInternalType)
+                continue;
+            var edgeName = strings[containmentEdges[edgeIndex + edgeNameOffset]];
+            if (edgeName !== "elements")
+                continue;
+            var elementsNodeIndex = containmentEdges[edgeIndex + edgeToNodeOffset];
+            node.nodeIndex = elementsNodeIndex;
+            if (node.retainersCount() === 1)
+                size += node.selfSize();
+            break;
+        }
+        return size;
+    },
+
+    /**
+     * @return {!WebInspector.HeapSnapshotCommon.Statistics}
+     */
+    getStatistics: function()
+    {
+        return this._statistics;
+    },
+
     __proto__: WebInspector.HeapSnapshot.prototype
 };
 

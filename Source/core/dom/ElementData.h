@@ -62,10 +62,11 @@ public:
 
     const StylePropertySet* presentationAttributeStyle() const;
 
+    // This is not a trivial getter and its return value should be cached for performance.
     size_t length() const;
     bool isEmpty() const { return !length(); }
 
-    const Attribute* attributeItem(unsigned index) const;
+    const Attribute& attributeItem(unsigned index) const;
     const Attribute* getAttributeItem(const QualifiedName&) const;
     size_t getAttributeItemIndex(const QualifiedName&, bool shouldIgnoreCase = false) const;
     size_t getAttributeItemIndex(const AtomicString& name, bool shouldIgnoreAttributeCase) const;
@@ -148,7 +149,7 @@ public:
     void addAttribute(const QualifiedName&, const AtomicString&);
     void removeAttribute(size_t index);
 
-    Attribute* attributeItem(unsigned index);
+    Attribute& attributeItem(unsigned index);
     Attribute* getAttributeItem(const QualifiedName&);
 
     UniqueElementData();
@@ -188,7 +189,7 @@ inline const Attribute* ElementData::getAttributeItem(const AtomicString& name, 
 {
     size_t index = getAttributeItemIndex(name, shouldIgnoreAttributeCase);
     if (index != kNotFound)
-        return attributeItem(index);
+        return &attributeItem(index);
     return 0;
 }
 
@@ -203,8 +204,8 @@ inline size_t ElementData::getAttributeItemIndex(const QualifiedName& name, bool
 {
     const Attribute* begin = attributeBase();
     // Cache length for performance as ElementData::length() contains a conditional branch.
-    unsigned len = length();
-    for (unsigned i = 0; i < len; ++i) {
+    unsigned length = this->length();
+    for (unsigned i = 0; i < length; ++i) {
         const Attribute& attribute = begin[i];
         if (attribute.name().matchesPossiblyIgnoringCase(name, shouldIgnoreCase))
             return i;
@@ -217,12 +218,12 @@ inline size_t ElementData::getAttributeItemIndex(const QualifiedName& name, bool
 inline size_t ElementData::getAttributeItemIndex(const AtomicString& name, bool shouldIgnoreAttributeCase) const
 {
     // Cache length for performance as ElementData::length() contains a conditional branch.
-    unsigned len = length();
+    unsigned length = this->length();
     bool doSlowCheck = shouldIgnoreAttributeCase;
 
     // Optimize for the case where the attribute exists and its name exactly matches.
     const Attribute* begin = attributeBase();
-    for (unsigned i = 0; i < len; ++i) {
+    for (unsigned i = 0; i < length; ++i) {
         const Attribute& attribute = begin[i];
         // FIXME: Why check the prefix? Namespaces should be all that matter.
         // Most attributes (all of HTML and CSS) have no namespace.
@@ -242,7 +243,8 @@ inline size_t ElementData::getAttributeItemIndex(const AtomicString& name, bool 
 inline const Attribute* ElementData::getAttributeItem(const QualifiedName& name) const
 {
     const Attribute* begin = attributeBase();
-    for (unsigned i = 0; i < length(); ++i) {
+    unsigned length = this->length();
+    for (unsigned i = 0; i < length; ++i) {
         const Attribute& attribute = begin[i];
         if (attribute.name().matches(name))
             return &attribute;
@@ -250,10 +252,11 @@ inline const Attribute* ElementData::getAttributeItem(const QualifiedName& name)
     return 0;
 }
 
-inline const Attribute* ElementData::attributeItem(unsigned index) const
+inline const Attribute& ElementData::attributeItem(unsigned index) const
 {
     RELEASE_ASSERT(index < length());
-    return attributeBase() + index;
+    ASSERT(attributeBase() + index);
+    return *(attributeBase() + index);
 }
 
 inline void UniqueElementData::addAttribute(const QualifiedName& attributeName, const AtomicString& value)
@@ -266,9 +269,9 @@ inline void UniqueElementData::removeAttribute(size_t index)
     m_attributeVector.remove(index);
 }
 
-inline Attribute* UniqueElementData::attributeItem(unsigned index)
+inline Attribute& UniqueElementData::attributeItem(unsigned index)
 {
-    return &m_attributeVector.at(index);
+    return m_attributeVector.at(index);
 }
 
 } // namespace WebCore

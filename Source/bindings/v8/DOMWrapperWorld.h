@@ -31,14 +31,14 @@
 #ifndef DOMWrapperWorld_h
 #define DOMWrapperWorld_h
 
-#include "bindings/v8/V8DOMActivityLogger.h"
 #include "bindings/v8/V8PerContextData.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include <v8.h>
+#include "wtf/MainThread.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
+#include <v8.h>
 
 namespace WebCore {
 
@@ -51,29 +51,43 @@ enum WorldIdConstants {
     // Embedder isolated worlds can use IDs in [1, 1<<29).
     EmbedderWorldIdLimit = (1 << 29),
     ScriptPreprocessorIsolatedWorldId,
+    IsolatedWorldIdLimit,
     WorkerWorldId,
+    TestingWorldId,
 };
 
 // This class represent a collection of DOM wrappers for a specific world.
 class DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
 public:
-    static PassRefPtr<DOMWrapperWorld> create(int worldId, int extensionGroup);
+    static PassRefPtr<DOMWrapperWorld> create(int worldId = -1, int extensionGroup = -1);
 
     static const int mainWorldExtensionGroup = 0;
     static PassRefPtr<DOMWrapperWorld> ensureIsolatedWorld(int worldId, int extensionGroup);
     ~DOMWrapperWorld();
+    void dispose();
 
     static bool isolatedWorldsExist() { return isolatedWorldCount; }
-    static void getAllWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld> >& worlds);
+    static void allWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld> >& worlds);
 
     static DOMWrapperWorld* world(v8::Handle<v8::Context> context)
     {
-        ASSERT(contextHasCorrectPrototype(context));
-        return V8PerContextDataHolder::from(context)->world();
+        ASSERT(!context.IsEmpty());
+        return V8PerContextData::world(context);
     }
 
-    // Will return null if there is no DOMWrapperWorld for the current v8::Context
-    static DOMWrapperWorld* current(v8::Isolate*);
+    // Will return null if there is no DOMWrapperWorld for the current context.
+    static DOMWrapperWorld* current(v8::Isolate* isolate)
+    {
+        if (isMainThread() && worldOfInitializingWindow) {
+            // It's possible that current() is being called while window is being initialized.
+            // In order to make current() workable during the initialization phase,
+            // we cache the world of the initializing window on worldOfInitializingWindow.
+            // If there is no initiazing window, worldOfInitializingWindow is 0.
+            return worldOfInitializingWindow;
+        }
+        return world(isolate->GetCurrentContext());
+    }
+
     static DOMWrapperWorld* mainWorld();
 
     // Associates an isolated world (see above for description) with a security
@@ -95,24 +109,27 @@ public:
     static void clearIsolatedWorldContentSecurityPolicy(int worldID);
     bool isolatedWorldHasContentSecurityPolicy();
 
-    // Associate a logger with the world identified by worldId (worlId may be 0
-    // identifying the main world).
-    static void setActivityLogger(int worldId, PassOwnPtr<V8DOMActivityLogger>);
-    static V8DOMActivityLogger* activityLogger(int worldId);
-
     bool isMainWorld() const { return m_worldId == MainWorldId; }
     bool isWorkerWorld() const { return m_worldId == WorkerWorldId; }
-    bool isIsolatedWorld() const { return !isMainWorld() && !isWorkerWorld(); }
+    bool isIsolatedWorld() const { return MainWorldId < m_worldId  && m_worldId < IsolatedWorldIdLimit; }
 
     int worldId() const { return m_worldId; }
     int extensionGroup() const { return m_extensionGroup; }
     DOMDataStore& domDataStore() { return *m_domDataStore; }
 
-private:
-    static unsigned isolatedWorldCount;
+    static void setWorldOfInitializingWindow(DOMWrapperWorld* world)
+    {
+        ASSERT(isMainThread());
+        worldOfInitializingWindow = world;
+    }
+    // FIXME: Remove this method once we fix crbug.com/345014.
+    static bool windowIsBeingInitialized() { return !!worldOfInitializingWindow; }
 
+private:
     DOMWrapperWorld(int worldId, int extensionGroup);
-    static bool contextHasCorrectPrototype(v8::Handle<v8::Context>);
+
+    static unsigned isolatedWorldCount;
+    static DOMWrapperWorld* worldOfInitializingWindow;
 
     const int m_worldId;
     const int m_extensionGroup;

@@ -37,7 +37,7 @@ WebInspector.DataGrid = function(columnsArray, editCallback, deleteCallback, ref
     WebInspector.View.call(this);
     this.registerRequiredCSS("dataGrid.css");
 
-    this.element.className = "data-grid";
+    this.element.className = "data-grid"; // Override
     this.element.tabIndex = 0;
     this.element.addEventListener("keydown", this._keyDown.bind(this), false);
 
@@ -689,7 +689,7 @@ WebInspector.DataGrid.prototype = {
             return;
 
         this.columns[columnIdentifier].hidden = !visible;
-        this.element.enableStyleClass("hide-" + columnIdentifier + "-column", !visible);
+        this.element.classList.toggle("hide-" + columnIdentifier + "-column", !visible);
     },
 
     get scrollContainer()
@@ -991,14 +991,13 @@ WebInspector.DataGrid.prototype = {
             contextMenu.appendItem(WebInspector.UIString("Refresh"), this._refreshCallback.bind(this));
 
         if (gridNode && gridNode.selectable && !gridNode.isEventWithinDisclosureTriangle(event)) {
-            // FIXME: Use the column names for Editing, instead of just "Edit".
             if (this._editCallback) {
                 if (gridNode === this.creationNode)
                     contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Add new" : "Add New"), this._startEditing.bind(this, event.target));
                 else {
                     var columnIdentifier = this.columnIdentifierFromNode(event.target);
                     if (columnIdentifier && this.columns[columnIdentifier].editable)
-                        contextMenu.appendItem(WebInspector.UIString("Edit"), this._startEditing.bind(this, event.target));
+                        contextMenu.appendItem(WebInspector.UIString("Edit \"%s\"", this.columns[columnIdentifier].title), this._startEditing.bind(this, event.target));
                 }
             }
             if (this._deleteCallback && gridNode !== this.creationNode)
@@ -1122,6 +1121,14 @@ WebInspector.DataGrid.prototype = {
         this.dispatchEventToListeners(WebInspector.DataGrid.Events.ColumnsResized);
     },
 
+    /**
+     * @return {?Element}
+     */
+    defaultAttachLocation: function()
+    {
+        return this.dataTableBody.firstChild;
+    },
+
     ColumnResizePadding: 24,
 
     CenterResizerOverBorderAdjustment: 3,
@@ -1243,8 +1250,8 @@ WebInspector.DataGridNode.prototype = {
         if (!this._element)
             return;
 
-        this._element.enableStyleClass("parent", this._hasChildren);
-        this._element.enableStyleClass("expanded", this._hasChildren && this.expanded);
+        this._element.classList.toggle("parent", this._hasChildren);
+        this._element.classList.toggle("expanded", this._hasChildren && this.expanded);
     },
 
     get hasChildren()
@@ -1260,7 +1267,7 @@ WebInspector.DataGridNode.prototype = {
         this._revealed = x;
 
         if (this._element)
-            this._element.enableStyleClass("revealed", this._revealed);
+            this._element.classList.toggle("revealed", this._revealed);
 
         for (var i = 0; i < this.children.length; ++i)
             this.children[i].revealed = x && this.expanded;
@@ -1385,17 +1392,9 @@ WebInspector.DataGridNode.prototype = {
     /**
      * @return {number}
      */
-    nodeHeight: function()
+    nodeSelfHeight: function()
     {
-        var rowHeight = 16;
-        if (!this.revealed)
-            return 0;
-        if (!this.expanded)
-            return rowHeight;
-        var result = rowHeight;
-        for (var i = 0; i < this.children.length; i++)
-            result += this.children[i].nodeHeight();
-        return result;
+        return 16;
     },
 
     /**
@@ -1744,7 +1743,7 @@ WebInspector.DataGridNode.prototype = {
         if (previousNode && previousNode.element.parentNode && previousNode.element.nextSibling)
             nextNode = previousNode.element.nextSibling;
         if (!nextNode)
-            nextNode = this.dataGrid.dataTableBody.firstChild;
+            nextNode = this.dataGrid.defaultAttachLocation();
         this.dataGrid.dataTableBody.insertBefore(this.element, nextNode);
 
         if (this.expanded)

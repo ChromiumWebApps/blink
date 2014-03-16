@@ -297,7 +297,6 @@ public:
 
 class WebMouseEvent : public WebInputEvent {
 public:
-    // These values defined for WebCore::MouseButton
     enum Button {
         ButtonNone = -1,
         ButtonLeft,
@@ -394,6 +393,8 @@ public:
     SourceDevice sourceDevice;
 
     union {
+        // Tap information must be set for GestureTap, GestureTapUnconfirmed,
+        // and GestureDoubleTap events.
         struct {
             int tapCount;
             float width;

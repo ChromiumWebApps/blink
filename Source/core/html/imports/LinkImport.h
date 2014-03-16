@@ -57,13 +57,12 @@ public:
     // LinkResource
     virtual void process() OVERRIDE;
     virtual Type type() const OVERRIDE { return Import; }
-    virtual void ownerRemoved() OVERRIDE;
     virtual bool hasLoaded() const OVERRIDE;
 
     // HTMLImportChildClient
     virtual void didFinish() OVERRIDE;
     virtual void importChildWasDestroyed(HTMLImportChild*) OVERRIDE;
-    virtual bool isCreatedByParser() const OVERRIDE;
+    virtual bool isSync() const OVERRIDE;
     virtual HTMLLinkElement* link() OVERRIDE;
 
     Document* importedDocument() const;

@@ -44,11 +44,6 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<ComponentTr
     return entries;
 }
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGComponentTransferFunctionElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 SVGComponentTransferFunctionElement::SVGComponentTransferFunctionElement(const QualifiedName& tagName, Document& document)
     : SVGElement(tagName, document)
     , m_tableValues(SVGAnimatedNumberList::create(this, SVGNames::tableValuesAttr, SVGNumberList::create()))
@@ -68,7 +63,6 @@ SVGComponentTransferFunctionElement::SVGComponentTransferFunctionElement(const Q
     addToPropertyMap(m_exponent);
     addToPropertyMap(m_offset);
     addToPropertyMap(m_type);
-    registerAnimatedPropertiesForSVGComponentTransferFunctionElement();
 }
 
 bool SVGComponentTransferFunctionElement::isSupportedAttribute(const QualifiedName& attrName)

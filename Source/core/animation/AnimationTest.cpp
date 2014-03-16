@@ -9,38 +9,14 @@
 #include "core/animation/AnimatableLength.h"
 #include "core/animation/AnimationClock.h"
 #include "core/animation/AnimationHelpers.h"
+#include "core/animation/AnimationTestHelper.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/animation/KeyframeEffectModel.h"
-#include "core/animation/TimedItemTiming.h"
-#include "platform/animation/TimingFunctionTestHelper.h"
+#include "core/animation/Timing.h"
 
 #include <gtest/gtest.h>
 
 namespace WebCore {
-
-namespace {
-
-v8::Handle<v8::Value> stringToV8Value(String string)
-{
-    return v8::Handle<v8::Value>::Cast(v8String(v8::Isolate::GetCurrent(), string));
-}
-
-v8::Handle<v8::Value> doubleToV8Value(double number)
-{
-    return v8::Handle<v8::Value>::Cast(v8::Number::New(v8::Isolate::GetCurrent(), number));
-}
-
-void setV8ObjectPropertyAsString(v8::Handle<v8::Object> object, String name, String value)
-{
-    object->Set(stringToV8Value(name), stringToV8Value(value));
-}
-
-void setV8ObjectPropertyAsNumber(v8::Handle<v8::Object> object, String name, double value)
-{
-    object->Set(stringToV8Value(name), doubleToV8Value(value));
-}
-
-} // namespace
 
 class AnimationAnimationTest : public ::testing::Test {
 protected:
@@ -49,8 +25,8 @@ protected:
         , element(document->createElement("foo", ASSERT_NO_EXCEPTION))
     {
         document->animationClock().resetTimeForTesting();
-        document->timeline()->setZeroTime(0);
-        EXPECT_EQ(0, document->timeline()->currentTime());
+        document->timeline().setZeroTime(0);
+        EXPECT_EQ(0, document->timeline().currentTime());
     }
 
     RefPtr<Document> document;
@@ -60,60 +36,32 @@ protected:
 class AnimationAnimationV8Test : public AnimationAnimationTest {
 protected:
     AnimationAnimationV8Test()
-        : isolate(v8::Isolate::GetCurrent())
-        , scope(isolate)
-        , context(v8::Context::New(isolate))
-        , contextScope(context)
+        : m_isolate(v8::Isolate::GetCurrent())
+        , m_scope(V8ExecutionScope::create(m_isolate))
     {
     }
 
-    v8::Isolate* isolate;
-    v8::HandleScope scope;
-    v8::Local<v8::Context> context;
-    v8::Context::Scope contextScope;
-
-    PassRefPtr<Animation> createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector, Dictionary timingInput)
+    template<typename T>
+    static PassRefPtr<Animation> createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector, T timingInput)
     {
-        return Animation::createUnsafe(element, keyframeDictionaryVector, timingInput);
+        return Animation::create(element, EffectInput::convert(element, keyframeDictionaryVector, true), timingInput);
+    }
+    static PassRefPtr<Animation> createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector)
+    {
+        return Animation::create(element, EffectInput::convert(element, keyframeDictionaryVector, true));
     }
 
-    PassRefPtr<Animation> createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector, double timingInput)
-    {
-        return Animation::createUnsafe(element, keyframeDictionaryVector, timingInput);
-    }
+    v8::Isolate* m_isolate;
 
-    PassRefPtr<Animation> createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector)
-    {
-        return Animation::createUnsafe(element, keyframeDictionaryVector);
-    }
-
-    void populateTiming(Timing& timing, Dictionary timingInputDictionary)
-    {
-        Animation::populateTiming(timing, timingInputDictionary);
-    }
-
-    void applyTimingInputNumber(Timing& timing, String timingProperty, double timingPropertyValue)
-    {
-        v8::Handle<v8::Object> timingInput = v8::Object::New(isolate);
-        setV8ObjectPropertyAsNumber(timingInput, timingProperty, timingPropertyValue);
-        Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), isolate);
-        populateTiming(timing, timingInputDictionary);
-    }
-
-    void applyTimingInputString(Timing& timing, String timingProperty, String timingPropertyValue)
-    {
-        v8::Handle<v8::Object> timingInput = v8::Object::New(isolate);
-        setV8ObjectPropertyAsString(timingInput, timingProperty, timingPropertyValue);
-        Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), isolate);
-        populateTiming(timing, timingInputDictionary);
-    }
+private:
+    OwnPtr<V8ExecutionScope> m_scope;
 };
 
 TEST_F(AnimationAnimationV8Test, CanCreateAnAnimation)
 {
     Vector<Dictionary> jsKeyframes;
-    v8::Handle<v8::Object> keyframe1 = v8::Object::New(isolate);
-    v8::Handle<v8::Object> keyframe2 = v8::Object::New(isolate);
+    v8::Handle<v8::Object> keyframe1 = v8::Object::New(m_isolate);
+    v8::Handle<v8::Object> keyframe2 = v8::Object::New(m_isolate);
 
     setV8ObjectPropertyAsString(keyframe1, "width", "100px");
     setV8ObjectPropertyAsString(keyframe1, "offset", "0");
@@ -122,8 +70,8 @@ TEST_F(AnimationAnimationV8Test, CanCreateAnAnimation)
     setV8ObjectPropertyAsString(keyframe2, "offset", "1");
     setV8ObjectPropertyAsString(keyframe2, "easing", "cubic-bezier(1, 1, 0.3, 0.3)");
 
-    jsKeyframes.append(Dictionary(keyframe1, isolate));
-    jsKeyframes.append(Dictionary(keyframe2, isolate));
+    jsKeyframes.append(Dictionary(keyframe1, m_isolate));
+    jsKeyframes.append(Dictionary(keyframe2, m_isolate));
 
     String value1;
     ASSERT_TRUE(jsKeyframes[0].get("width", value1));
@@ -176,18 +124,18 @@ TEST_F(AnimationAnimationV8Test, CanOmitSpecifiedDuration)
     EXPECT_TRUE(std::isnan(animation->specifiedTiming().iterationDuration));
 }
 
-TEST_F(AnimationAnimationV8Test, ClipNegativeDurationToZero)
+TEST_F(AnimationAnimationV8Test, NegativeDurationIsAuto)
 {
     Vector<Dictionary, 0> jsKeyframes;
     RefPtr<Animation> animation = createAnimation(element.get(), jsKeyframes, -2);
-    EXPECT_EQ(0, animation->specifiedTiming().iterationDuration);
+    EXPECT_TRUE(std::isnan(animation->specifiedTiming().iterationDuration));
 }
 
 TEST_F(AnimationAnimationV8Test, SpecifiedGetters)
 {
     Vector<Dictionary, 0> jsKeyframes;
 
-    v8::Handle<v8::Object> timingInput = v8::Object::New(isolate);
+    v8::Handle<v8::Object> timingInput = v8::Object::New(m_isolate);
     setV8ObjectPropertyAsNumber(timingInput, "delay", 2);
     setV8ObjectPropertyAsNumber(timingInput, "endDelay", 0.5);
     setV8ObjectPropertyAsString(timingInput, "fill", "backwards");
@@ -196,7 +144,7 @@ TEST_F(AnimationAnimationV8Test, SpecifiedGetters)
     setV8ObjectPropertyAsNumber(timingInput, "playbackRate", 2);
     setV8ObjectPropertyAsString(timingInput, "direction", "reverse");
     setV8ObjectPropertyAsString(timingInput, "easing", "step-start");
-    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), isolate);
+    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), m_isolate);
 
     RefPtr<Animation> animation = createAnimation(element.get(), jsKeyframes, timingInputDictionary);
 
@@ -215,9 +163,9 @@ TEST_F(AnimationAnimationV8Test, SpecifiedDurationGetter)
 {
     Vector<Dictionary, 0> jsKeyframes;
 
-    v8::Handle<v8::Object> timingInputWithDuration = v8::Object::New(isolate);
+    v8::Handle<v8::Object> timingInputWithDuration = v8::Object::New(m_isolate);
     setV8ObjectPropertyAsNumber(timingInputWithDuration, "duration", 2.5);
-    Dictionary timingInputDictionaryWithDuration = Dictionary(v8::Handle<v8::Value>::Cast(timingInputWithDuration), isolate);
+    Dictionary timingInputDictionaryWithDuration = Dictionary(v8::Handle<v8::Value>::Cast(timingInputWithDuration), m_isolate);
 
     RefPtr<Animation> animationWithDuration = createAnimation(element.get(), jsKeyframes, timingInputDictionaryWithDuration);
 
@@ -233,8 +181,8 @@ TEST_F(AnimationAnimationV8Test, SpecifiedDurationGetter)
     EXPECT_EQ("", stringDuration);
 
 
-    v8::Handle<v8::Object> timingInputNoDuration = v8::Object::New(isolate);
-    Dictionary timingInputDictionaryNoDuration = Dictionary(v8::Handle<v8::Value>::Cast(timingInputNoDuration), isolate);
+    v8::Handle<v8::Object> timingInputNoDuration = v8::Object::New(m_isolate);
+    Dictionary timingInputDictionaryNoDuration = Dictionary(v8::Handle<v8::Value>::Cast(timingInputNoDuration), m_isolate);
 
     RefPtr<Animation> animationNoDuration = createAnimation(element.get(), jsKeyframes, timingInputDictionaryNoDuration);
 
@@ -253,8 +201,8 @@ TEST_F(AnimationAnimationV8Test, SpecifiedDurationGetter)
 TEST_F(AnimationAnimationV8Test, SpecifiedSetters)
 {
     Vector<Dictionary, 0> jsKeyframes;
-    v8::Handle<v8::Object> timingInput = v8::Object::New(isolate);
-    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), isolate);
+    v8::Handle<v8::Object> timingInput = v8::Object::New(m_isolate);
+    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), m_isolate);
     RefPtr<Animation> animation = createAnimation(element.get(), jsKeyframes, timingInputDictionary);
 
     RefPtr<TimedItemTiming> specified = animation->specified();
@@ -295,8 +243,8 @@ TEST_F(AnimationAnimationV8Test, SpecifiedSetters)
 TEST_F(AnimationAnimationV8Test, SetSpecifiedDuration)
 {
     Vector<Dictionary, 0> jsKeyframes;
-    v8::Handle<v8::Object> timingInput = v8::Object::New(isolate);
-    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), isolate);
+    v8::Handle<v8::Object> timingInput = v8::Object::New(m_isolate);
+    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), m_isolate);
     RefPtr<Animation> animation = createAnimation(element.get(), jsKeyframes, timingInputDictionary);
 
     RefPtr<TimedItemTiming> specified = animation->specified();
@@ -323,342 +271,6 @@ TEST_F(AnimationAnimationV8Test, SetSpecifiedDuration)
     EXPECT_EQ("", stringDuration);
 }
 
-TEST_F(AnimationAnimationV8Test, TimingInputStartDelay)
-{
-    Timing timing;
-    EXPECT_EQ(0, timing.startDelay);
-
-    applyTimingInputNumber(timing, "delay", 1.1);
-    EXPECT_EQ(1.1, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputNumber(timing, "delay", -1);
-    EXPECT_EQ(-1, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputString(timing, "delay", "1");
-    EXPECT_EQ(1, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputString(timing, "delay", "1s");
-    EXPECT_EQ(0, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputString(timing, "delay", "Infinity");
-    EXPECT_EQ(0, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputString(timing, "delay", "-Infinity");
-    EXPECT_EQ(0, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputString(timing, "delay", "NaN");
-    EXPECT_EQ(0, timing.startDelay);
-    timing.startDelay = 0;
-
-    applyTimingInputString(timing, "delay", "rubbish");
-    EXPECT_EQ(0, timing.startDelay);
-    timing.startDelay = 0;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputEndDelay)
-{
-    Timing timing;
-    applyTimingInputNumber(timing, "endDelay", 10);
-    EXPECT_EQ(10, timing.endDelay);
-    applyTimingInputNumber(timing, "endDelay", -2.5);
-    EXPECT_EQ(-2.5, timing.endDelay);
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputFillMode)
-{
-    Timing timing;
-    Timing::FillMode defaultFillMode = Timing::FillModeAuto;
-    EXPECT_EQ(defaultFillMode, timing.fillMode);
-
-    applyTimingInputString(timing, "fill", "auto");
-    EXPECT_EQ(Timing::FillModeAuto, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputString(timing, "fill", "forwards");
-    EXPECT_EQ(Timing::FillModeForwards, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputString(timing, "fill", "none");
-    EXPECT_EQ(Timing::FillModeNone, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputString(timing, "fill", "backwards");
-    EXPECT_EQ(Timing::FillModeBackwards, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputString(timing, "fill", "both");
-    EXPECT_EQ(Timing::FillModeBoth, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputString(timing, "fill", "everything!");
-    EXPECT_EQ(defaultFillMode, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputString(timing, "fill", "backwardsandforwards");
-    EXPECT_EQ(defaultFillMode, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-
-    applyTimingInputNumber(timing, "fill", 2);
-    EXPECT_EQ(defaultFillMode, timing.fillMode);
-    timing.fillMode = defaultFillMode;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputIterationStart)
-{
-    Timing timing;
-    EXPECT_EQ(0, timing.iterationStart);
-
-    applyTimingInputNumber(timing, "iterationStart", 1.1);
-    EXPECT_EQ(1.1, timing.iterationStart);
-    timing.iterationStart = 0;
-
-    applyTimingInputNumber(timing, "iterationStart", -1);
-    EXPECT_EQ(0, timing.iterationStart);
-    timing.iterationStart = 0;
-
-    applyTimingInputString(timing, "iterationStart", "Infinity");
-    EXPECT_EQ(0, timing.iterationStart);
-    timing.iterationStart = 0;
-
-    applyTimingInputString(timing, "iterationStart", "-Infinity");
-    EXPECT_EQ(0, timing.iterationStart);
-    timing.iterationStart = 0;
-
-    applyTimingInputString(timing, "iterationStart", "NaN");
-    EXPECT_EQ(0, timing.iterationStart);
-    timing.iterationStart = 0;
-
-    applyTimingInputString(timing, "iterationStart", "rubbish");
-    EXPECT_EQ(0, timing.iterationStart);
-    timing.iterationStart = 0;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputIterationCount)
-{
-    Timing timing;
-    EXPECT_EQ(1, timing.iterationCount);
-
-    applyTimingInputNumber(timing, "iterations", 2.1);
-    EXPECT_EQ(2.1, timing.iterationCount);
-    timing.iterationCount = 1;
-
-    applyTimingInputNumber(timing, "iterations", -1);
-    EXPECT_EQ(0, timing.iterationCount);
-    timing.iterationCount = 1;
-
-    applyTimingInputString(timing, "iterations", "Infinity");
-    EXPECT_TRUE(std::isinf(timing.iterationCount) && (timing.iterationCount > 0));
-    timing.iterationCount = 1;
-
-    applyTimingInputString(timing, "iterations", "-Infinity");
-    EXPECT_EQ(0, timing.iterationCount);
-    timing.iterationCount = 1;
-
-    applyTimingInputString(timing, "iterations", "NaN");
-    EXPECT_EQ(1, timing.iterationCount);
-    timing.iterationCount = 1;
-
-    applyTimingInputString(timing, "iterations", "rubbish");
-    EXPECT_EQ(1, timing.iterationCount);
-    timing.iterationCount = 1;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputIterationDuration)
-{
-    Timing timing;
-    EXPECT_TRUE(std::isnan(timing.iterationDuration));
-
-    applyTimingInputNumber(timing, "duration", 1.1);
-    EXPECT_EQ(1.1, timing.iterationDuration);
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputNumber(timing, "duration", -1);
-    EXPECT_TRUE(std::isnan(timing.iterationDuration));
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputString(timing, "duration", "1");
-    EXPECT_EQ(1, timing.iterationDuration);
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputString(timing, "duration", "Infinity");
-    EXPECT_TRUE(std::isinf(timing.iterationDuration) && (timing.iterationDuration > 0));
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputString(timing, "duration", "-Infinity");
-    EXPECT_TRUE(std::isnan(timing.iterationDuration));
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputString(timing, "duration", "NaN");
-    EXPECT_TRUE(std::isnan(timing.iterationDuration));
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputString(timing, "duration", "auto");
-    EXPECT_TRUE(std::isnan(timing.iterationDuration));
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-
-    applyTimingInputString(timing, "duration", "rubbish");
-    EXPECT_TRUE(std::isnan(timing.iterationDuration));
-    timing.iterationDuration = std::numeric_limits<double>::quiet_NaN();
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputPlaybackRate)
-{
-    Timing timing;
-    EXPECT_EQ(1, timing.playbackRate);
-
-    applyTimingInputNumber(timing, "playbackRate", 2.1);
-    EXPECT_EQ(2.1, timing.playbackRate);
-    timing.playbackRate = 1;
-
-    applyTimingInputNumber(timing, "playbackRate", -1);
-    EXPECT_EQ(-1, timing.playbackRate);
-    timing.playbackRate = 1;
-
-    applyTimingInputString(timing, "playbackRate", "Infinity");
-    EXPECT_EQ(1, timing.playbackRate);
-    timing.playbackRate = 1;
-
-    applyTimingInputString(timing, "playbackRate", "-Infinity");
-    EXPECT_EQ(1, timing.playbackRate);
-    timing.playbackRate = 1;
-
-    applyTimingInputString(timing, "playbackRate", "NaN");
-    EXPECT_EQ(1, timing.playbackRate);
-    timing.playbackRate = 1;
-
-    applyTimingInputString(timing, "playbackRate", "rubbish");
-    EXPECT_EQ(1, timing.playbackRate);
-    timing.playbackRate = 1;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputDirection)
-{
-    Timing timing;
-    Timing::PlaybackDirection defaultPlaybackDirection = Timing::PlaybackDirectionNormal;
-    EXPECT_EQ(defaultPlaybackDirection, timing.direction);
-
-    applyTimingInputString(timing, "direction", "normal");
-    EXPECT_EQ(Timing::PlaybackDirectionNormal, timing.direction);
-    timing.direction = defaultPlaybackDirection;
-
-    applyTimingInputString(timing, "direction", "reverse");
-    EXPECT_EQ(Timing::PlaybackDirectionReverse, timing.direction);
-    timing.direction = defaultPlaybackDirection;
-
-    applyTimingInputString(timing, "direction", "alternate");
-    EXPECT_EQ(Timing::PlaybackDirectionAlternate, timing.direction);
-    timing.direction = defaultPlaybackDirection;
-
-    applyTimingInputString(timing, "direction", "alternate-reverse");
-    EXPECT_EQ(Timing::PlaybackDirectionAlternateReverse, timing.direction);
-    timing.direction = defaultPlaybackDirection;
-
-    applyTimingInputString(timing, "direction", "rubbish");
-    EXPECT_EQ(defaultPlaybackDirection, timing.direction);
-    timing.direction = defaultPlaybackDirection;
-
-    applyTimingInputNumber(timing, "direction", 2);
-    EXPECT_EQ(defaultPlaybackDirection, timing.direction);
-    timing.direction = defaultPlaybackDirection;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputTimingFunction)
-{
-    Timing timing;
-    const RefPtr<TimingFunction> defaultTimingFunction = LinearTimingFunction::create();
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-
-    applyTimingInputString(timing, "easing", "ease");
-    EXPECT_EQ(*(CubicBezierTimingFunction::preset(CubicBezierTimingFunction::Ease)), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "ease-in");
-    EXPECT_EQ(*(CubicBezierTimingFunction::preset(CubicBezierTimingFunction::EaseIn)), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "ease-out");
-    EXPECT_EQ(*(CubicBezierTimingFunction::preset(CubicBezierTimingFunction::EaseOut)), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "ease-in-out");
-    EXPECT_EQ(*(CubicBezierTimingFunction::preset(CubicBezierTimingFunction::EaseInOut)), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "linear");
-    EXPECT_EQ(*(LinearTimingFunction::create()), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "initial");
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "step-start");
-    EXPECT_EQ(*(StepsTimingFunction::preset(StepsTimingFunction::Start)), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "step-end");
-    EXPECT_EQ(*(StepsTimingFunction::preset(StepsTimingFunction::End)), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "cubic-bezier(1, 1, 0.3, 0.3)");
-    EXPECT_EQ(*(CubicBezierTimingFunction::create(1, 1, 0.3, 0.3).get()), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "steps(3, start)");
-    EXPECT_EQ(*(StepsTimingFunction::create(3, true).get()), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "steps(5, end)");
-    EXPECT_EQ(*(StepsTimingFunction::create(5, false).get()), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "steps(5.6, end)");
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    // FIXME: Step-middle not yet implemented. Change this test when it is working.
-    applyTimingInputString(timing, "easing", "steps(5, middle)");
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "cubic-bezier(2, 2, 0.3, 0.3)");
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputString(timing, "easing", "rubbish");
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-
-    applyTimingInputNumber(timing, "easing", 2);
-    EXPECT_EQ(*defaultTimingFunction.get(), *timing.timingFunction.get());
-    timing.timingFunction = defaultTimingFunction;
-}
-
-TEST_F(AnimationAnimationV8Test, TimingInputEmpty)
-{
-    Timing updatedTiming;
-    Timing controlTiming;
-
-    v8::Handle<v8::Object> timingInput = v8::Object::New(isolate);
-    Dictionary timingInputDictionary = Dictionary(v8::Handle<v8::Value>::Cast(timingInput), isolate);
-    populateTiming(updatedTiming, timingInputDictionary);
-
-    EXPECT_EQ(controlTiming.startDelay, updatedTiming.startDelay);
-    EXPECT_EQ(controlTiming.fillMode, updatedTiming.fillMode);
-    EXPECT_EQ(controlTiming.iterationStart, updatedTiming.iterationStart);
-    EXPECT_EQ(controlTiming.iterationCount, updatedTiming.iterationCount);
-    EXPECT_TRUE(std::isnan(updatedTiming.iterationDuration));
-    EXPECT_EQ(controlTiming.playbackRate, updatedTiming.playbackRate);
-    EXPECT_EQ(controlTiming.direction, updatedTiming.direction);
-    EXPECT_EQ(*controlTiming.timingFunction.get(), *updatedTiming.timingFunction.get());
-}
-
 TEST_F(AnimationAnimationTest, TimeToEffectChange)
 {
     Timing timing;
@@ -667,7 +279,7 @@ TEST_F(AnimationAnimationTest, TimeToEffectChange)
     timing.endDelay = 100;
     timing.fillMode = Timing::FillModeNone;
     RefPtr<Animation> animation = Animation::create(nullptr, nullptr, timing);
-    RefPtr<Player> player = document->timeline()->play(animation.get());
+    RefPtr<Player> player = document->timeline().play(animation.get());
     double inf = std::numeric_limits<double>::infinity();
 
     EXPECT_EQ(100, animation->timeToForwardsEffectChange());
@@ -700,7 +312,7 @@ TEST_F(AnimationAnimationTest, TimeToEffectChangeWithPlaybackRate)
     timing.playbackRate = 2;
     timing.fillMode = Timing::FillModeNone;
     RefPtr<Animation> animation = Animation::create(nullptr, nullptr, timing);
-    RefPtr<Player> player = document->timeline()->play(animation.get());
+    RefPtr<Player> player = document->timeline().play(animation.get());
     double inf = std::numeric_limits<double>::infinity();
 
     EXPECT_EQ(100, animation->timeToForwardsEffectChange());
@@ -733,7 +345,7 @@ TEST_F(AnimationAnimationTest, TimeToEffectChangeWithNegativePlaybackRate)
     timing.playbackRate = -2;
     timing.fillMode = Timing::FillModeNone;
     RefPtr<Animation> animation = Animation::create(nullptr, nullptr, timing);
-    RefPtr<Player> player = document->timeline()->play(animation.get());
+    RefPtr<Player> player = document->timeline().play(animation.get());
     double inf = std::numeric_limits<double>::infinity();
 
     EXPECT_EQ(100, animation->timeToForwardsEffectChange());

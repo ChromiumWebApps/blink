@@ -36,8 +36,8 @@
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/frame/LocalFrame.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/frame/Frame.h"
 #include "core/rendering/style/StyleRareNonInheritedData.h"
 
 namespace WebCore {
@@ -69,7 +69,7 @@ void CSSSelectorWatch::callbackSelectorChangeTimerFired(Timer<CSSSelectorWatch>*
 
     if (m_timerExpirations < 1) {
         m_timerExpirations++;
-        m_callbackSelectorChangeTimer.startOneShot(0);
+        m_callbackSelectorChangeTimer.startOneShot(0, FROM_HERE);
         return;
     }
     if (m_document.frame()) {
@@ -125,7 +125,7 @@ void CSSSelectorWatch::updateSelectorMatches(const Vector<String>& removedSelect
     } else {
         m_timerExpirations = 0;
         if (!m_callbackSelectorChangeTimer.isActive())
-            m_callbackSelectorChangeTimer.startOneShot(0);
+            m_callbackSelectorChangeTimer.startOneShot(0, FROM_HERE);
     }
 }
 
@@ -156,7 +156,7 @@ void CSSSelectorWatch::watchCSSSelectors(const Vector<String>& selectors)
         if (!allCompound(selectorList))
             continue;
 
-        RefPtr<StyleRule> rule = StyleRule::create();
+        RefPtrWillBeRawPtr<StyleRule> rule = StyleRule::create();
         rule->wrapperAdoptSelectorList(selectorList);
         rule->setProperties(callbackPropertySet);
         m_watchedCallbackSelectors.append(rule.release());

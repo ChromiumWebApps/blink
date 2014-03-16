@@ -24,48 +24,16 @@
 
 #include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionState.h"
+#include "core/css/RGBColor.h"
+#include "core/css/parser/BisonCSSParser.h"
 
 namespace WebCore {
 
-static inline SVGColor::SVGColorType colorTypeForPaintType(const SVGPaint::SVGPaintType& paintType)
-{
-    switch (paintType) {
-    case SVGPaint::SVG_PAINTTYPE_NONE:
-    case SVGPaint::SVG_PAINTTYPE_UNKNOWN:
-    case SVGPaint::SVG_PAINTTYPE_URI:
-    case SVGPaint::SVG_PAINTTYPE_URI_NONE:
-        return SVGColor::SVG_COLORTYPE_UNKNOWN;
-    case SVGPaint::SVG_PAINTTYPE_URI_RGBCOLOR:
-    case SVGPaint::SVG_PAINTTYPE_RGBCOLOR:
-        return SVGColor::SVG_COLORTYPE_RGBCOLOR;
-    case SVGPaint::SVG_PAINTTYPE_URI_RGBCOLOR_ICCCOLOR:
-    case SVGPaint::SVG_PAINTTYPE_RGBCOLOR_ICCCOLOR:
-        return SVGColor::SVG_COLORTYPE_RGBCOLOR_ICCCOLOR;
-    case SVGPaint::SVG_PAINTTYPE_URI_CURRENTCOLOR:
-    case SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR:
-        return SVGColor::SVG_COLORTYPE_CURRENTCOLOR;
-    }
-
-    ASSERT_NOT_REACHED();
-    return SVGColor::SVG_COLORTYPE_UNKNOWN;
-}
-
 SVGPaint::SVGPaint(const SVGPaintType& paintType, const String& uri)
-    : SVGColor(SVGPaintClass, colorTypeForPaintType(paintType))
+    : CSSValue(SVGPaintClass)
     , m_paintType(paintType)
     , m_uri(uri)
 {
-}
-
-void SVGPaint::setUri(const String&)
-{
-    // The whole SVGPaint interface is deprecated in SVG 1.1 (2nd edition).
-    // The setters are the most problematic part so we remove the support for those first.
-}
-
-void SVGPaint::setPaint(unsigned short, const String&, const String&, const String&, ExceptionState& exceptionState)
-{
-    exceptionState.throwDOMException(NoModificationAllowedError, ExceptionMessages::readOnly());
 }
 
 String SVGPaint::customCSSText() const
@@ -75,19 +43,18 @@ String SVGPaint::customCSSText() const
         return String();
     case SVG_PAINTTYPE_RGBCOLOR:
     case SVG_PAINTTYPE_RGBCOLOR_ICCCOLOR:
+        return m_color.serializedAsCSSComponentValue();
     case SVG_PAINTTYPE_CURRENTCOLOR:
-        return SVGColor::customCSSText();
+        return "currentColor";
     case SVG_PAINTTYPE_NONE:
         return "none";
     case SVG_PAINTTYPE_URI_NONE:
         return m_uri + " none";
     case SVG_PAINTTYPE_URI_CURRENTCOLOR:
+        return "url(" + m_uri + ") currentColor";
     case SVG_PAINTTYPE_URI_RGBCOLOR:
     case SVG_PAINTTYPE_URI_RGBCOLOR_ICCCOLOR: {
-        String color = SVGColor::customCSSText();
-        if (color.isEmpty())
-            return m_uri;
-        return "url(" + m_uri + ") " + color;
+        return "url(" + m_uri + ") " + m_color.serializedAsCSSComponentValue();
     }
     case SVG_PAINTTYPE_URI:
         return "url(" + m_uri + ')';
@@ -98,20 +65,31 @@ String SVGPaint::customCSSText() const
 }
 
 SVGPaint::SVGPaint(const SVGPaint& cloneFrom)
-    : SVGColor(SVGPaintClass, cloneFrom)
+    : CSSValue(SVGPaintClass, /*isCSSOMSafe*/ true)
     , m_paintType(cloneFrom.m_paintType)
+    , m_color(cloneFrom.m_color)
     , m_uri(cloneFrom.m_uri)
 {
 }
 
 PassRefPtrWillBeRawPtr<SVGPaint> SVGPaint::cloneForCSSOM() const
 {
-    return adoptRefCountedWillBeRefCountedGarbageCollected(new SVGPaint(*this));
+    return adoptRefWillBeRefCountedGarbageCollected(new SVGPaint(*this));
 }
 
 bool SVGPaint::equals(const SVGPaint& other) const
 {
-    return m_paintType == other.m_paintType && m_uri == other.m_uri && SVGColor::equals(other);
+    return m_paintType == other.m_paintType && m_uri == other.m_uri && m_color == other.m_color;
+}
+
+StyleColor SVGPaint::colorFromRGBColorString(const String& colorString)
+{
+    // FIXME: Rework css parser so it is more SVG aware.
+    RGBA32 color;
+    if (BisonCSSParser::parseColor(color, colorString.stripWhiteSpace()))
+        return StyleColor(color);
+    // FIXME: This branch catches the string currentColor, but we should error if we have an illegal color value.
+    return StyleColor::currentColor();
 }
 
 }

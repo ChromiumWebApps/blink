@@ -56,7 +56,7 @@
 #include "core/accessibility/AXTableHeaderContainer.h"
 #include "core/accessibility/AXTableRow.h"
 #include "core/dom/Document.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLAreaElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
@@ -107,10 +107,10 @@ void AXComputedObjectAttributeCache::clear()
 bool AXObjectCache::gAccessibilityEnabled = false;
 bool AXObjectCache::gInlineTextBoxAccessibility = false;
 
-AXObjectCache::AXObjectCache(const Document* doc)
-    : m_notificationPostTimer(this, &AXObjectCache::notificationPostTimerFired)
+AXObjectCache::AXObjectCache(Document& document)
+    : m_document(document)
+    , m_notificationPostTimer(this, &AXObjectCache::notificationPostTimerFired)
 {
-    m_document = const_cast<Document*>(doc);
     m_computedObjectAttributeCache = AXComputedObjectAttributeCache::create();
 }
 
@@ -167,7 +167,7 @@ AXObject* AXObjectCache::focusedUIElementForPage(const Page* page)
     if (!focusedNode)
         focusedNode = focusedDocument;
 
-    if (focusedNode->hasTagName(areaTag))
+    if (isHTMLAreaElement(*focusedNode))
         return focusedImageMapUIElement(toHTMLAreaElement(focusedNode));
 
     AXObject* obj = focusedNode->document().axObjectCache()->getOrCreate(focusedNode);
@@ -271,7 +271,7 @@ static PassRefPtr<AXObject> createFromRenderer(RenderObject* renderer)
     // If the node is aria role="list" or the aria role is empty and its a
     // ul/ol/dl type (it shouldn't be a list if aria says otherwise).
     if (node && ((nodeHasRole(node, "list") || nodeHasRole(node, "directory"))
-        || (nodeHasRole(node, nullAtom) && (node->hasTagName(ulTag) || node->hasTagName(olTag) || node->hasTagName(dlTag)))))
+        || (nodeHasRole(node, nullAtom) && (isHTMLUListElement(*node) || isHTMLOListElement(*node) || isHTMLDListElement(*node)))))
         return AXList::create(renderer);
 
     // aria tables
@@ -447,7 +447,7 @@ AXObject* AXObjectCache::rootObject()
     if (!gAccessibilityEnabled)
         return 0;
 
-    return getOrCreate(m_document->view());
+    return getOrCreate(m_document.view());
 }
 
 AXObject* AXObjectCache::getOrCreate(AccessibilityRole role)
@@ -767,7 +767,7 @@ void AXObjectCache::postNotification(AXObject* object, Document* document, AXNot
     if (postType == PostAsynchronously) {
         m_notificationsToPost.append(std::make_pair(object, notification));
         if (!m_notificationPostTimer.isActive())
-            m_notificationPostTimer.startOneShot(0);
+            m_notificationPostTimer.startOneShot(0, FROM_HERE);
     } else {
         postPlatformNotification(object, notification);
     }
@@ -831,7 +831,7 @@ void AXObjectCache::handleAttributeChanged(const QualifiedName& attrName, Elemen
         handleAriaRoleChanged(element);
     else if (attrName == altAttr || attrName == titleAttr)
         textChanged(element);
-    else if (attrName == forAttr && element->hasTagName(labelTag))
+    else if (attrName == forAttr && isHTMLLabelElement(*element))
         labelChanged(element);
 
     if (!attrName.localName().string().startsWith("aria-"))
@@ -920,7 +920,7 @@ void AXObjectCache::textMarkerDataForVisiblePosition(TextMarkerData& textMarkerD
     if (!domNode)
         return;
 
-    if (domNode->hasTagName(inputTag) && toHTMLInputElement(domNode)->isPasswordField())
+    if (isHTMLInputElement(*domNode) && toHTMLInputElement(*domNode).isPasswordField())
         return;
 
     // find or create an accessibility object for this node
@@ -1028,6 +1028,16 @@ void AXObjectCache::handleScrolledToAnchor(const Node* anchorNode)
     // The anchor node may not be accessible. Post the notification for the
     // first accessible object.
     postPlatformNotification(AXObject::firstAccessibleObjectFromNode(anchorNode), AXScrolledToAnchor);
+}
+
+void AXObjectCache::handleScrollPositionChanged(ScrollView* scrollView)
+{
+    postPlatformNotification(getOrCreate(scrollView), AXScrollPositionChanged);
+}
+
+void AXObjectCache::handleScrollPositionChanged(RenderObject* renderObject)
+{
+    postPlatformNotification(getOrCreate(renderObject), AXScrollPositionChanged);
 }
 
 } // namespace WebCore

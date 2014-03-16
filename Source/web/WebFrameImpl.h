@@ -34,10 +34,11 @@
 #include "WebFrame.h"
 
 #include "FrameLoaderClientImpl.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "platform/geometry/FloatRect.h"
 #include "public/platform/WebFileSystemType.h"
 #include "wtf/Compiler.h"
+#include "wtf/HashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
@@ -79,7 +80,6 @@ public:
     virtual WebString uniqueName() const OVERRIDE;
     virtual WebString assignedName() const OVERRIDE;
     virtual void setName(const WebString&) OVERRIDE;
-    virtual long long embedderIdentifier() const OVERRIDE;
     virtual WebVector<WebIconURL> iconURLs(int iconTypesMask) const OVERRIDE;
     virtual void setIsRemote(bool) OVERRIDE;
     virtual void setRemoteWebLayer(WebLayer*) OVERRIDE;
@@ -96,7 +96,7 @@ public:
     virtual bool hasVerticalScrollbar() const OVERRIDE;
     virtual WebView* view() const OVERRIDE;
     virtual WebFrame* opener() const OVERRIDE;
-    virtual void setOpener(const WebFrame*) OVERRIDE;
+    virtual void setOpener(WebFrame*) OVERRIDE;
     virtual void appendChild(WebFrame*) OVERRIDE;
     virtual void removeChild(WebFrame*) OVERRIDE;
     virtual WebFrame* parent() const OVERRIDE;
@@ -130,21 +130,10 @@ public:
         int extensionGroup, WebVector<v8::Local<v8::Value> >* results) OVERRIDE;
     virtual v8::Handle<v8::Value> callFunctionEvenIfScriptDisabled(
         v8::Handle<v8::Function>,
-        v8::Handle<v8::Object>,
+        v8::Handle<v8::Value>,
         int argc,
         v8::Handle<v8::Value> argv[]) OVERRIDE;
     virtual v8::Local<v8::Context> mainWorldScriptContext() const OVERRIDE;
-    virtual v8::Handle<v8::Value> createFileSystem(WebFileSystemType,
-        const WebString& name,
-        const WebString& path) OVERRIDE;
-    virtual v8::Handle<v8::Value> createSerializableFileSystem(WebFileSystemType,
-        const WebString& name,
-        const WebString& path) OVERRIDE;
-    virtual v8::Handle<v8::Value> createFileEntry(WebFileSystemType,
-        const WebString& fileSystemName,
-        const WebString& fileSystemPath,
-        const WebString& filePath,
-        bool isDirectory) OVERRIDE;
     virtual void reload(bool ignoreCache) OVERRIDE;
     virtual void reloadWithOverrideURL(const WebURL& overrideUrl, bool ignoreCache) OVERRIDE;
     virtual void loadRequest(const WebURLRequest&) OVERRIDE;
@@ -241,32 +230,29 @@ public:
     void willDetachParent();
 
     static WebFrameImpl* create(WebFrameClient*);
-    // FIXME: Move the embedderIdentifier concept fully to the embedder and
-    // remove this factory method.
-    static WebFrameImpl* create(WebFrameClient*, long long embedderIdentifier);
     virtual ~WebFrameImpl();
 
     // Called by the WebViewImpl to initialize the main frame for the page.
     void initializeAsMainFrame(WebCore::Page*);
 
-    PassRefPtr<WebCore::Frame> createChildFrame(
+    PassRefPtr<WebCore::LocalFrame> createChildFrame(
         const WebCore::FrameLoadRequest&, WebCore::HTMLFrameOwnerElement*);
 
     void didChangeContentsSize(const WebCore::IntSize&);
 
     void createFrameView();
 
-    static WebFrameImpl* fromFrame(WebCore::Frame* frame);
+    static WebFrameImpl* fromFrame(WebCore::LocalFrame* frame);
     static WebFrameImpl* fromFrameOwnerElement(WebCore::Element* element);
 
     // If the frame hosts a PluginDocument, this method returns the WebPluginContainerImpl
     // that hosts the plugin.
-    static WebPluginContainerImpl* pluginContainerFromFrame(WebCore::Frame*);
+    static WebPluginContainerImpl* pluginContainerFromFrame(WebCore::LocalFrame*);
 
     // If the frame hosts a PluginDocument, this method returns the WebPluginContainerImpl
     // that hosts the plugin. If the provided node is a plugin, then it runs its
     // WebPluginContainerImpl.
-    static WebPluginContainerImpl* pluginContainerFromNode(WebCore::Frame*, const WebNode&);
+    static WebPluginContainerImpl* pluginContainerFromNode(WebCore::LocalFrame*, const WebNode&);
 
     WebViewImpl* viewImpl() const;
 
@@ -301,7 +287,7 @@ public:
     // Otherwise, disallow scrolling.
     virtual void setCanHaveScrollbars(bool) OVERRIDE;
 
-    WebCore::Frame* frame() const { return m_frame.get(); }
+    WebCore::LocalFrame* frame() const { return m_frame.get(); }
     WebFrameClient* client() const { return m_client; }
     void setClient(WebFrameClient* client) { m_client = client; }
 
@@ -310,7 +296,7 @@ public:
 
     void setInputEventsTransformForEmulation(const WebCore::IntSize&, float);
 
-    static void selectWordAroundPosition(WebCore::Frame*, WebCore::VisiblePosition);
+    static void selectWordAroundPosition(WebCore::LocalFrame*, WebCore::VisiblePosition);
 
 private:
     class DeferredScopeStringMatches;
@@ -338,10 +324,10 @@ private:
       InvalidateAll          // Both content area and the scrollbar.
     };
 
-    WebFrameImpl(WebFrameClient*, long long frame_identifier);
+    explicit WebFrameImpl(WebFrameClient*);
 
     // Sets the local WebCore frame and registers destruction observers.
-    void setWebCoreFrame(PassRefPtr<WebCore::Frame>);
+    void setWebCoreFrame(PassRefPtr<WebCore::LocalFrame>);
 
     // Notifies the delegate about a new selection rect.
     void reportFindInPageSelection(
@@ -420,35 +406,22 @@ private:
     // Returns a hit-tested VisiblePosition for the given point
     WebCore::VisiblePosition visiblePositionForWindowPoint(const WebPoint&);
 
-    class WebFrameInit : public WebCore::FrameInit {
-    public:
-        static PassRefPtr<WebFrameInit> create(WebFrameImpl* webFrameImpl, int64_t frameID)
-        {
-            return adoptRef(new WebFrameInit(webFrameImpl, frameID));
-        }
+    FrameLoaderClientImpl m_frameLoaderClientImpl;
 
-    private:
-        WebFrameInit(WebFrameImpl* webFrameImpl, int64_t frameID)
-            : WebCore::FrameInit(frameID)
-            , m_frameLoaderClientImpl(webFrameImpl)
-        {
-            setFrameLoaderClient(&m_frameLoaderClientImpl);
-        }
-
-        FrameLoaderClientImpl m_frameLoaderClientImpl;
-    };
-    RefPtr<WebFrameInit> m_frameInit;
-
-    // The embedder retains a reference to the WebCore Frame while it is active in the DOM. This
+    // The embedder retains a reference to the WebCore LocalFrame while it is active in the DOM. This
     // reference is released when the frame is removed from the DOM or the entire page is closed.
-    RefPtr<WebCore::Frame> m_frame;
+    // FIXME: These will need to change to WebFrame when we introduce WebFrameProxy.
+    RefPtr<WebCore::LocalFrame> m_frame;
     WebFrameImpl* m_parent;
     WebFrameImpl* m_previousSibling;
     WebFrameImpl* m_nextSibling;
     WebFrameImpl* m_firstChild;
     WebFrameImpl* m_lastChild;
 
-    // Indicate whether the current Frame is local or remote. Remote frames are
+    WebFrameImpl* m_opener;
+    WTF::HashSet<WebFrameImpl*> m_openedFrames;
+
+    // Indicate whether the current LocalFrame is local or remote. Remote frames are
     // rendered in a different process from their parent frames.
     bool m_isRemote;
 

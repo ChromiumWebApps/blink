@@ -25,6 +25,7 @@
 #include "core/frame/SettingsDelegate.h"
 #include "core/frame/UseCounter.h"
 #include "core/page/HistoryController.h"
+#include "core/page/PageAnimator.h"
 #include "core/page/PageVisibilityState.h"
 #include "platform/LifecycleContext.h"
 #include "platform/Supplementable.h"
@@ -50,7 +51,7 @@ class DragClient;
 class DragController;
 class EditorClient;
 class FocusController;
-class Frame;
+class LocalFrame;
 class FrameHost;
 class FrameSelection;
 class HaltablePlugin;
@@ -58,7 +59,6 @@ class HistoryItem;
 class InspectorClient;
 class InspectorController;
 class Node;
-class PageGroup;
 class PageLifecycleNotifier;
 class PlatformMouseEvent;
 class PluginData;
@@ -80,7 +80,7 @@ class ValidationMessageClient;
 
 typedef uint64_t LinkHash;
 
-float deviceScaleFactor(Frame*);
+float deviceScaleFactor(LocalFrame*);
 
 class Page FINAL : public Supplementable<Page>, public LifecycleContext<Page>, public SettingsDelegate {
     WTF_MAKE_NONCOPYABLE(Page);
@@ -108,9 +108,13 @@ public:
     explicit Page(PageClients&);
     virtual ~Page();
 
+    void makeOrdinary();
+
     // This method returns all pages, incl. private ones associated with
     // inspector overlay, popups, SVGImage, etc.
     static HashSet<Page*>& allPages();
+    // This method returns all ordinary pages.
+    static HashSet<Page*>& ordinaryPages();
 
     FrameHost& frameHost() { return *m_frameHost; }
 
@@ -127,29 +131,19 @@ public:
 
     HistoryController& historyController() const { return *m_historyController; }
 
-    void setMainFrame(PassRefPtr<Frame>);
-    Frame* mainFrame() const { return m_mainFrame.get(); }
+    void setMainFrame(PassRefPtr<LocalFrame>);
+    LocalFrame* mainFrame() const { return m_mainFrame.get(); }
 
     void documentDetached(Document*);
 
     bool openedByDOM() const;
     void setOpenedByDOM();
 
-    // FIXME: PageGroup should probably just be removed, see comment in PageGroup.h
-    enum PageGroupType { PrivatePageGroup, SharedPageGroup };
-    void setGroupType(PageGroupType);
-    void clearPageGroup();
-    PageGroup& group()
-    {
-        if (!m_group)
-            setGroupType(PrivatePageGroup);
-        return *m_group;
-    }
-
     void incrementSubframeCount() { ++m_subframeCount; }
     void decrementSubframeCount() { ASSERT(m_subframeCount); --m_subframeCount; }
     int subframeCount() const { checkSubframeCountConsistency(); return m_subframeCount; }
 
+    PageAnimator& animator() { return m_animator; }
     Chrome& chrome() const { return *m_chrome; }
     AutoscrollController& autoscrollController() const { return *m_autoscrollController; }
     DragCaretController& dragCaretController() const { return *m_dragCaretController; }
@@ -164,7 +158,7 @@ public:
     ScrollingCoordinator* scrollingCoordinator();
 
     String mainThreadScrollingReasonsAsText();
-    PassRefPtr<ClientRectList> nonFastScrollableRects(const Frame*);
+    PassRefPtr<ClientRectList> nonFastScrollableRects(const LocalFrame*);
 
     Settings& settings() const { return *m_settings; }
     ProgressTracker& progress() const { return *m_progress; }
@@ -222,7 +216,7 @@ public:
     void addMultisamplingChangedObserver(MultisamplingChangedObserver*);
     void removeMultisamplingChangedObserver(MultisamplingChangedObserver*);
 
-    void didCommitLoad(Frame*);
+    void didCommitLoad(LocalFrame*);
 
     static void networkStateChanged(bool online);
     PassOwnPtr<LifecycleNotifier<Page> > createLifecycleNotifier();
@@ -246,6 +240,7 @@ private:
     // SettingsDelegate overrides.
     virtual void settingsChanged(SettingsDelegate::ChangeType) OVERRIDE;
 
+    PageAnimator m_animator;
     const OwnPtr<AutoscrollController> m_autoscrollController;
     const OwnPtr<Chrome> m_chrome;
     const OwnPtr<DragCaretController> m_dragCaretController;
@@ -260,7 +255,7 @@ private:
     const OwnPtr<ProgressTracker> m_progress;
     const OwnPtr<UndoStack> m_undoStack;
 
-    RefPtr<Frame> m_mainFrame;
+    RefPtr<LocalFrame> m_mainFrame;
 
     mutable RefPtr<PluginData> m_pluginData;
 
@@ -280,8 +275,6 @@ private:
 
     float m_pageScaleFactor;
     float m_deviceScaleFactor;
-
-    RefPtr<PageGroup> m_group;
 
     OwnPtr<StorageNamespace> m_sessionStorage;
 

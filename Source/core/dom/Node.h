@@ -57,7 +57,7 @@ class EventDispatchMediator;
 class EventListener;
 class ExceptionState;
 class FloatPoint;
-class Frame;
+class LocalFrame;
 class HTMLInputElement;
 class IntRect;
 class KeyboardEvent;
@@ -195,7 +195,7 @@ public:
     void removeChild(Node* child, ExceptionState&);
     void appendChild(PassRefPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
-    bool hasChildNodes() const { return firstChild(); }
+    bool hasChildren() const { return firstChild(); }
     virtual PassRefPtr<Node> cloneNode(bool deep = false) = 0;
     virtual const AtomicString& localName() const;
     virtual const AtomicString& namespaceURI() const;
@@ -283,7 +283,7 @@ public:
     ContainerNode* parentOrShadowHostNode() const;
     Element* parentOrShadowHostElement() const;
     void setParentOrShadowHostNode(ContainerNode*);
-    Node* highestAncestor() const;
+    Node& highestAncestor() const;
 
     // Knows about all kinds of hosts.
     ContainerNode* parentOrShadowHostOrTemplateHostNode() const;
@@ -475,8 +475,8 @@ public:
 
     bool isDocumentTypeNode() const { return nodeType() == DOCUMENT_TYPE_NODE; }
     virtual bool childTypeAllowed(NodeType) const { return false; }
-    unsigned childNodeCount() const;
-    Node* childNode(unsigned index) const;
+    unsigned countChildren() const;
+    Node* traverseToChildAt(unsigned index) const;
 
     bool isDescendantOf(const Node*) const;
     bool contains(const Node*) const;
@@ -562,7 +562,7 @@ public:
     //
     // There are another callback named didNotifySubtreeInsertionsToDocument(), which is called after all the descendant is notified,
     // if this node was inserted into the document tree. Only a few subclasses actually need this. To utilize this, the node should
-    // return InsertionShouldCallDidNotifySubtreeInsertions from insrtedInto().
+    // return InsertionShouldCallDidNotifySubtreeInsertions from insertedInto().
     //
     enum InsertionNotificationRequest {
         InsertionDone,
@@ -652,7 +652,7 @@ public:
     virtual EventTargetData& ensureEventTargetData() OVERRIDE;
 
     void getRegisteredMutationObserversOfType(HashMap<MutationObserver*, MutationRecordDeliveryOptions>&, MutationObserver::MutationType, const QualifiedName* attributeName);
-    void registerMutationObserver(MutationObserver*, MutationObserverOptions, const HashSet<AtomicString>& attributeFilter);
+    void registerMutationObserver(MutationObserver&, MutationObserverOptions, const HashSet<AtomicString>& attributeFilter);
     void unregisterMutationObserver(MutationObserverRegistration*);
     void registerTransientMutationObserver(MutationObserverRegistration*);
     void unregisterTransientMutationObserver(MutationObserverRegistration*);
@@ -909,6 +909,7 @@ inline bool operator!=(const Node& a, const PassRefPtr<Node>& b) { return !(a ==
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.
+void showNode(const WebCore::Node*);
 void showTree(const WebCore::Node*);
 void showNodePath(const WebCore::Node*);
 #endif

@@ -28,7 +28,6 @@
 #include "Internals.h"
 
 #include <v8.h>
-#include "HTMLNames.h"
 #include "InspectorFrontendClientLocal.h"
 #include "InternalProfilers.h"
 #include "InternalRuntimeFlags.h"
@@ -74,18 +73,24 @@
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/SpellCheckRequester.h"
 #include "core/editing/SpellChecker.h"
+#include "core/editing/SurroundingText.h"
 #include "core/editing/TextIterator.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMPoint.h"
-#include "core/frame/Frame.h"
+#include "core/frame/DOMWindow.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
+#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLTextAreaElement.h"
 #include "core/html/forms/FormController.h"
-#include "core/html/shadow/HTMLContentElement.h"
+#include "core/html/shadow/ShadowElementNames.h"
+#include "core/html/shadow/TextControlInnerElements.h"
 #include "core/inspector/InspectorClient.h"
 #include "core/inspector/InspectorConsoleAgent.h"
 #include "core/inspector/InspectorController.h"
@@ -98,20 +103,17 @@
 #include "core/loader/HistoryItem.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
-#include "core/frame/DOMWindow.h"
 #include "core/page/EventHandler.h"
-#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "core/page/PagePopupController.h"
 #include "core/page/PrintContext.h"
-#include "core/frame/Settings.h"
-#include "core/rendering/CompositedLayerMapping.h"
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderMenuList.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderTreeAsText.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/compositing/CompositedLayerMapping.h"
+#include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/testing/GCObservation.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/ColorChooser.h"
@@ -136,12 +138,6 @@
 namespace WebCore {
 
 // FIXME: oilpan: These will be removed soon.
-DEFINE_GC_INFO(InternalRuntimeFlags);
-DEFINE_GC_INFO(TypeConversions);
-DEFINE_GC_INFO(MallocStatistics);
-DEFINE_GC_INFO(LayerRect);
-DEFINE_GC_INFO(Internals);
-
 static MockPagePopupDriver* s_pagePopupDriver = 0;
 
 using namespace HTMLNames;
@@ -150,7 +146,8 @@ class InspectorFrontendChannelDummy : public InspectorFrontendChannel {
 public:
     explicit InspectorFrontendChannelDummy(Page*);
     virtual ~InspectorFrontendChannelDummy() { }
-    virtual bool sendMessageToFrontend(const String& message) OVERRIDE;
+    virtual void sendMessageToFrontend(PassRefPtr<JSONObject> message) OVERRIDE;
+    virtual void flush() OVERRIDE { }
 
 private:
     Page* m_frontendPage;
@@ -161,9 +158,9 @@ InspectorFrontendChannelDummy::InspectorFrontendChannelDummy(Page* page)
 {
 }
 
-bool InspectorFrontendChannelDummy::sendMessageToFrontend(const String& message)
+void InspectorFrontendChannelDummy::sendMessageToFrontend(PassRefPtr<JSONObject> message)
 {
-    return InspectorClient::doDispatchMessageOnFrontendPage(m_frontendPage, message);
+    InspectorClient::doDispatchMessageOnFrontendPage(m_frontendPage, message->toJSONString());
 }
 
 static bool markerTypesFrom(const String& markerType, DocumentMarker::MarkerTypes& result)
@@ -234,7 +231,7 @@ Document* Internals::contextDocument() const
     return toDocument(executionContext());
 }
 
-Frame* Internals::frame() const
+LocalFrame* Internals::frame() const
 {
     if (!contextDocument())
         return 0;
@@ -304,7 +301,7 @@ unsigned Internals::updateStyleAndReturnAffectedElementCount(ExceptionState& exc
 
 unsigned Internals::needsLayoutCount(ExceptionState& exceptionState) const
 {
-    Frame* contextFrame = frame();
+    LocalFrame* contextFrame = frame();
     if (!contextFrame) {
         exceptionState.throwDOMException(InvalidAccessError, "No context frame is available.");
         return 0;
@@ -381,7 +378,7 @@ bool Internals::isValidContentSelect(Element* insertionPoint, ExceptionState& ex
         return false;
     }
 
-    return insertionPoint->hasTagName(contentTag) && toHTMLContentElement(insertionPoint)->isSelectValid();
+    return isHTMLContentElement(*insertionPoint) && toHTMLContentElement(*insertionPoint).isSelectValid();
 }
 
 Node* Internals::treeScopeRootNode(Node* node, ExceptionState& exceptionState)
@@ -480,9 +477,9 @@ unsigned short Internals::compareTreeScopePosition(const Node* node1, const Node
 
 unsigned Internals::numberOfActiveAnimations() const
 {
-    Frame* contextFrame = frame();
+    LocalFrame* contextFrame = frame();
     Document* document = contextFrame->document();
-    return document->timeline()->numberOfActiveAnimationsForTesting() + document->transitionTimeline()->numberOfActiveAnimationsForTesting();
+    return document->timeline().numberOfActiveAnimationsForTesting() + document->transitionTimeline().numberOfActiveAnimationsForTesting();
 }
 
 void Internals::pauseAnimations(double pauseTime, ExceptionState& exceptionState)
@@ -493,8 +490,8 @@ void Internals::pauseAnimations(double pauseTime, ExceptionState& exceptionState
     }
 
     frame()->view()->updateLayoutAndStyleForPainting();
-    frame()->document()->timeline()->pauseAnimationsForTesting(pauseTime);
-    frame()->document()->transitionTimeline()->pauseAnimationsForTesting(pauseTime);
+    frame()->document()->timeline().pauseAnimationsForTesting(pauseTime);
+    frame()->document()->transitionTimeline().pauseAnimationsForTesting(pauseTime);
 }
 
 bool Internals::hasShadowInsertionPoint(const Node* root, ExceptionState& exceptionState) const
@@ -706,12 +703,13 @@ String Internals::visiblePlaceholder(Element* element)
 
 void Internals::selectColorInColorChooser(Element* element, const String& colorValue)
 {
-    if (!element->hasTagName(inputTag))
+    ASSERT(element);
+    if (!isHTMLInputElement(*element))
         return;
     Color color;
     if (!color.setFromString(colorValue))
         return;
-    toHTMLInputElement(element)->selectColorInColorChooser(color);
+    toHTMLInputElement(*element).selectColorInColorChooser(color);
 }
 
 bool Internals::hasAutofocusRequest(Document* document)
@@ -761,7 +759,7 @@ void Internals::setEnableMockPagePopup(bool enabled, ExceptionState& exceptionSt
     page->chrome().client().setPagePopupDriver(s_pagePopupDriver);
 }
 
-PassRefPtr<PagePopupController> Internals::pagePopupController()
+PassRefPtrWillBeRawPtr<PagePopupController> Internals::pagePopupController()
 {
     return s_pagePopupDriver ? s_pagePopupDriver->pagePopupController() : 0;
 }
@@ -827,7 +825,7 @@ unsigned Internals::markerCountForNode(Node* node, const String& markerType, Exc
         return 0;
     }
 
-    return node->document().markers()->markersFor(node, markerTypes).size();
+    return node->document().markers().markersFor(node, markerTypes).size();
 }
 
 unsigned Internals::activeMarkerCountForNode(Node* node, ExceptionState& exceptionState)
@@ -839,7 +837,7 @@ unsigned Internals::activeMarkerCountForNode(Node* node, ExceptionState& excepti
 
     // Only TextMatch markers can be active.
     DocumentMarker::MarkerType markerType = DocumentMarker::TextMatch;
-    Vector<DocumentMarker*> markers = node->document().markers()->markersFor(node, markerType);
+    Vector<DocumentMarker*> markers = node->document().markers().markersFor(node, markerType);
 
     unsigned activeMarkerCount = 0;
     for (Vector<DocumentMarker*>::iterator iter = markers.begin(); iter != markers.end(); ++iter) {
@@ -863,7 +861,7 @@ DocumentMarker* Internals::markerAt(Node* node, const String& markerType, unsign
         return 0;
     }
 
-    Vector<DocumentMarker*> markers = node->document().markers()->markersFor(node, markerTypes);
+    Vector<DocumentMarker*> markers = node->document().markers().markersFor(node, markerTypes);
     if (markers.size() <= index)
         return 0;
     return markers[index];
@@ -888,7 +886,7 @@ String Internals::markerDescriptionForNode(Node* node, const String& markerType,
 void Internals::addTextMatchMarker(const Range* range, bool isActive)
 {
     range->ownerDocument().updateLayoutIgnorePendingStylesheets();
-    range->ownerDocument().markers()->addTextMatchMarker(range, isActive);
+    range->ownerDocument().markers().addTextMatchMarker(range, isActive);
 }
 
 void Internals::setMarkersActive(Node* node, unsigned startOffset, unsigned endOffset, bool active, ExceptionState& exceptionState)
@@ -898,7 +896,7 @@ void Internals::setMarkersActive(Node* node, unsigned startOffset, unsigned endO
         return;
     }
 
-    node->document().markers()->setMarkersActive(node, startOffset, endOffset, active);
+    node->document().markers().setMarkersActive(node, startOffset, endOffset, active);
 }
 
 void Internals::setMarkedTextMatchesAreHighlighted(Document* document, bool highlight, ExceptionState&)
@@ -974,11 +972,11 @@ bool Internals::wasLastChangeUserEdit(Element* textField, ExceptionState& except
         return false;
     }
 
-    if (textField->hasTagName(inputTag))
-        return toHTMLInputElement(textField)->lastChangeWasUserEdit();
+    if (isHTMLInputElement(*textField))
+        return toHTMLInputElement(*textField).lastChangeWasUserEdit();
 
-    if (textField->hasTagName(textareaTag))
-        return toHTMLTextAreaElement(textField)->lastChangeWasUserEdit();
+    if (isHTMLTextAreaElement(*textField))
+        return toHTMLTextAreaElement(*textField).lastChangeWasUserEdit();
 
     exceptionState.throwDOMException(InvalidNodeTypeError, "The element provided is not a TEXTAREA.");
     return false;
@@ -991,8 +989,8 @@ bool Internals::elementShouldAutoComplete(Element* element, ExceptionState& exce
         return false;
     }
 
-    if (element->hasTagName(inputTag))
-        return toHTMLInputElement(element)->shouldAutocomplete();
+    if (isHTMLInputElement(*element))
+        return toHTMLInputElement(*element).shouldAutocomplete();
 
     exceptionState.throwDOMException(InvalidNodeTypeError, "The element provided is not an INPUT.");
     return false;
@@ -1011,11 +1009,11 @@ String Internals::suggestedValue(Element* element, ExceptionState& exceptionStat
     }
 
     String suggestedValue;
-    if (element->hasTagName(inputTag))
-        suggestedValue = toHTMLInputElement(element)->suggestedValue();
+    if (isHTMLInputElement(*element))
+        suggestedValue = toHTMLInputElement(*element).suggestedValue();
 
-    if (element->hasTagName(textareaTag))
-        suggestedValue = toHTMLTextAreaElement(element)->suggestedValue();
+    if (isHTMLTextAreaElement(*element))
+        suggestedValue = toHTMLTextAreaElement(*element).suggestedValue();
     return suggestedValue;
 }
 
@@ -1031,11 +1029,11 @@ void Internals::setSuggestedValue(Element* element, const String& value, Excepti
         return;
     }
 
-    if (element->hasTagName(inputTag))
-        toHTMLInputElement(element)->setSuggestedValue(value);
+    if (isHTMLInputElement(*element))
+        toHTMLInputElement(*element).setSuggestedValue(value);
 
-    if (element->hasTagName(textareaTag))
-        toHTMLTextAreaElement(element)->setSuggestedValue(value);
+    if (isHTMLTextAreaElement(*element))
+        toHTMLTextAreaElement(*element).setSuggestedValue(value);
 }
 
 void Internals::setEditingValue(Element* element, const String& value, ExceptionState& exceptionState)
@@ -1045,12 +1043,12 @@ void Internals::setEditingValue(Element* element, const String& value, Exception
         return;
     }
 
-    if (!element->hasTagName(inputTag)) {
+    if (!isHTMLInputElement(*element)) {
         exceptionState.throwDOMException(InvalidNodeTypeError, "The element provided is not an INPUT.");
         return;
     }
 
-    toHTMLInputElement(element)->setEditingValue(value);
+    toHTMLInputElement(*element).setEditingValue(value);
 }
 
 void Internals::setAutofilled(Element* element, bool enabled, ExceptionState& exceptionState)
@@ -1262,6 +1260,16 @@ void Internals::setUserPreferredLanguages(const Vector<String>& languages)
     WebCore::overrideUserPreferredLanguages(atomicLanguages);
 }
 
+unsigned Internals::activeDOMObjectCount(Document* document, ExceptionState& exceptionState)
+{
+    if (!document) {
+        exceptionState.throwDOMException(InvalidAccessError, "No context document is available.");
+        return 0;
+    }
+
+    return document->activeDOMObjectCount();
+}
+
 unsigned Internals::wheelEventHandlerCount(Document* document, ExceptionState& exceptionState)
 {
     if (!document) {
@@ -1425,7 +1433,7 @@ PassRefPtr<NodeList> Internals::nodesFromRect(Document* document, int centerX, i
         return nullptr;
     }
 
-    Frame* frame = document->frame();
+    LocalFrame* frame = document->frame();
     FrameView* frameView = document->view();
     RenderView* renderView = document->renderView();
 
@@ -1610,11 +1618,11 @@ bool Internals::hasGrammarMarker(Document* document, int from, int length, Excep
 unsigned Internals::numberOfScrollableAreas(Document* document, ExceptionState&)
 {
     unsigned count = 0;
-    Frame* frame = document->frame();
+    LocalFrame* frame = document->frame();
     if (frame->view()->scrollableAreas())
         count += frame->view()->scrollableAreas()->size();
 
-    for (Frame* child = frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
+    for (LocalFrame* child = frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
         if (child->view() && child->view()->scrollableAreas())
             count += child->view()->scrollableAreas()->size();
     }
@@ -1639,6 +1647,7 @@ String Internals::layerTreeAsText(Document* document, ExceptionState& exceptionS
 
 String Internals::elementLayerTreeAsText(Element* element, ExceptionState& exceptionState) const
 {
+    DisableCompositingQueryAsserts disabler;
     return elementLayerTreeAsText(element, 0, exceptionState);
 }
 
@@ -2056,7 +2065,7 @@ PassRefPtrWillBeRawPtr<TypeConversions> Internals::typeConversions() const
 
 Vector<String> Internals::getReferencedFilePaths() const
 {
-    frame()->loader().saveDocumentAndScrollState();
+    frame()->loader().saveDocumentState();
     return FormController::getReferencedFilePaths(frame()->loader().currentItem()->documentState());
 }
 
@@ -2094,10 +2103,10 @@ void Internals::updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(Node* 
         document = contextDocument();
     } else if (node->isDocumentNode()) {
         document = toDocument(node);
-    } else if (node->hasTagName(HTMLNames::iframeTag)) {
-        document = toHTMLIFrameElement(node)->contentDocument();
+    } else if (isHTMLIFrameElement(*node)) {
+        document = toHTMLIFrameElement(*node).contentDocument();
     } else {
-        exceptionState.throwDOMException(TypeError, "The node provided is neither a document nor an IFrame.");
+        exceptionState.throwTypeError("The node provided is neither a document nor an IFrame.");
         return;
     }
     document->updateLayoutIgnorePendingStylesheets(Document::RunPostLayoutTasksSynchronously);
@@ -2277,12 +2286,13 @@ String Internals::baseURL(Document* document, ExceptionState& exceptionState)
 
 bool Internals::isSelectPopupVisible(Node* node)
 {
-    if (!node->hasTagName(HTMLNames::selectTag))
+    ASSERT(node);
+    if (!isHTMLSelectElement(*node))
         return false;
 
-    HTMLSelectElement* select = toHTMLSelectElement(node);
+    HTMLSelectElement& select = toHTMLSelectElement(*node);
 
-    RenderObject* renderer = select->renderer();
+    RenderObject* renderer = select.renderer();
     if (!renderer->isMenuList())
         return false;
 
@@ -2335,12 +2345,12 @@ void Internals::setZoomFactor(float factor)
 
 void Internals::setShouldRevealPassword(Element* element, bool reveal, ExceptionState& exceptionState)
 {
-    if (!element || !element->hasTagName(inputTag)) {
+    if (!isHTMLInputElement(element)) {
         exceptionState.throwDOMException(InvalidAccessError, ExceptionMessages::argumentNullOrIncorrectType(1, "Element"));
         return;
     }
 
-    return toHTMLInputElement(element)->setShouldRevealPassword(reveal);
+    return toHTMLInputElement(*element).setShouldRevealPassword(reveal);
 }
 
 namespace {
@@ -2380,6 +2390,31 @@ void Internals::trace(Visitor* visitor)
 {
     visitor->trace(m_runtimeFlags);
     visitor->trace(m_profilers);
+}
+
+void Internals::startSpeechInput(Element* element)
+{
+#if ENABLE(INPUT_SPEECH)
+    HTMLInputElement* input = toHTMLInputElement(element);
+    if (!input->isSpeechEnabled())
+        return;
+
+    InputFieldSpeechButtonElement* speechButton = toInputFieldSpeechButtonElement(input->userAgentShadowRoot()->getElementById(ShadowElementNames::speechButton()));
+    if (speechButton)
+        speechButton->startSpeechInput();
+#endif
+}
+
+void Internals::setValueForUser(Element* element, const String& value)
+{
+    toHTMLInputElement(element)->setValueForUser(value);
+}
+
+String Internals::textSurroundingNode(Node* node, int x, int y, unsigned long maxLength)
+{
+    blink::WebPoint point(x, y);
+    SurroundingText surroundingText(VisiblePosition(node->renderer()->positionForPoint(static_cast<IntPoint>(point))), maxLength);
+    return surroundingText.content();
 }
 
 }

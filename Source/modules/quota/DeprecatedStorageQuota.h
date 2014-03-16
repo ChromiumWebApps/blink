@@ -33,6 +33,7 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "heap/Handle.h"
+#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
@@ -44,7 +45,6 @@ class StorageQuotaCallback;
 class StorageUsageCallback;
 
 class DeprecatedStorageQuota : public RefCountedWillBeGarbageCollectedFinalized<DeprecatedStorageQuota>, public ScriptWrappable {
-    DECLARE_GC_INFO;
 public:
     enum Type {
         Temporary,

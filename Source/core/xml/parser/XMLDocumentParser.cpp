@@ -48,15 +48,16 @@
 #include "core/dom/TransformSource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ScriptResource.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLTemplateElement.h"
 #include "core/html/parser/HTMLEntityParser.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/ImageLoader.h"
-#include "core/frame/UseCounter.h"
 #include "core/xml/XMLTreeViewer.h"
+#include "core/xml/parser/SharedBufferReader.h"
 #include "core/xml/parser/XMLDocumentParserScope.h"
 #include "core/xml/parser/XMLParserInput.h"
 #include "platform/SharedBuffer.h"
@@ -525,27 +526,6 @@ static int matchFunc(const char*)
     return XMLDocumentParserScope::currentFetcher && currentThread() == libxmlLoaderThread;
 }
 
-class OffsetBuffer {
-    WTF_MAKE_FAST_ALLOCATED;
-public:
-    OffsetBuffer(const Vector<char>& b) : m_buffer(b), m_currentOffset(0) { }
-
-    int readOutBytes(char* outputBuffer, unsigned askedToRead)
-    {
-        unsigned bytesLeft = m_buffer.size() - m_currentOffset;
-        unsigned lenToCopy = min(askedToRead, bytesLeft);
-        if (lenToCopy) {
-            memcpy(outputBuffer, m_buffer.data() + m_currentOffset, lenToCopy);
-            m_currentOffset += lenToCopy;
-        }
-        return lenToCopy;
-    }
-
-private:
-    Vector<char> m_buffer;
-    unsigned m_currentOffset;
-};
-
 static inline void setAttributes(Element* element, Vector<Attribute>& attributeVector, ParserContentPolicy parserContentPolicy)
 {
     if (!scriptingContentIsAllowed(parserContentPolicy))
@@ -642,7 +622,7 @@ static void* openFunc(const char* uri)
         return &globalDescriptor;
 
     KURL finalURL;
-    Vector<char> data;
+    RefPtr<SharedBuffer> data;
 
     {
         ResourceFetcher* fetcher = XMLDocumentParserScope::currentFetcher;
@@ -653,7 +633,7 @@ static void* openFunc(const char* uri)
             FetchRequest request(ResourceRequest(url), FetchInitiatorTypeNames::xml, ResourceFetcher::defaultResourceOptions());
             ResourcePtr<Resource> resource = fetcher->fetchSynchronously(request);
             if (resource && !resource->errorOccurred()) {
-                resource->resourceBuffer()->moveTo(data);
+                data = resource->resourceBuffer();
                 finalURL = resource->response().url();
             }
         }
@@ -664,7 +644,7 @@ static void* openFunc(const char* uri)
     if (!shouldAllowExternalLoad(finalURL))
         return &globalDescriptor;
 
-    return new OffsetBuffer(data);
+    return new SharedBufferReader(data);
 }
 
 static int readFunc(void* context, char* buffer, int len)
@@ -673,8 +653,8 @@ static int readFunc(void* context, char* buffer, int len)
     if (context == &globalDescriptor)
         return 0;
 
-    OffsetBuffer* data = static_cast<OffsetBuffer*>(context);
-    return data->readOutBytes(buffer, len);
+    SharedBufferReader* data = static_cast<SharedBufferReader*>(context);
+    return data->readData(buffer, len);
 }
 
 static int writeFunc(void*, const char*, int)
@@ -686,7 +666,7 @@ static int writeFunc(void*, const char*, int)
 static int closeFunc(void* context)
 {
     if (context != &globalDescriptor) {
-        OffsetBuffer* data = static_cast<OffsetBuffer*>(context);
+        SharedBufferReader* data = static_cast<SharedBufferReader*>(context);
         delete data;
     }
     return 0;
@@ -823,12 +803,13 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parent
     for (; !elemStack.isEmpty(); elemStack.removeLast()) {
         Element* element = elemStack.last();
         if (element->hasAttributes()) {
-            for (unsigned i = 0; i < element->attributeCount(); i++) {
-                const Attribute* attribute = element->attributeItem(i);
-                if (attribute->localName() == xmlnsAtom)
-                    m_defaultNamespaceURI = attribute->value();
-                else if (attribute->prefix() == xmlnsAtom)
-                    m_prefixToNamespaceMap.set(attribute->localName(), attribute->value());
+            unsigned attributeCount = element->attributeCount();
+            for (unsigned i = 0; i < attributeCount; ++i) {
+                const Attribute& attribute = element->attributeItem(i);
+                if (attribute.localName() == xmlnsAtom)
+                    m_defaultNamespaceURI = attribute.value();
+                else if (attribute.prefix() == xmlnsAtom)
+                    m_prefixToNamespaceMap.set(attribute.localName(), attribute.value());
             }
         }
     }
@@ -995,13 +976,13 @@ void XMLDocumentParser::startElementNs(const AtomicString& localName, const Atom
 
     m_currentNode->parserAppendChild(newElement.get());
 
-    if (newElement->hasTagName(HTMLNames::templateTag))
-        pushCurrentNode(toHTMLTemplateElement(newElement.get())->content());
+    if (isHTMLTemplateElement(*newElement))
+        pushCurrentNode(toHTMLTemplateElement(*newElement).content());
     else
         pushCurrentNode(newElement.get());
 
-    if (newElement->hasTagName(HTMLNames::htmlTag))
-        toHTMLHtmlElement(newElement)->insertedByParser();
+    if (isHTMLHtmlElement(*newElement))
+        toHTMLHtmlElement(*newElement).insertedByParser();
 
     if (!m_parsingFragment && isFirstElement && document()->frame())
         document()->frame()->loader().dispatchDocumentElementAvailable();

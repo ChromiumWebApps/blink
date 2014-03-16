@@ -85,6 +85,7 @@ class WebRTCPeerConnectionHandler;
 class WebRTCPeerConnectionHandlerClient;
 class WebSandboxSupport;
 class WebScreenOrientationListener;
+class WebScrollbarBehavior;
 class WebSocketHandle;
 class WebSocketStreamHandle;
 class WebSpeechSynthesizer;
@@ -392,13 +393,18 @@ public:
     // Decodes the in-memory audio file data and returns the linear PCM audio data in the destinationBus.
     // A sample-rate conversion to sampleRate will occur if the file data is at a different sample-rate.
     // Returns true on success.
-    virtual bool loadAudioResource(WebAudioBus* destinationBus, const char* audioFileData, size_t dataSize, double sampleRate) { return false; }
-
+    virtual bool loadAudioResource(WebAudioBus* destinationBus, const char* audioFileData, size_t dataSize) { return false; }
 
     // Screen -------------------------------------------------------------
 
     // Supplies the system monitor color profile.
     virtual void screenColorProfile(WebVector<char>* profile) { }
+
+
+    // Scrollbar ----------------------------------------------------------
+
+    // Must return non-null.
+    virtual WebScrollbarBehavior* scrollbarBehavior() { return 0; }
 
 
     // Sudden Termination --------------------------------------------------

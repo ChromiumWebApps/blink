@@ -49,9 +49,6 @@ KeyboardEvent.DOM_KEY_LOCATION_NUMPAD;
 /** @param {*} message */
 function postMessage(message) {}
 
-/** @type {*} */
-window.testRunner ;
-
 /**
  * @param {string} eventName
  * @param {!Function} listener
@@ -231,7 +228,6 @@ InspectorFrontendHostAPI.prototype.platform = function() {}
 InspectorFrontendHostAPI.prototype.port = function() {}
 InspectorFrontendHostAPI.prototype.recordActionTaken = function(actionCode) {}
 InspectorFrontendHostAPI.prototype.recordPanelShown = function(panelCode) {}
-InspectorFrontendHostAPI.prototype.recordSettingChanged = function(settingCode) {}
 InspectorFrontendHostAPI.prototype.sendMessageToBackend = function(message) {}
 InspectorFrontendHostAPI.prototype.sendMessageToEmbedder = function(message) {}
 InspectorFrontendHostAPI.prototype.setInjectedScriptForOrigin = function(origin, script) {}
@@ -249,35 +245,9 @@ InspectorFrontendHost.embedderMessageAck = function(id, error) {}
 var FormatterWorker = {}
 var WebInspector = {}
 
-WebInspector.queryParamsObject = {}
-WebInspector.toggleSearchingForNode = function() {}
 WebInspector.panels = {};
 
-/**
- * @param {string=} messageLevel
- * @param {boolean=} showConsole
- */
-WebInspector.log = function(message, messageLevel, showConsole) {}
-
-WebInspector.showErrorMessage = function(error) {}
-
-WebInspector.addMainEventListeners = function(doc) {}
-
-WebInspector.openResource = function(url, external) {}
-
-WebInspector.showConsole = function() {}
-
-/**
- * @param {string} expression
- * @param {boolean=} showResultOnly
- */
-WebInspector.evaluateInConsole = function(expression, showResultOnly) {}
-
-WebInspector.queryParamsObject = {}
-
-WebInspector.Events = {
-    InspectorLoaded: "InspectorLoaded"
-}
+WebInspector.reload = function() { }
 
 /** Extensions API */
 
@@ -319,35 +289,6 @@ function ExtensionReloadOptions() {
     this.preprocessingScript = "";
     this.userAgent = "";
 }
-
-WebInspector.showPanel = function(panel)
-{
-}
-
-/**
- * @type {string} 
- */
-WebInspector.inspectedPageDomain;
-
-WebInspector.SourceJavaScriptTokenizer = {}
-WebInspector.SourceJavaScriptTokenizer.Keywords = {}
-
-/**
- * @return {boolean}
- */
-WebInspector.isInspectingDevice = function() {}
-
-/**
- * @return {boolean}
- */
-WebInspector.isWorkerFrontend = function() {}
-
-/**
- * @return {boolean}
- */
-WebInspector.isDedicatedWorkerFrontend = function() {}
-
-var InspectorTest = {}
 
 /* jsdifflib API */
 var difflib = {};
@@ -516,10 +457,6 @@ CodeMirror.keyMap;
 
 /** @type {{scrollLeft: number, scrollTop: number}} */
 CodeMirror.doc;
-
-WebInspector.suggestReload = function() { }
-WebInspector.reload = function() { }
-WebInspector._inspectedTabId;
 
 /** @type {boolean} */
 window.dispatchStandaloneTestRunnerMessages;

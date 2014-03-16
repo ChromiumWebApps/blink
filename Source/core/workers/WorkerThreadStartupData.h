@@ -31,9 +31,10 @@
 #ifndef WorkerThreadStartupData_h
 #define WorkerThreadStartupData_h
 
-#include "core/frame/ContentSecurityPolicy.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
@@ -42,12 +43,13 @@ namespace WebCore {
 
 class WorkerClients;
 
-struct WorkerThreadStartupData {
-    WTF_MAKE_NONCOPYABLE(WorkerThreadStartupData); WTF_MAKE_FAST_ALLOCATED;
+class WorkerThreadStartupData : public NoBaseWillBeGarbageCollectedFinalized<WorkerThreadStartupData> {
+    WTF_MAKE_NONCOPYABLE(WorkerThreadStartupData);
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
-    static PassOwnPtr<WorkerThreadStartupData> create(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode startMode, const String& contentSecurityPolicy, ContentSecurityPolicy::HeaderType contentSecurityPolicyType, PassOwnPtr<WorkerClients> workerClients)
+    static PassOwnPtrWillBeRawPtr<WorkerThreadStartupData> create(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode startMode, const String& contentSecurityPolicy, ContentSecurityPolicyHeaderType contentSecurityPolicyType, PassOwnPtr<WorkerClients> workerClients)
     {
-        return adoptPtr(new WorkerThreadStartupData(scriptURL, userAgent, sourceCode, startMode, contentSecurityPolicy, contentSecurityPolicyType, workerClients));
+        return adoptPtrWillBeNoop(new WorkerThreadStartupData(scriptURL, userAgent, sourceCode, startMode, contentSecurityPolicy, contentSecurityPolicyType, workerClients));
     }
 
     ~WorkerThreadStartupData();
@@ -57,11 +59,13 @@ public:
     String m_sourceCode;
     WorkerThreadStartMode m_startMode;
     String m_contentSecurityPolicy;
-    ContentSecurityPolicy::HeaderType m_contentSecurityPolicyType;
+    ContentSecurityPolicyHeaderType m_contentSecurityPolicyType;
     OwnPtr<WorkerClients> m_workerClients;
 
+    void trace(Visitor*) { }
+
 private:
-    WorkerThreadStartupData(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode, const String& contentSecurityPolicy, ContentSecurityPolicy::HeaderType contentSecurityPolicyType, PassOwnPtr<WorkerClients>);
+    WorkerThreadStartupData(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode, const String& contentSecurityPolicy, ContentSecurityPolicyHeaderType contentSecurityPolicyType, PassOwnPtr<WorkerClients>);
 };
 
 } // namespace WebCore

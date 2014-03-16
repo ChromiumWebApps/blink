@@ -50,7 +50,7 @@ public:
             toChildNodeList(m_childNodeList)->invalidateCache();
     }
 
-    PassRefPtr<ChildNodeList> ensureChildNodeList(ContainerNode* node)
+    PassRefPtr<ChildNodeList> ensureChildNodeList(ContainerNode& node)
     {
         if (m_childNodeList)
             return toChildNodeList(m_childNodeList);
@@ -59,7 +59,7 @@ public:
         return list.release();
     }
 
-    PassRefPtr<EmptyNodeList> ensureEmptyChildNodeList(Node* node)
+    PassRefPtr<EmptyNodeList> ensureEmptyChildNodeList(Node& node)
     {
         if (m_childNodeList)
             return toEmptyNodeList(m_childNodeList);
@@ -97,7 +97,7 @@ public:
     typedef HashMap<QualifiedName, TagCollection*> TagCollectionCacheNS;
 
     template<typename T>
-    PassRefPtr<T> addCache(ContainerNode* node, CollectionType collectionType, const AtomicString& name)
+    PassRefPtr<T> addCache(ContainerNode& node, CollectionType collectionType, const AtomicString& name)
     {
         NodeListAtomicNameCacheMap::AddResult result = m_atomicNameCaches.add(namedNodeListKey(collectionType, name), 0);
         if (!result.isNewEntry)
@@ -109,7 +109,7 @@ public:
     }
 
     template<typename T>
-    PassRefPtr<T> addCache(ContainerNode* node, CollectionType collectionType)
+    PassRefPtr<T> addCache(ContainerNode& node, CollectionType collectionType)
     {
         NodeListAtomicNameCacheMap::AddResult result = m_atomicNameCaches.add(namedNodeListKey(collectionType, starAtom), 0);
         if (!result.isNewEntry)
@@ -126,7 +126,7 @@ public:
         return static_cast<T*>(m_atomicNameCaches.get(namedNodeListKey(collectionType, starAtom)));
     }
 
-    PassRefPtr<TagCollection> addCache(ContainerNode* node, const AtomicString& namespaceURI, const AtomicString& localName)
+    PassRefPtr<TagCollection> addCache(ContainerNode& node, const AtomicString& namespaceURI, const AtomicString& localName)
     {
         QualifiedName name(nullAtom, localName, namespaceURI);
         TagCollectionCacheNS::AddResult result = m_tagCollectionCacheNS.add(name, 0);
@@ -201,7 +201,7 @@ private:
         return std::pair<unsigned char, StringImpl*>(type, name.impl());
     }
 
-    bool deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(Node*);
+    bool deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(Node&);
 
     // Can be a ChildNodeList or an EmptyNodeList.
     NodeList* m_childNodeList;
@@ -268,13 +268,12 @@ private:
     OwnPtr<NodeMutationObserverData> m_mutationObserverData;
 };
 
-inline bool NodeListsNodeData::deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(Node* ownerNode)
+inline bool NodeListsNodeData::deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(Node& ownerNode)
 {
-    ASSERT(ownerNode);
-    ASSERT(ownerNode->nodeLists() == this);
+    ASSERT(ownerNode.nodeLists() == this);
     if ((m_childNodeList ? 1 : 0) + m_atomicNameCaches.size() + m_tagCollectionCacheNS.size() != 1)
         return false;
-    ownerNode->clearNodeLists();
+    ownerNode.clearNodeLists();
     return true;
 }
 

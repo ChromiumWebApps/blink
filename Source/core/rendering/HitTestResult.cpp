@@ -30,12 +30,12 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
 #include "core/fetch/ImageResource.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/frame/Frame.h"
 #include "core/page/FrameTree.h"
 #include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderTextFragment.h"
@@ -179,7 +179,7 @@ void HitTestResult::setScrollbar(Scrollbar* s)
     m_scrollbar = s;
 }
 
-Frame* HitTestResult::innerNodeFrame() const
+LocalFrame* HitTestResult::innerNodeFrame() const
 {
     if (m_innerNonSharedNode)
         return m_innerNonSharedNode->document().frame();
@@ -193,7 +193,7 @@ bool HitTestResult::isSelected() const
     if (!m_innerNonSharedNode)
         return false;
 
-    if (Frame* frame = m_innerNonSharedNode->document().frame())
+    if (LocalFrame* frame = m_innerNonSharedNode->document().frame())
         return frame->selection().contains(m_hitTestLocation.point());
     return false;
 }
@@ -206,7 +206,7 @@ String HitTestResult::spellingToolTip(TextDirection& dir) const
     if (!m_innerNonSharedNode)
         return String();
 
-    DocumentMarker* marker = m_innerNonSharedNode->document().markers()->markerContainingPoint(m_hitTestLocation.point(), DocumentMarker::Grammar);
+    DocumentMarker* marker = m_innerNonSharedNode->document().markers().markerContainingPoint(m_hitTestLocation.point(), DocumentMarker::Grammar);
     if (!marker)
         return String();
 
@@ -347,12 +347,12 @@ bool HitTestResult::isLiveLink() const
 
 bool HitTestResult::isMisspelled() const
 {
-    if (!targetNode())
+    if (!targetNode() || !targetNode()->renderer())
         return false;
     VisiblePosition pos(targetNode()->renderer()->positionForPoint(localPoint()));
     if (pos.isNull())
         return false;
-    return m_innerNonSharedNode->document().markers()->markersInRange(
+    return m_innerNonSharedNode->document().markers().markersInRange(
         makeRange(pos, pos).get(), DocumentMarker::MisspellingMarkers()).size() > 0;
 }
 

@@ -94,7 +94,7 @@ void GeolocationClientMock::requestPermission(Geolocation* geolocation)
 
 void GeolocationClientMock::cancelPermissionRequest(Geolocation* geolocation)
 {
-    // Called from Geolocation::disconnectFrame() in response to Frame destruction.
+    // Called from Geolocation::disconnectFrame() in response to LocalFrame destruction.
     m_pendingPermissions.remove(geolocation);
     if (m_pendingPermissions.isEmpty() && m_permissionTimer.isActive())
         m_permissionTimer.stop();
@@ -104,7 +104,7 @@ void GeolocationClientMock::asyncUpdatePermission()
 {
     ASSERT(m_permissionState != PermissionStateUnset);
     if (!m_permissionTimer.isActive())
-        m_permissionTimer.startOneShot(0);
+        m_permissionTimer.startOneShot(0, FROM_HERE);
 }
 
 void GeolocationClientMock::permissionTimerFired(Timer<GeolocationClientMock>* timer)
@@ -157,7 +157,7 @@ void GeolocationClientMock::asyncUpdateController()
 {
     ASSERT(m_controller);
     if (m_isActive && !m_controllerTimer.isActive())
-        m_controllerTimer.startOneShot(0);
+        m_controllerTimer.startOneShot(0, FROM_HERE);
 }
 
 void GeolocationClientMock::controllerTimerFired(Timer<GeolocationClientMock>* timer)

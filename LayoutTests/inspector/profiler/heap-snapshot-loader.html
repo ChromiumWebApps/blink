@@ -6,7 +6,7 @@
 
 function test()
 {
-    WebInspector.showPanel("profiles");
+    WebInspector.inspectorView.showPanel("profiles");
     var source = InspectorTest.createHeapSnapshotMockRaw();
     var sourceStringified = JSON.stringify(source);
     var partSize = sourceStringified.length >> 3;
@@ -37,8 +37,8 @@ function test()
         profileType._takeHeapSnapshot(function() {});
     }
 
-    WebInspector.log = function(message) {
-        InspectorTest.addResult("WebInspector.log: " + message);
+    WebInspector.console.log = function(message) {
+        InspectorTest.addResult("WebInspector.console.log: " + message);
     }
 
     InspectorTest.runTestSuite([

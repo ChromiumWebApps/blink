@@ -47,9 +47,11 @@
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerScriptLoaderClient.h"
 #include "core/workers/WorkerThreadStartupData.h"
+#include "heap/Handle.h"
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 #include "platform/NotImplemented.h"
 #include "platform/SharedBuffer.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "wtf/Functional.h"
 
 using namespace WebCore;
@@ -236,7 +238,7 @@ void WebEmbeddedWorkerImpl::onScriptLoaderFinished()
     providePermissionClientToWorker(workerClients.get(), m_permissionClient.release());
     provideServiceWorkerGlobalScopeClientToWorker(workerClients.get(), ServiceWorkerGlobalScopeClientImpl::create(m_workerContextClient.release()));
 
-    OwnPtr<WorkerThreadStartupData> startupData =
+    OwnPtrWillBeRawPtr<WorkerThreadStartupData> startupData =
         WorkerThreadStartupData::create(
             m_mainScriptLoader->url(),
             m_workerStartData.userAgent,
@@ -244,7 +246,7 @@ void WebEmbeddedWorkerImpl::onScriptLoaderFinished()
             startMode,
             // FIXME: fill appropriate CSP info and policy type.
             String(),
-            ContentSecurityPolicy::Enforce,
+            ContentSecurityPolicyHeaderTypeEnforce,
             workerClients.release());
 
     m_mainScriptLoader.clear();

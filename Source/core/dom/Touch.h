@@ -28,6 +28,7 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/events/EventTarget.h"
+#include "heap/Handle.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -35,15 +36,15 @@
 
 namespace WebCore {
 
-class Frame;
+class LocalFrame;
 
-class Touch : public RefCounted<Touch>, public ScriptWrappable {
+class Touch : public RefCountedWillBeGarbageCollectedFinalized<Touch>, public ScriptWrappable {
 public:
-    static PassRefPtr<Touch> create(Frame* frame, EventTarget* target,
+    static PassRefPtrWillBeRawPtr<Touch> create(LocalFrame* frame, EventTarget* target,
             unsigned identifier, int screenX, int screenY, int pageX, int pageY,
             int radiusX, int radiusY, float rotationAngle, float force)
     {
-        return adoptRef(new Touch(frame, target, identifier, screenX,
+        return adoptRefWillBeNoop(new Touch(frame, target, identifier, screenX,
                 screenY, pageX, pageY, radiusX, radiusY, rotationAngle, force));
     }
 
@@ -60,10 +61,12 @@ public:
     float webkitRotationAngle() const { return m_rotationAngle; }
     float webkitForce() const { return m_force; }
     const LayoutPoint& absoluteLocation() const { return m_absoluteLocation; }
-    PassRefPtr<Touch> cloneWithNewTarget(EventTarget*) const;
+    PassRefPtrWillBeRawPtr<Touch> cloneWithNewTarget(EventTarget*) const;
+
+    void trace(Visitor*) { }
 
 private:
-    Touch(Frame* frame, EventTarget* target, unsigned identifier,
+    Touch(LocalFrame* frame, EventTarget* target, unsigned identifier,
             int screenX, int screenY, int pageX, int pageY,
             int radiusX, int radiusY, float rotationAngle, float force);
 

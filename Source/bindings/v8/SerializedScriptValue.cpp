@@ -41,7 +41,7 @@
 #include "bindings/v8/ScriptScope.h"
 #include "bindings/v8/ScriptState.h"
 #include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8Utilities.h"
+#include "bindings/v8/WorkerScriptController.h"
 #include "bindings/v8/custom/V8ArrayBufferCustom.h"
 #include "bindings/v8/custom/V8ArrayBufferViewCustom.h"
 #include "bindings/v8/custom/V8DataViewCustom.h"
@@ -61,6 +61,7 @@
 #include "core/fileapi/FileList.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/DataView.h"
+#include "heap/Handle.h"
 #include "platform/SharedBuffer.h"
 #include "wtf/ArrayBuffer.h"
 #include "wtf/ArrayBufferContents.h"
@@ -279,9 +280,8 @@ private:
 class Writer {
     WTF_MAKE_NONCOPYABLE(Writer);
 public:
-    explicit Writer(v8::Isolate* isolate)
+    Writer()
         : m_position(0)
-        , m_isolate(isolate)
     {
     }
 
@@ -551,8 +551,6 @@ public:
         doWriteUint32(length);
     }
 
-    v8::Isolate* getIsolate() { return m_isolate; }
-
 private:
     void doWriteFile(const File& file)
     {
@@ -682,7 +680,6 @@ private:
 
     Vector<BufferValueType> m_buffer;
     unsigned m_position;
-    v8::Isolate* m_isolate;
 };
 
 static v8::Handle<v8::Object> toV8Object(MessagePort* impl, v8::Isolate* isolate)
@@ -725,11 +722,11 @@ public:
         ASSERT(!tryCatch.HasCaught());
         if (messagePorts) {
             for (size_t i = 0; i < messagePorts->size(); i++)
-                m_transferredMessagePorts.set(toV8Object(messagePorts->at(i).get(), m_writer.getIsolate()), i);
+                m_transferredMessagePorts.set(toV8Object(messagePorts->at(i).get(), isolate), i);
         }
         if (arrayBuffers) {
             for (size_t i = 0; i < arrayBuffers->size(); i++)  {
-                v8::Handle<v8::Object> v8ArrayBuffer = toV8Object(arrayBuffers->at(i).get(), m_writer.getIsolate());
+                v8::Handle<v8::Object> v8ArrayBuffer = toV8Object(arrayBuffers->at(i).get(), isolate);
                 // Coalesce multiple occurences of the same buffer to the first index.
                 if (!m_transferredArrayBuffers.contains(v8ArrayBuffer))
                     m_transferredArrayBuffers.set(v8ArrayBuffer, i);
@@ -1055,13 +1052,16 @@ private:
         m_writer.writeBooleanObject(booleanObject->ValueOf());
     }
 
-    void writeBlob(v8::Handle<v8::Value> value)
+    StateBase* writeBlob(v8::Handle<v8::Value> value, StateBase* next)
     {
         Blob* blob = V8Blob::toNative(value.As<v8::Object>());
         if (!blob)
-            return;
+            return 0;
+        if (blob->hasBeenClosed())
+            return handleError(DataCloneError, "A Blob object has been closed, and could therefore not be cloned.", next);
         m_writer.writeBlob(blob->uuid(), blob->type(), blob->size());
         m_blobDataHandles.add(blob->uuid(), blob->blobDataHandle());
+        return 0;
     }
 
     StateBase* writeDOMFileSystem(v8::Handle<v8::Value> value, StateBase* next)
@@ -1075,13 +1075,16 @@ private:
         return 0;
     }
 
-    void writeFile(v8::Handle<v8::Value> value)
+    StateBase* writeFile(v8::Handle<v8::Value> value, StateBase* next)
     {
         File* file = V8File::toNative(value.As<v8::Object>());
         if (!file)
-            return;
+            return 0;
+        if (file->hasBeenClosed())
+            return handleError(DataCloneError, "A File object has been closed, and could therefore not be cloned.", next);
         m_writer.writeFile(*file);
         m_blobDataHandles.add(file->uuid(), file->blobDataHandle());
+        return 0;
     }
 
     void writeFileList(v8::Handle<v8::Value> value)
@@ -1118,7 +1121,7 @@ private:
             return 0;
         if (!arrayBufferView->buffer())
             return handleError(DataCloneError, "An ArrayBuffer could not be cloned.", next);
-        v8::Handle<v8::Value> underlyingBuffer = toV8(arrayBufferView->buffer(), v8::Handle<v8::Object>(), m_writer.getIsolate());
+        v8::Handle<v8::Value> underlyingBuffer = toV8(arrayBufferView->buffer(), v8::Handle<v8::Object>(), m_isolate);
         if (underlyingBuffer.IsEmpty())
             return handleError(DataCloneError, "An ArrayBuffer could not be cloned.", next);
         StateBase* stateOut = doSerializeArrayBuffer(underlyingBuffer, next);
@@ -1283,9 +1286,9 @@ Serializer::StateBase* Serializer::doSerialize(v8::Handle<v8::Value> value, Stat
         else if (value->IsArray()) {
             return startArrayState(value.As<v8::Array>(), next);
         } else if (V8File::hasInstance(value, m_isolate))
-            writeFile(value);
+            return writeFile(value, next);
         else if (V8Blob::hasInstance(value, m_isolate))
-            writeBlob(value);
+            return writeBlob(value, next);
         else if (V8DOMFileSystem::hasInstance(value, m_isolate))
             return writeDOMFileSystem(value, next);
         else if (V8FileList::hasInstance(value, m_isolate))
@@ -1858,7 +1861,7 @@ private:
             return false;
         if (!doReadUint64(&size))
             return false;
-        RefPtr<Blob> blob = Blob::create(getOrCreateBlobDataHandle(uuid, type, size));
+        RefPtrWillBeRawPtr<Blob> blob = Blob::create(getOrCreateBlobDataHandle(uuid, type, size));
         *value = toV8(blob.release(), v8::Handle<v8::Object>(), m_isolate);
         return true;
     }
@@ -1874,14 +1877,14 @@ private:
             return false;
         if (!readWebCoreString(&url))
             return false;
-        RefPtr<DOMFileSystem> fs = DOMFileSystem::create(currentExecutionContext(m_isolate), name, static_cast<WebCore::FileSystemType>(type), KURL(ParsedURLString, url));
+        RefPtrWillBeRawPtr<DOMFileSystem> fs = DOMFileSystem::create(currentExecutionContext(m_isolate), name, static_cast<WebCore::FileSystemType>(type), KURL(ParsedURLString, url));
         *value = toV8(fs.release(), v8::Handle<v8::Object>(), m_isolate);
         return true;
     }
 
     bool readFile(v8::Handle<v8::Value>* value)
     {
-        RefPtr<File> file = doReadFileHelper();
+        RefPtrWillBeRawPtr<File> file = doReadFileHelper();
         if (!file)
             return false;
         *value = toV8(file.release(), v8::Handle<v8::Object>(), m_isolate);
@@ -1895,9 +1898,9 @@ private:
         uint32_t length;
         if (!doReadUint32(&length))
             return false;
-        RefPtr<FileList> fileList = FileList::create();
+        RefPtrWillBeRawPtr<FileList> fileList = FileList::create();
         for (unsigned i = 0; i < length; ++i) {
-            RefPtr<File> file = doReadFileHelper();
+            RefPtrWillBeRawPtr<File> file = doReadFileHelper();
             if (!file)
                 return false;
             fileList->append(file.release());
@@ -1906,7 +1909,7 @@ private:
         return true;
     }
 
-    PassRefPtr<File> doReadFileHelper()
+    PassRefPtrWillBeRawPtr<File> doReadFileHelper()
     {
         if (m_version < 3)
             return nullptr;
@@ -2283,7 +2286,7 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::create(const String& da
 
 PassRefPtr<SerializedScriptValue> SerializedScriptValue::create(const String& data, v8::Isolate* isolate)
 {
-    Writer writer(isolate);
+    Writer writer;
     writer.writeWebCoreString(data);
     String wireData = writer.takeWireString();
     return adoptRef(new SerializedScriptValue(wireData));
@@ -2296,12 +2299,7 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::create()
 
 PassRefPtr<SerializedScriptValue> SerializedScriptValue::nullValue()
 {
-    return nullValue(v8::Isolate::GetCurrent());
-}
-
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::nullValue(v8::Isolate* isolate)
-{
-    Writer writer(isolate);
+    Writer writer;
     writer.writeNull();
     String wireData = writer.takeWireString();
     return adoptRef(new SerializedScriptValue(wireData));
@@ -2331,12 +2329,21 @@ SerializedScriptValue::SerializedScriptValue()
 {
 }
 
-inline void neuterBinding(ArrayBuffer* object)
+static void neuterArrayBufferInAllWorlds(ArrayBuffer* object)
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    Vector<DOMDataStore*>& allStores = V8PerIsolateData::from(isolate)->allStores();
-    for (size_t i = 0; i < allStores.size(); i++) {
-        v8::Handle<v8::Object> wrapper = allStores[i]->get<V8ArrayBuffer>(object, isolate);
+    if (isMainThread()) {
+        Vector<RefPtr<DOMWrapperWorld> > worlds;
+        DOMWrapperWorld::allWorldsInMainThread(worlds);
+        for (size_t i = 0; i < worlds.size(); i++) {
+            v8::Handle<v8::Object> wrapper = worlds[i]->domDataStore().get<V8ArrayBuffer>(object, isolate);
+            if (!wrapper.IsEmpty()) {
+                ASSERT(wrapper->IsArrayBuffer());
+                v8::Handle<v8::ArrayBuffer>::Cast(wrapper)->Neuter();
+            }
+        }
+    } else {
+        v8::Handle<v8::Object> wrapper = DOMWrapperWorld::current(isolate)->domDataStore().get<V8ArrayBuffer>(object, isolate);
         if (!wrapper.IsEmpty()) {
             ASSERT(wrapper->IsArrayBuffer());
             v8::Handle<v8::ArrayBuffer>::Cast(wrapper)->Neuter();
@@ -2369,7 +2376,7 @@ PassOwnPtr<SerializedScriptValue::ArrayBufferContentsArray> SerializedScriptValu
             return nullptr;
         }
 
-        neuterBinding(arrayBuffers[i].get());
+        neuterArrayBufferInAllWorlds(arrayBuffers[i].get());
     }
     return contents.release();
 }
@@ -2377,7 +2384,7 @@ PassOwnPtr<SerializedScriptValue::ArrayBufferContentsArray> SerializedScriptValu
 SerializedScriptValue::SerializedScriptValue(v8::Handle<v8::Value> value, MessagePortArray* messagePorts, ArrayBufferArray* arrayBuffers, ExceptionState& exceptionState, v8::Isolate* isolate)
     : m_externallyAllocatedMemory(0)
 {
-    Writer writer(isolate);
+    Writer writer;
     Serializer::Status status;
     String errorMessage;
     {
@@ -2437,6 +2444,57 @@ v8::Handle<v8::Value> SerializedScriptValue::deserialize(v8::Isolate* isolate, M
     // Holding a RefPtr ensures we are alive (along with our internal data) throughout the operation.
     RefPtr<SerializedScriptValue> protect(this);
     return deserializer.deserialize();
+}
+
+bool SerializedScriptValue::extractTransferables(v8::Local<v8::Value> value, int argumentIndex, MessagePortArray& ports, ArrayBufferArray& arrayBuffers, ExceptionState& exceptionState, v8::Isolate* isolate)
+{
+    if (isUndefinedOrNull(value)) {
+        ports.resize(0);
+        arrayBuffers.resize(0);
+        return true;
+    }
+
+    uint32_t length = 0;
+    if (value->IsArray()) {
+        v8::Local<v8::Array> array = v8::Local<v8::Array>::Cast(value);
+        length = array->Length();
+    } else if (toV8Sequence(value, length, isolate).IsEmpty()) {
+        exceptionState.throwTypeError(ExceptionMessages::notAnArrayTypeArgumentOrValue(argumentIndex + 1));
+        return false;
+    }
+
+    v8::Local<v8::Object> transferrables = v8::Local<v8::Object>::Cast(value);
+
+    // Validate the passed array of transferrables.
+    for (unsigned i = 0; i < length; ++i) {
+        v8::Local<v8::Value> transferrable = transferrables->Get(i);
+        // Validation of non-null objects, per HTML5 spec 10.3.3.
+        if (isUndefinedOrNull(transferrable)) {
+            exceptionState.throwDOMException(DataCloneError, "Value at index " + String::number(i) + " is an untransferable " + (transferrable->IsUndefined() ? "'undefined'" : "'null'") + " value.");
+            return false;
+        }
+        // Validation of Objects implementing an interface, per WebIDL spec 4.1.15.
+        if (V8MessagePort::hasInstance(transferrable, isolate)) {
+            RefPtr<MessagePort> port = V8MessagePort::toNative(v8::Handle<v8::Object>::Cast(transferrable));
+            // Check for duplicate MessagePorts.
+            if (ports.contains(port)) {
+                exceptionState.throwDOMException(DataCloneError, "Message port at index " + String::number(i) + " is a duplicate of an earlier port.");
+                return false;
+            }
+            ports.append(port.release());
+        } else if (V8ArrayBuffer::hasInstance(transferrable, isolate)) {
+            RefPtr<ArrayBuffer> arrayBuffer = V8ArrayBuffer::toNative(v8::Handle<v8::Object>::Cast(transferrable));
+            if (arrayBuffers.contains(arrayBuffer)) {
+                exceptionState.throwDOMException(DataCloneError, "ArrayBuffer at index " + String::number(i) + " is a duplicate of an earlier ArrayBuffer.");
+                return false;
+            }
+            arrayBuffers.append(arrayBuffer.release());
+        } else {
+            exceptionState.throwDOMException(DataCloneError, "Value at index " + String::number(i) + " does not have a transferable type.");
+            return false;
+        }
+    }
+    return true;
 }
 
 void SerializedScriptValue::registerMemoryAllocatedWithCurrentScriptContext()

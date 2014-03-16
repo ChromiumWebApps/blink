@@ -31,7 +31,10 @@ window.onload = function() {
         inputs[i].appendChild(contentSpan);
         inputs[i].createShadowRoot().innerHTML = '<span>Shadow!</span><content select="*"></content>';
     }
-    document.querySelector('input[type=text]').focus();
+    var text = document.querySelector('input[type=text]');
+    text.focus();
+    text.value = 'updated';
+    text.setRangeText('range', 0, 7);
 };
 </script>
 </body>

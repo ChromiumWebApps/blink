@@ -39,12 +39,14 @@
 
 namespace WebCore {
 
-HTMLImportChild::HTMLImportChild(const KURL& url, bool createdByParser)
-    : HTMLImport(createdByParser)
+HTMLImportChild::HTMLImportChild(Document& master, const KURL& url, bool sync)
+    : HTMLImport(sync)
+    , m_master(master)
     , m_url(url)
     , m_customElementMicrotaskStep(0)
     , m_client(0)
 {
+    m_master.guardRef();
 }
 
 HTMLImportChild::~HTMLImportChild()
@@ -60,6 +62,8 @@ HTMLImportChild::~HTMLImportChild()
 
     if (m_client)
         m_client->importChildWasDestroyed(this);
+
+    m_master.guardDeref();
 }
 
 void HTMLImportChild::wasAlreadyLoaded()
@@ -74,7 +78,7 @@ void HTMLImportChild::startLoading(const ResourcePtr<RawResource>& resource)
     ASSERT(!this->resource());
     ASSERT(!m_loader);
 
-    if (isCreatedByParser()) {
+    if (isSync()) {
         ASSERT(!m_customElementMicrotaskStep);
         m_customElementMicrotaskStep = CustomElement::didCreateImport(this);
     }
@@ -147,6 +151,12 @@ void HTMLImportChild::didFinishParsing()
 {
     ASSERT(m_loader->isOwnedBy(this));
     m_loader->didFinishParsing();
+}
+
+void HTMLImportChild::didRemoveAllPendingStylesheet()
+{
+    ASSERT(m_loader->isOwnedBy(this));
+    m_loader->didRemoveAllPendingStylesheet();
 }
 
 void HTMLImportChild::stateDidChange()
@@ -239,7 +249,7 @@ void HTMLImportChild::showThis()
     fprintf(stderr, " loader=%p own=%s async=%s url=%s",
         m_loader.get(),
         hasLoader() && ownsLoader() ? "Y" : "N",
-        isCreatedByParser() ? "Y" : "N",
+        isSync() ? "Y" : "N",
         url().string().utf8().data());
 }
 #endif

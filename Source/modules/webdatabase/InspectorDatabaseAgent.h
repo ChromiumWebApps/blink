@@ -31,6 +31,7 @@
 
 #include "InspectorFrontend.h"
 #include "core/inspector/InspectorBaseAgent.h"
+#include "heap/Handle.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
@@ -39,7 +40,7 @@ namespace WebCore {
 
 class Database;
 class DocumentLoader;
-class Frame;
+class LocalFrame;
 class InspectorDatabaseResource;
 class InspectorFrontend;
 class InstrumentingAgents;
@@ -58,7 +59,7 @@ public:
     virtual void clearFrontend() OVERRIDE;
     virtual void restore() OVERRIDE;
 
-    void didCommitLoad(Frame*, DocumentLoader*);
+    void didCommitLoad(LocalFrame*, DocumentLoader*);
 
     // Called from the front-end.
     virtual void enable(ErrorString*) OVERRIDE;
@@ -66,7 +67,7 @@ public:
     virtual void getDatabaseTableNames(ErrorString*, const String& databaseId, RefPtr<TypeBuilder::Array<String> >& names) OVERRIDE;
     virtual void executeSQL(ErrorString*, const String& databaseId, const String& query, PassRefPtr<ExecuteSQLCallback>) OVERRIDE;
 
-    void didOpenDatabase(PassRefPtr<Database>, const String& domain, const String& name, const String& version);
+    void didOpenDatabase(PassRefPtrWillBeRawPtr<Database>, const String& domain, const String& name, const String& version);
 private:
     explicit InspectorDatabaseAgent();
 

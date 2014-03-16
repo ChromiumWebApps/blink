@@ -24,8 +24,8 @@
 
 #include "core/rendering/svg/RenderSVGResource.h"
 
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/svg/RenderSVGResourceClipper.h"
 #include "core/rendering/svg/RenderSVGResourceFilter.h"
 #include "core/rendering/svg/RenderSVGResourceMasker.h"
@@ -81,8 +81,7 @@ static inline RenderSVGResource* requestPaintingResource(RenderSVGResourceMode m
 
     bool applyToFill = mode == ApplyToFillMode;
     SVGPaint::SVGPaintType paintType = applyToFill ? svgStyle->fillPaintType() : svgStyle->strokePaintType();
-    if (paintType == SVGPaint::SVG_PAINTTYPE_NONE)
-        return 0;
+    ASSERT(paintType != SVGPaint::SVG_PAINTTYPE_NONE);
 
     Color color;
     bool hasColor = false;
@@ -184,7 +183,7 @@ static inline void removeFromCacheAndInvalidateDependencies(RenderObject* object
 
     if (!object->node() || !object->node()->isSVGElement())
         return;
-    HashSet<SVGElement*>* dependencies = object->document().accessSVGExtensions()->setOfElementsReferencingTarget(toSVGElement(object->node()));
+    HashSet<SVGElement*>* dependencies = object->document().accessSVGExtensions().setOfElementsReferencingTarget(toSVGElement(object->node()));
     if (!dependencies)
         return;
     HashSet<SVGElement*>::iterator end = dependencies->end();

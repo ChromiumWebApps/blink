@@ -99,10 +99,10 @@ public:
     void drawEmphasisMarks(GraphicsContext*, const TextRunPaintInfo&, const AtomicString& mark, const FloatPoint&) const;
 
     float width(const TextRun&, HashSet<const SimpleFontData*>* fallbackFonts = 0, GlyphOverflow* = 0) const;
-    float width(const TextRun&, int& charsConsumed, String& glyphName) const;
+    float width(const TextRun&, int& charsConsumed, Glyph& glyphId) const;
 
     int offsetForPosition(const TextRun&, float position, bool includePartialGlyphs) const;
-    FloatRect selectionRectForText(const TextRun&, const FloatPoint&, int h, int from = 0, int to = -1) const;
+    FloatRect selectionRectForText(const TextRun&, const FloatPoint&, int h, int from = 0, int to = -1, bool accountForGlyphBounds = false) const;
 
     bool isFixedPitch() const;
 
@@ -142,7 +142,7 @@ private:
     void drawEmphasisMarks(GraphicsContext*, const TextRunPaintInfo&, const GlyphBuffer&, const AtomicString&, const FloatPoint&) const;
     float floatWidthForSimpleText(const TextRun&, HashSet<const SimpleFontData*>* fallbackFonts = 0, GlyphOverflow* = 0) const;
     int offsetForPositionForSimpleText(const TextRun&, float position, bool includePartialGlyphs) const;
-    FloatRect selectionRectForSimpleText(const TextRun&, const FloatPoint&, int h, int from, int to) const;
+    FloatRect selectionRectForSimpleText(const TextRun&, const FloatPoint&, int h, int from, int to, bool accountForGlyphBounds) const;
 
     bool getEmphasisMarkGlyphData(const AtomicString&, GlyphData&) const;
 
@@ -173,6 +173,11 @@ private:
     bool loadingCustomFonts() const
     {
         return m_fontFallbackList && m_fontFallbackList->loadingCustomFonts();
+    }
+
+    bool shouldSkipDrawing() const
+    {
+        return m_fontFallbackList && m_fontFallbackList->shouldSkipDrawing();
     }
 
     FontDescription m_fontDescription;

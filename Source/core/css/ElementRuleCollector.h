@@ -75,10 +75,11 @@ private:
     const CSSStyleSheet* m_parentStyleSheet;
 };
 
+// FIXME: oilpan: when transition types are gone this class can be replaced with HeapVector.
 class StyleRuleList : public RefCounted<StyleRuleList> {
 public:
     static PassRefPtr<StyleRuleList> create() { return adoptRef(new StyleRuleList()); }
-    Vector<StyleRule*> m_list;
+    WillBePersistentHeapVector<RawPtrWillBeMember<StyleRule> > m_list;
 };
 
 // ElementRuleCollector is designed to be used as a stack object.
@@ -86,6 +87,7 @@ public:
 // and then let it go out of scope.
 // FIXME: Currently it modifies the RenderStyle but should not!
 class ElementRuleCollector {
+    STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(ElementRuleCollector);
 public:
     ElementRuleCollector(const ElementResolveContext&, const SelectorFilter&, RenderStyle* = 0);
@@ -100,7 +102,7 @@ public:
 
     MatchResult& matchedResult();
     PassRefPtr<StyleRuleList> matchedStyleRuleList();
-    PassRefPtr<CSSRuleList> matchedCSSRuleList();
+    PassRefPtrWillBeRawPtr<CSSRuleList> matchedCSSRuleList();
 
     void collectMatchingRules(const MatchRequest&, RuleRange&, SelectorChecker::BehaviorAtBoundary = SelectorChecker::DoesNotCrossBoundary, CascadeScope = ignoreCascadeScope, CascadeOrder = ignoreCascadeOrder);
     void sortAndTransferMatchedRules();
@@ -113,8 +115,17 @@ public:
 
 private:
     void collectRuleIfMatches(const RuleData&, SelectorChecker::BehaviorAtBoundary, CascadeScope, CascadeOrder, const MatchRequest&, RuleRange&);
-    void collectMatchingRulesForList(const Vector<RuleData>*, SelectorChecker::BehaviorAtBoundary, CascadeScope, CascadeOrder, const MatchRequest&, RuleRange&);
-    void collectMatchingRulesForList(const RuleData*, SelectorChecker::BehaviorAtBoundary, CascadeScope, CascadeOrder, const MatchRequest&, RuleRange&);
+
+    template<typename RuleDataListType>
+    void collectMatchingRulesForList(const RuleDataListType* rules, SelectorChecker::BehaviorAtBoundary behaviorAtBoundary, CascadeScope cascadeScope, CascadeOrder cascadeOrder, const MatchRequest& matchRequest, RuleRange& ruleRange)
+    {
+        if (!rules)
+            return;
+
+        for (typename RuleDataListType::const_iterator it = rules->begin(), end = rules->end(); it != end; ++it)
+            collectRuleIfMatches(*it, behaviorAtBoundary, cascadeScope, cascadeOrder, matchRequest, ruleRange);
+    }
+
     bool ruleMatches(const RuleData&, const ContainerNode* scope, SelectorChecker::BehaviorAtBoundary, SelectorChecker::MatchResult*);
 
     CSSRuleList* nestedRuleList(CSSRule*);
@@ -142,7 +153,7 @@ private:
     OwnPtr<Vector<MatchedRule, 32> > m_matchedRules;
 
     // Output.
-    RefPtr<StaticCSSRuleList> m_cssRuleList;
+    RefPtrWillBeMember<StaticCSSRuleList> m_cssRuleList;
     RefPtr<StyleRuleList> m_styleRuleList;
     MatchResult m_result;
 };

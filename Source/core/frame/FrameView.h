@@ -25,8 +25,8 @@
 #ifndef FrameView_h
 #define FrameView_h
 
+#include "RuntimeEnabledFeatures.h"
 #include "core/rendering/PaintPhase.h"
-#include "core/rendering/PartialLayoutState.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/scroll/ScrollView.h"
@@ -37,9 +37,12 @@
 namespace WebCore {
 
 class AXObjectCache;
+class DocumentLifecycle;
+class Cursor;
 class Element;
 class FloatSize;
-class Frame;
+class HTMLFrameOwnerElement;
+class LocalFrame;
 class KURL;
 class Node;
 class Page;
@@ -48,6 +51,7 @@ class RenderEmbeddedObject;
 class RenderObject;
 class RenderScrollbarPart;
 class RenderStyle;
+class RenderView;
 class RenderWidget;
 
 typedef unsigned long long DOMTimeStamp;
@@ -57,8 +61,8 @@ public:
     friend class RenderView;
     friend class Internals;
 
-    static PassRefPtr<FrameView> create(Frame*);
-    static PassRefPtr<FrameView> create(Frame*, const IntSize& initialSize);
+    static PassRefPtr<FrameView> create(LocalFrame*);
+    static PassRefPtr<FrameView> create(LocalFrame*, const IntSize& initialSize);
 
     virtual ~FrameView();
 
@@ -69,7 +73,8 @@ public:
 
     virtual bool scheduleAnimation() OVERRIDE;
 
-    Frame& frame() const { return *m_frame; }
+    LocalFrame& frame() const { return *m_frame; }
+    Page* page() const;
 
     RenderView* renderView() const;
 
@@ -78,6 +83,7 @@ public:
     virtual PassRefPtr<Scrollbar> createScrollbar(ScrollbarOrientation) OVERRIDE;
 
     virtual void setContentsSize(const IntSize&) OVERRIDE;
+    IntPoint clampOffsetAtScale(const IntPoint& offset, float scale) const;
 
     void layout(bool allowSubtree = true);
     bool didFirstLayout() const;
@@ -107,17 +113,11 @@ public:
 
     bool needsFullRepaint() const { return m_doFullRepaint; }
 
-    void serviceScriptedAnimations(double monotonicAnimationStartTime);
-
     void updateCompositingLayersAfterStyleChange();
     void updateCompositingLayersAfterLayout();
 
     bool hasCompositedContent() const;
     bool isEnclosedInCompositingLayer() const;
-
-    // Returns true when a paint with the PaintBehaviorFlattenCompositingLayers flag set gives
-    // a faithful representation of the content.
-    bool isSoftwareRenderable() const;
 
     void resetScrollbars();
     void prepareForDetach();
@@ -210,8 +210,6 @@ public:
     bool hasEverPainted() const { return m_lastPaintTime; }
     void setNodeToDraw(Node*);
 
-    bool isServicingAnimations() const { return m_servicingAnimations; }
-
     virtual void paintOverhangAreas(GraphicsContext*, const IntRect& horizontalOverhangArea, const IntRect& verticalOverhangArea, const IntRect& dirtyRect) OVERRIDE;
     virtual void paintScrollCorner(GraphicsContext*, const IntRect& cornerRect) OVERRIDE;
     virtual void paintScrollbar(GraphicsContext*, Scrollbar*, const IntRect&) OVERRIDE;
@@ -303,11 +301,29 @@ public:
     // DEPRECATED: Use viewportConstrainedVisibleContentRect() instead.
     IntSize scrollOffsetForFixedPosition() const;
 
-    PartialLayoutState& partialLayout() { return m_partialLayout; }
+    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE;
 
     // Override scrollbar notifications to update the AXObject cache.
     virtual void didAddScrollbar(Scrollbar*, ScrollbarOrientation) OVERRIDE;
     virtual void willRemoveScrollbar(Scrollbar*, ScrollbarOrientation) OVERRIDE;
+
+    virtual bool shouldAttemptToScrollUsingFastPath() const OVERRIDE;
+    // FIXME: This should probably be renamed as the 'inSubtreeLayout' parameter
+    // passed around the FrameView layout methods can be true while this returns
+    // false.
+    bool isSubtreeLayout() const { return !!m_layoutSubtreeRoot; }
+
+    // ScrollableArea interface
+    virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&) OVERRIDE;
+    virtual void getTickmarks(Vector<IntRect>&) const OVERRIDE;
+    virtual void scrollTo(const IntSize&) OVERRIDE;
+    virtual IntRect scrollableAreaBoundingBox() const OVERRIDE;
+    virtual bool scrollAnimatorEnabled() const OVERRIDE;
+    virtual bool usesCompositedScrolling() const OVERRIDE;
+    virtual GraphicsLayer* layerForScrolling() const OVERRIDE;
+    virtual GraphicsLayer* layerForHorizontalScrollbar() const OVERRIDE;
+    virtual GraphicsLayer* layerForVerticalScrollbar() const OVERRIDE;
+    virtual GraphicsLayer* layerForScrollCorner() const OVERRIDE;
 
 protected:
     virtual bool scrollContentsFastPath(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& clipRect) OVERRIDE;
@@ -317,7 +333,7 @@ protected:
     virtual bool isFlippedDocument() const OVERRIDE;
 
 private:
-    explicit FrameView(Frame*);
+    explicit FrameView(LocalFrame*);
 
     void reset();
     void init();
@@ -328,7 +344,7 @@ private:
     friend class RenderWidget;
     bool useSlowRepaints(bool considerOverlap = true) const;
     bool useSlowRepaintsIfNotOverlapped() const;
-    void updateCanBlitOnScrollRecursively();
+
     bool contentsInCompositedLayer() const;
 
     void applyOverflowToViewportAndSetRenderer(RenderObject*, ScrollbarMode& hMode, ScrollbarMode& vMode);
@@ -359,25 +375,13 @@ private:
     virtual IntPoint convertToContainingView(const IntPoint&) const OVERRIDE;
     virtual IntPoint convertFromContainingView(const IntPoint&) const OVERRIDE;
 
-    // ScrollableArea interface
-    virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&) OVERRIDE;
-    virtual void getTickmarks(Vector<IntRect>&) const OVERRIDE;
-    virtual void scrollTo(const IntSize&) OVERRIDE;
-    virtual ScrollableArea* enclosingScrollableArea() const OVERRIDE;
-    virtual IntRect scrollableAreaBoundingBox() const OVERRIDE;
-    virtual bool scrollAnimatorEnabled() const OVERRIDE;
-    virtual bool usesCompositedScrolling() const OVERRIDE;
-    virtual GraphicsLayer* layerForScrolling() const OVERRIDE;
-    virtual GraphicsLayer* layerForHorizontalScrollbar() const OVERRIDE;
-    virtual GraphicsLayer* layerForVerticalScrollbar() const OVERRIDE;
-    virtual GraphicsLayer* layerForScrollCorner() const OVERRIDE;
-
     void sendResizeEventIfNeeded();
 
     void updateScrollableAreaSet();
 
     virtual void notifyPageThatContentAreaWillPaint() const OVERRIDE;
 
+    void scheduleUpdateWidgetsIfNecessary();
     void updateWidgetsTimerFired(Timer<FrameView>*);
     bool updateWidgets();
 
@@ -386,7 +390,7 @@ private:
     void didScrollTimerFired(Timer<FrameView>*);
 
     bool hasCustomScrollbars() const;
-    bool shouldUseCustomScrollbars(Element*& customScrollbarElement, Frame*& customScrollbarFrame);
+    bool shouldUseCustomScrollbars(Element*& customScrollbarElement, LocalFrame*& customScrollbarFrame);
 
     virtual void updateScrollCorner() OVERRIDE;
 
@@ -399,7 +403,6 @@ private:
 
     void setLayoutSizeInternal(const IntSize&);
 
-    bool isSubtreeLayout() const { return !!m_layoutSubtreeRoot; }
     bool repaintAllowed() const
     {
         if (!RuntimeEnabledFeatures::repaintAfterLayoutEnabled())
@@ -419,7 +422,7 @@ private:
     // FIXME: These are just "children" of the FrameView and should be RefPtr<Widget> instead.
     HashSet<RefPtr<RenderWidget> > m_widgets;
 
-    RefPtr<Frame> m_frame;
+    RefPtr<LocalFrame> m_frame;
 
     bool m_doFullRepaint;
 
@@ -496,13 +499,10 @@ private:
 
     bool m_hasSoftwareFilters;
 
-    bool m_servicingAnimations;
-
     float m_visibleContentScaleFactor;
     IntSize m_inputEventsOffsetForEmulation;
     float m_inputEventsScaleFactorForEmulation;
 
-    PartialLayoutState m_partialLayout;
     IntSize m_layoutSize;
     bool m_layoutSizeFixedToFrameSize;
 

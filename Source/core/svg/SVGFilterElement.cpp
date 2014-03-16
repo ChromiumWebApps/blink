@@ -32,11 +32,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFilterElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFilterElement::SVGFilterElement(Document& document)
     : SVGElement(SVGNames::filterTag, document)
     , SVGURIReference(this)
@@ -64,7 +59,6 @@ inline SVGFilterElement::SVGFilterElement(Document& document)
     addToPropertyMap(m_filterUnits);
     addToPropertyMap(m_primitiveUnits);
     addToPropertyMap(m_filterRes);
-    registerAnimatedPropertiesForSVGFilterElement();
 }
 
 PassRefPtr<SVGFilterElement> SVGFilterElement::create(Document& document)

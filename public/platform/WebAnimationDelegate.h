@@ -33,10 +33,8 @@ namespace blink {
 
 class WebAnimationDelegate {
 public:
-    // FIXME: Remove wallClockTime once the legacy implementation of CSS
-    // animations and transitions is removed.
-    virtual void notifyAnimationStarted(double wallClockTime, double monotonicTime, WebAnimation::TargetProperty) = 0;
-    virtual void notifyAnimationFinished(double wallClockTime, double monotonicTime, WebAnimation::TargetProperty) = 0;
+    virtual void notifyAnimationStarted(double monotonicTime, WebAnimation::TargetProperty) = 0;
+    virtual void notifyAnimationFinished(double monotonicTime, WebAnimation::TargetProperty) = 0;
 };
 
 } // namespace blink

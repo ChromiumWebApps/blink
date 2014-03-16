@@ -141,6 +141,10 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
                 }
             }
         }
+        static void swap(T* src, T* srcEnd, T* dst)
+        {
+            std::swap_ranges(src, srcEnd, dst);
+        }
     };
 
     template<typename T>
@@ -154,6 +158,17 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         {
             memmove(dst, src, reinterpret_cast<const char*>(srcEnd) - reinterpret_cast<const char*>(src));
         }
+        static void swap(T* src, T* srcEnd, T* dst)
+        {
+            char* srcC = reinterpret_cast<char*>(src);
+            char* srcEndC = reinterpret_cast<char*>(srcEnd);
+            char* dstC = reinterpret_cast<char*>(dst);
+
+            // FIXME: Below performs per-byte swap. This can be optimized by doing coarce-grained swap before-hand.
+            size_t size = srcEndC - srcC;
+            for (size_t i = 0; i < size; ++i)
+              std::swap(srcC[i], dstC[i]);
+        }
     };
 
     template <bool canCopyWithMemcpy, typename T>
@@ -162,7 +177,8 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     template<typename T>
     struct VectorCopier<false, T>
     {
-        static void uninitializedCopy(const T* src, const T* srcEnd, T* dst)
+        template<typename U>
+        static void uninitializedCopy(const U* src, const U* srcEnd, T* dst)
         {
             while (src != srcEnd) {
                 new (NotNull, dst) T(*src);
@@ -178,6 +194,11 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         static void uninitializedCopy(const T* src, const T* srcEnd, T* dst)
         {
             memcpy(dst, src, reinterpret_cast<const char*>(srcEnd) - reinterpret_cast<const char*>(src));
+        }
+        template<typename U>
+        static void uninitializedCopy(const U* src, const U* srcEnd, T* dst)
+        {
+            VectorCopier<false, T>::uninitializedCopy(src, srcEnd, dst);
         }
     };
 
@@ -256,6 +277,11 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
             VectorMover<VectorTraits<T>::canMoveWithMemcpy, T>::moveOverlapping(src, srcEnd, dst);
         }
 
+        static void swap(T* src, T* srcEnd, T* dst)
+        {
+            VectorMover<VectorTraits<T>::canMoveWithMemcpy, T>::swap(src, srcEnd, dst);
+        }
+
         static void uninitializedCopy(const T* src, const T* srcEnd, T* dst)
         {
             VectorCopier<VectorTraits<T>::canCopyWithMemcpy, T>::uninitializedCopy(src, srcEnd, dst);
@@ -307,10 +333,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         {
         }
 
-        ~VectorBufferBase()
-        {
-        }
-
         T* m_buffer;
         unsigned m_capacity;
         unsigned m_size;
@@ -334,10 +356,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
             // allocation on some systems.
             if (capacity)
                 allocateBuffer(capacity);
-        }
-
-        ~VectorBuffer()
-        {
         }
 
         void destruct()
@@ -401,10 +419,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
                 Base::allocateBuffer(capacity);
         }
 
-        ~VectorBuffer()
-        {
-        }
-
         void destruct()
         {
             deallocateBuffer(m_buffer);
@@ -446,18 +460,26 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
 
         void swapVectorBuffer(VectorBuffer<T, inlineCapacity, Allocator>& other)
         {
+            typedef VectorTypeOperations<T> TypeOperations;
+
             if (buffer() == inlineBuffer() && other.buffer() == other.inlineBuffer()) {
-                WTF::swap(m_inlineBuffer, other.m_inlineBuffer);
-                std::swap(m_capacity, other.m_capacity);
+                ASSERT(m_capacity == other.m_capacity);
+                if (m_size > other.m_size) {
+                    TypeOperations::swap(inlineBuffer(), inlineBuffer() + other.m_size, other.inlineBuffer());
+                    TypeOperations::move(inlineBuffer() + other.m_size, inlineBuffer() + m_size, other.inlineBuffer() + other.m_size);
+                } else {
+                    TypeOperations::swap(inlineBuffer(), inlineBuffer() + m_size, other.inlineBuffer());
+                    TypeOperations::move(other.inlineBuffer() + m_size, other.inlineBuffer() + other.m_size, inlineBuffer() + m_size);
+                }
             } else if (buffer() == inlineBuffer()) {
                 m_buffer = other.m_buffer;
                 other.m_buffer = other.inlineBuffer();
-                WTF::swap(m_inlineBuffer, other.m_inlineBuffer);
+                TypeOperations::move(inlineBuffer(), inlineBuffer() + m_size, other.inlineBuffer());
                 std::swap(m_capacity, other.m_capacity);
             } else if (other.buffer() == other.inlineBuffer()) {
                 other.m_buffer = m_buffer;
                 m_buffer = inlineBuffer();
-                WTF::swap(m_inlineBuffer, other.m_inlineBuffer);
+                TypeOperations::move(other.inlineBuffer(), other.inlineBuffer() + other.m_size, inlineBuffer());
                 std::swap(m_capacity, other.m_capacity);
             } else {
                 std::swap(m_buffer, other.m_buffer);
@@ -487,8 +509,49 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         AlignedBuffer<m_inlineBufferSize, WTF_ALIGN_OF(T)> m_inlineBuffer;
     };
 
+    template<typename T, size_t inlineCapacity, typename Allocator>
+    class Vector;
+
+    // VectorDestructorBase defines the destructor of a vector. This base is used in order to
+    // completely avoid creating a destructor for a vector that does not need to be destructed.
+    // By doing so, the clang compiler will have correct information about whether or not a
+    // vector has a trivial destructor and we use that in a compiler plugin to ensure the
+    // correctness of non-finalized garbage-collected classes and the use of VectorTraits::needsDestruction.
+
+    // All non-GC managed vectors needs a destructor. This destructor will simply call finalize on the actual vector type.
+    template<typename Derived, typename Elements, bool hasInlineCapacity, bool isGarbageCollected>
+    class VectorDestructorBase {
+    public:
+        ~VectorDestructorBase() { static_cast<Derived*>(this)->finalize(); }
+    };
+
+    // Heap-allocated vectors with no inlineCapacity never need a destructor.
+    template<typename Derived, typename Elements>
+    class VectorDestructorBase<Derived, Elements, false, true> { };
+
+    // Heap-allocator vectors with inlineCapacity need a destructor if the inline elements do.
+    // The use of VectorTraits<Elements>::needsDestruction is delayed until we know that
+    // inlineCapacity is non-zero to allow classes that recursively refer to themselves in vector
+    // members. If inlineCapacity is non-zero doing so would have undefined meaning, so in this
+    // case we can use HeapVectorWithInlineCapacityDestructorBase to define a destructor
+    // depending on the value of VectorTraits<Elements>::needsDestruction.
+    template<typename Derived, bool elementsNeedsDestruction>
+    class HeapVectorWithInlineCapacityDestructorBase;
+
+    template<typename Derived>
+    class HeapVectorWithInlineCapacityDestructorBase<Derived, true> {
+    public:
+        ~HeapVectorWithInlineCapacityDestructorBase() { static_cast<Derived*>(this)->finalize(); }
+    };
+
+    template<typename Derived>
+    class HeapVectorWithInlineCapacityDestructorBase<Derived, false> { };
+
+    template<typename Derived, typename Elements>
+    class VectorDestructorBase<Derived, Elements, true, true> : public HeapVectorWithInlineCapacityDestructorBase<Derived, VectorTraits<Elements>::needsDestruction> { };
+
     template<typename T, size_t inlineCapacity = 0, typename Allocator = DefaultAllocator>
-    class Vector : private VectorBuffer<T, inlineCapacity, Allocator> {
+    class Vector : private VectorBuffer<T, inlineCapacity, Allocator>, public VectorDestructorBase<Vector<T, inlineCapacity, Allocator>, T, (inlineCapacity > 0), Allocator::isGarbageCollected> {
     private:
         typedef VectorBuffer<T, inlineCapacity, Allocator> Base;
         typedef VectorTypeOperations<T> TypeOperations;
@@ -510,7 +573,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         void operator delete[](void* p) { Allocator::deleteArray(p); }
         void* operator new(size_t, NotNullTag, void* location)
         {
-            COMPILE_ASSERT(!Allocator::isGarbageCollected, Garbage_collector_must_be_disabled);
             ASSERT(location);
             return location;
         }
@@ -531,7 +593,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         // On-GC-heap vectors: Destructor should be called for inline buffers
         // (if any) but destructor shouldn't be called for vector backing since
         // it is managed by the traced GC heap.
-        ~Vector()
+        void finalize()
         {
             if (!inlineCapacity) {
                 if (LIKELY(!Base::buffer()))
@@ -545,14 +607,9 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
             Base::destruct();
         }
 
-        void finalize()
-        {
-            this->~Vector();
-        }
-
         void clearUnusedSlots(T* from, T* to)
         {
-            VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || VectorTraits<T>::needsTracing || VectorTraits<T>::isWeak), T>::clear(from, to);
+            VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || ShouldBeTraced<VectorTraits<T> >::value || VectorTraits<T>::isWeak), T>::clear(from, to);
         }
 
         Vector(const Vector&);
@@ -653,8 +710,8 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
 
         void swap(Vector& other)
         {
-            std::swap(m_size, other.m_size);
             Base::swapVectorBuffer(other);
+            std::swap(m_size, other.m_size);
         }
 
         void reverse();
@@ -963,8 +1020,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         }
         RELEASE_ASSERT(newSize >= m_size);
         T* dest = end();
-        for (size_t i = 0; i < dataSize; ++i)
-            new (NotNull, &dest[i]) T(data[i]);
+        VectorCopier<VectorTraits<T>::canCopyWithMemcpy, T>::uninitializedCopy(data, &data[dataSize], dest);
         m_size = newSize;
     }
 
@@ -1023,8 +1079,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         RELEASE_ASSERT(newSize >= m_size);
         T* spot = begin() + position;
         TypeOperations::moveOverlapping(spot, end(), spot + dataSize);
-        for (size_t i = 0; i < dataSize; ++i)
-            new (NotNull, &spot[i]) T(data[i]);
+        VectorCopier<VectorTraits<T>::canCopyWithMemcpy, T>::uninitializedCopy(data, &data[dataSize], spot);
         m_size = newSize;
     }
 
@@ -1113,8 +1168,8 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         a.swap(b);
     }
 
-    template<typename T, size_t inlineCapacity, typename Allocator>
-    bool operator==(const Vector<T, inlineCapacity, Allocator>& a, const Vector<T, inlineCapacity, Allocator>& b)
+    template<typename T, size_t inlineCapacityA, size_t inlineCapacityB, typename Allocator>
+    bool operator==(const Vector<T, inlineCapacityA, Allocator>& a, const Vector<T, inlineCapacityB, Allocator>& b)
     {
         if (a.size() != b.size())
             return false;
@@ -1122,8 +1177,8 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         return VectorTypeOperations<T>::compare(a.data(), b.data(), a.size());
     }
 
-    template<typename T, size_t inlineCapacity, typename Allocator>
-    inline bool operator!=(const Vector<T, inlineCapacity, Allocator>& a, const Vector<T, inlineCapacity, Allocator>& b)
+    template<typename T, size_t inlineCapacityA, size_t inlineCapacityB, typename Allocator>
+    inline bool operator!=(const Vector<T, inlineCapacityA, Allocator>& a, const Vector<T, inlineCapacityB, Allocator>& b)
     {
         return !(a == b);
     }
@@ -1136,7 +1191,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         COMPILE_ASSERT(Allocator::isGarbageCollected, Garbage_collector_must_be_enabled);
         const T* bufferBegin = buffer();
         const T* bufferEnd = buffer() + size();
-        if (VectorTraits<T>::needsTracing) {
+        if (ShouldBeTraced<VectorTraits<T> >::value) {
             for (const T* bufferEntry = bufferBegin; bufferEntry != bufferEnd; bufferEntry++)
                 Allocator::template trace<T, VectorTraits<T> >(visitor, *const_cast<T*>(bufferEntry));
         }

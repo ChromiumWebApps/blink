@@ -38,9 +38,55 @@ function InspectorBackendClass()
     this._dispatcherPrototypes = {};
     this._initialized = false;
     this._enums = {};
+    this._initProtocolAgentsConstructor();
 }
 
 InspectorBackendClass.prototype = {
+
+    _initProtocolAgentsConstructor: function()
+    {
+        window.Protocol = {};
+
+        /**
+         * @constructor
+         * @param {!Object.<string, !Object>} agentsMap
+         */
+        window.Protocol.Agents = function(agentsMap) {
+            this._agentsMap = agentsMap;
+        };
+    },
+
+    /**
+     * @param {string} domain
+     */
+    _addAgentGetterMethodToProtocolAgentsPrototype: function(domain)
+    {
+        var upperCaseLength = 0;
+        while (upperCaseLength < domain.length && domain[upperCaseLength].toLowerCase() !== domain[upperCaseLength])
+            ++upperCaseLength;
+
+        var methodName = domain.substr(0, upperCaseLength).toLowerCase() + domain.slice(upperCaseLength) + "Agent";
+
+        /**
+         * @this {Protocol.Agents}
+         */
+        function agentGetter()
+        {
+            return this._agentsMap[domain];
+        }
+
+        window.Protocol.Agents.prototype[methodName] = agentGetter;
+
+        /**
+         * @this {Protocol.Agents}
+         */
+        function registerDispatcher(dispatcher)
+        {
+            this.registerDispatcher(domain, dispatcher)
+        }
+
+        window.Protocol.Agents.prototype["register" + domain + "Dispatcher"] = registerDispatcher;
+    },
 
     /**
      * @return {!InspectorBackendClass.Connection}
@@ -73,8 +119,10 @@ InspectorBackendClass.prototype = {
      */
     _agentPrototype: function(domain)
     {
-        if (!this._agentPrototypes[domain])
+        if (!this._agentPrototypes[domain]) {
             this._agentPrototypes[domain] = new InspectorBackendClass.AgentPrototype(domain);
+            this._addAgentGetterMethodToProtocolAgentsPrototype(domain);
+        }
 
         return this._agentPrototypes[domain];
     },
@@ -283,6 +331,7 @@ InspectorBackendClass._generateCommands = function(schema) {
 
 /**
  *  @constructor
+ *  @extends {WebInspector.Object}
  */
 InspectorBackendClass.Connection = function()
 {
@@ -291,6 +340,10 @@ InspectorBackendClass.Connection = function()
     this._agents = {};
     this._dispatchers = {};
     this._callbacks = {};
+}
+
+InspectorBackendClass.Connection.Events = {
+    Disconnected: "Disconnected",
 }
 
 InspectorBackendClass.Connection.prototype = {
@@ -335,6 +388,14 @@ InspectorBackendClass.Connection.prototype = {
     agent: function(domain)
     {
         return this._agents[domain];
+    },
+
+    /**
+     * @return {!Object.<string, !Object>}
+     */
+    agentsMap: function()
+    {
+        return this._agents;
     },
 
     /**
@@ -474,17 +535,29 @@ InspectorBackendClass.Connection.prototype = {
             for (var id = 0; id < scripts.length; ++id)
                 scripts[id].call(this);
         }
-    }
+    },
+
+    /**
+     * @param {string} reason
+     */
+    fireDisconnected: function(reason)
+    {
+        this.dispatchEventToListeners(InspectorBackendClass.Connection.Events.Disconnected, {reason: reason});
+    },
+
+    __proto__: WebInspector.Object.prototype
 
 }
 
 /**
  * @constructor
  * @extends {InspectorBackendClass.Connection}
+ * @param {!function(!InspectorBackendClass.Connection)} onConnectionReady
  */
-InspectorBackendClass.MainConnection = function()
+InspectorBackendClass.MainConnection = function(onConnectionReady)
 {
     InspectorBackendClass.Connection.call(this);
+    onConnectionReady(this);
 }
 
 InspectorBackendClass.MainConnection.prototype = {
@@ -499,7 +572,87 @@ InspectorBackendClass.MainConnection.prototype = {
     },
 
     __proto__: InspectorBackendClass.Connection.prototype
+}
 
+/**
+ * @constructor
+ * @extends {InspectorBackendClass.Connection}
+ * @param {string} url
+ * @param {!function(!InspectorBackendClass.Connection)} onConnectionReady
+ */
+InspectorBackendClass.WebSocketConnection = function(url, onConnectionReady)
+{
+    InspectorBackendClass.Connection.call(this);
+    this._socket = new WebSocket(url);
+    this._socket.onmessage = this._onMessage.bind(this);
+    this._socket.onerror = this._onError.bind(this);
+    this._socket.onopen = onConnectionReady.bind(null, this);
+    this._socket.onclose = this.fireDisconnected.bind(this, "websocket_closed");
+}
+
+InspectorBackendClass.WebSocketConnection.prototype = {
+
+    /**
+     * @param {!MessageEvent} message
+     */
+    _onMessage: function(message)
+    {
+        var data = /** @type {string} */ (message.data)
+        this.dispatch(data);
+    },
+
+    /**
+     * @param {!Event} error
+     */
+    _onError: function(error)
+    {
+        console.error(error);
+    },
+
+    /**
+     * @param {!Object} messageObject
+     */
+    sendMessage: function(messageObject)
+    {
+        var message = JSON.stringify(messageObject);
+        this._socket.send(message);
+    },
+
+    __proto__: InspectorBackendClass.Connection.prototype
+}
+
+
+/**
+ * @constructor
+ * @extends {InspectorBackendClass.Connection}
+ * @param {!function(!InspectorBackendClass.Connection)} onConnectionReady
+ */
+InspectorBackendClass.StubConnection = function(onConnectionReady)
+{
+    InspectorBackendClass.Connection.call(this);
+    onConnectionReady(this);
+}
+
+InspectorBackendClass.StubConnection.prototype = {
+
+    /**
+     * @param {!Object} messageObject
+     */
+    sendMessage: function(messageObject)
+    {
+        var message = JSON.stringify(messageObject);
+        setTimeout(this._echoResponse.bind(this, messageObject), 0);
+    },
+
+    /**
+     * @param {!Object} messageObject
+     */
+    _echoResponse: function(messageObject)
+    {
+        this.dispatch(messageObject)
+    },
+
+    __proto__: InspectorBackendClass.Connection.prototype
 }
 
 /**

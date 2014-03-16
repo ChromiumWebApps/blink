@@ -52,7 +52,7 @@ String CSSFontFaceRule::cssText() const
 {
     StringBuilder result;
     result.appendLiteral("@font-face { ");
-    String descs = m_fontFaceRule->properties()->asText();
+    String descs = m_fontFaceRule->properties().asText();
     result.append(descs);
     if (!descs.isEmpty())
         result.append(' ');
@@ -66,6 +66,12 @@ void CSSFontFaceRule::reattach(StyleRuleBase* rule)
     m_fontFaceRule = toStyleRuleFontFace(rule);
     if (m_propertiesCSSOMWrapper)
         m_propertiesCSSOMWrapper->reattach(m_fontFaceRule->mutableProperties());
+}
+
+void CSSFontFaceRule::trace(Visitor* visitor)
+{
+    visitor->trace(m_fontFaceRule);
+    CSSRule::trace(visitor);
 }
 
 } // namespace WebCore

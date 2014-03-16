@@ -73,7 +73,10 @@ using namespace HTMLNames;
     CSSParserString string;
 
     StyleRuleBase* rule;
-    Vector<RefPtr<StyleRuleBase> >* ruleList;
+    // The content of the two below HeapVectors are guaranteed to be kept alive by
+    // the corresponding m_parsedRules and m_floatingMediaQueryExpList lists in BisonCSSParser.h.
+    WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >* ruleList;
+    WillBeHeapVector<OwnPtrWillBeMember<MediaQueryExp> >* mediaQueryExpList;
     CSSParserSelector* selector;
     Vector<OwnPtr<CSSParserSelector> >* selectorList;
     CSSSelector::MarginBoxType marginBox;
@@ -84,7 +87,6 @@ using namespace HTMLNames;
     MediaQueryExp* mediaQueryExp;
     CSSParserValue value;
     CSSParserValueList* valueList;
-    Vector<OwnPtr<MediaQueryExp> >* mediaQueryExpList;
     StyleKeyframe* keyframe;
     Vector<RefPtr<StyleKeyframe> >* keyframeRuleList;
     float val;
@@ -1044,15 +1046,19 @@ combinator:
     '+' maybe_space { $$ = CSSSelector::DirectAdjacent; }
     | '~' maybe_space { $$ = CSSSelector::IndirectAdjacent; }
     | '>' maybe_space { $$ = CSSSelector::Child; }
-    | '^' maybe_space {
+    // FIXME: implement named combinator and replace the following /shadow/, /shadow-child/ and
+    // /shadow-deep/ with named combinator's implementation.
+    | '/' IDENT '/' maybe_space {
         if (!RuntimeEnabledFeatures::shadowDOMEnabled())
             YYERROR;
-        $$ = CSSSelector::ChildTree;
-    }
-    | '^' '^' maybe_space {
-        if (!RuntimeEnabledFeatures::shadowDOMEnabled())
+        if ($2.equalIgnoringCase("shadow"))
+            $$ = CSSSelector::Shadow;
+        else if ($2.equalIgnoringCase("shadow-deep"))
+            $$ = CSSSelector::ShadowDeep;
+        else if ($2.equalIgnoringCase("content"))
+            $$ = CSSSelector::ShadowContent;
+        else
             YYERROR;
-        $$ = CSSSelector::DescendantTree;
     }
     ;
 
@@ -1135,8 +1141,6 @@ selector:
         while (end->tagHistory())
             end = end->tagHistory();
         end->setRelation(CSSSelector::Descendant);
-        if ($1->isContentPseudoElement())
-            end->setRelationIsAffectedByPseudoContent();
         end->setTagHistory(parser->sinkFloatingSelector($1));
     }
     | selector combinator simple_selector {
@@ -1145,8 +1149,6 @@ selector:
         while (end->tagHistory())
             end = end->tagHistory();
         end->setRelation($2);
-        if ($1->isContentPseudoElement())
-            end->setRelationIsAffectedByPseudoContent();
         end->setTagHistory(parser->sinkFloatingSelector($1));
     }
     ;

@@ -41,8 +41,8 @@
 #include "core/html/HTMLScriptElement.h"
 #include "core/html/imports/HTMLImport.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/frame/ContentSecurityPolicy.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/svg/SVGScriptElement.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -114,7 +114,6 @@ static bool isLegacySupportedJavaScriptLanguage(const String& language)
     typedef HashSet<String, CaseFoldingHash> LanguageSet;
     DEFINE_STATIC_LOCAL(LanguageSet, languages, ());
     if (languages.isEmpty()) {
-        languages.add("javascript");
         languages.add("javascript");
         languages.add("javascript1.0");
         languages.add("javascript1.1");
@@ -282,12 +281,14 @@ bool ScriptLoader::fetchScript(const String& sourceUrl)
 
 bool isHTMLScriptLoader(Element* element)
 {
-    return element->hasTagName(HTMLNames::scriptTag);
+    ASSERT(element);
+    return isHTMLScriptElement(*element);
 }
 
 bool isSVGScriptLoader(Element* element)
 {
-    return element->hasTagName(SVGNames::scriptTag);
+    ASSERT(element);
+    return isSVGScriptElement(*element);
 }
 
 void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode)
@@ -302,16 +303,19 @@ void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode)
     if (!contextDocument)
         return;
 
-    Frame* frame = contextDocument->frame();
+    LocalFrame* frame = contextDocument->frame();
 
     bool shouldBypassMainWorldContentSecurityPolicy = (frame && frame->script().shouldBypassMainWorldContentSecurityPolicy()) || elementDocument->contentSecurityPolicy()->allowScriptNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr)) || elementDocument->contentSecurityPolicy()->allowScriptHash(sourceCode.source());
 
     if (!m_isExternalScript && (!shouldBypassMainWorldContentSecurityPolicy && !elementDocument->contentSecurityPolicy()->allowInlineScript(elementDocument->url(), m_startLineNumber)))
         return;
 
-    if (m_isExternalScript && m_resource && !m_resource->mimeTypeAllowedByNosniff()) {
-        contextDocument->addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, "Refused to execute script from '" + m_resource->url().elidedString() + "' because its MIME type ('" + m_resource->mimeType() + "') is not executable, and strict MIME type checking is enabled.");
-        return;
+    if (m_isExternalScript) {
+        ScriptResource* resource = m_resource ? m_resource.get() : sourceCode.resource();
+        if (resource && !resource->mimeTypeAllowedByNosniff()) {
+            contextDocument->addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, "Refused to execute script from '" + resource->url().elidedString() + "' because its MIME type ('" + resource->mimeType() + "') is not executable, and strict MIME type checking is enabled.");
+            return;
+        }
     }
 
     if (frame) {
@@ -324,7 +328,7 @@ void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode)
             contextDocument->pushCurrentScript(toHTMLScriptElement(m_element));
 
         AccessControlStatus corsCheck = NotSharableCrossOrigin;
-        if (sourceCode.resource() && sourceCode.resource()->passesAccessControlCheck(m_element->document().securityOrigin()))
+        if (!m_isExternalScript || (sourceCode.resource() && sourceCode.resource()->passesAccessControlCheck(m_element->document().securityOrigin())))
             corsCheck = SharableCrossOrigin;
 
         // Create a script from the script element node, using the script

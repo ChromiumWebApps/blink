@@ -25,13 +25,13 @@
 #include "core/rendering/RenderWidget.h"
 
 #include "core/accessibility/AXObjectCache.h"
-#include "core/frame/Frame.h"
-#include "core/rendering/CompositedLayerMapping.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/LayoutRectRecorder.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "wtf/HashMap.h"
 
 namespace WebCore {

@@ -31,10 +31,10 @@
 #include "core/events/Event.h"
 #include "core/events/MouseEvent.h"
 #include "core/dom/Node.h"
+#include "core/frame/LocalFrame.h"
 #include "core/page/ContextMenuClient.h"
 #include "core/page/ContextMenuProvider.h"
 #include "core/page/EventHandler.h"
-#include "core/frame/Frame.h"
 #include "platform/ContextMenu.h"
 #include "platform/ContextMenuItem.h"
 
@@ -61,8 +61,8 @@ void ContextMenuController::clearContextMenu()
     if (m_menuProvider)
         m_menuProvider->contextMenuCleared();
     m_menuProvider = nullptr;
-    m_hitTestResult = HitTestResult();
     m_client->clearContextMenu();
+    m_hitTestResult = HitTestResult();
 }
 
 void ContextMenuController::documentDetached(Document* document)
@@ -107,7 +107,7 @@ PassOwnPtr<ContextMenu> ContextMenuController::createContextMenu(Event* event)
     MouseEvent* mouseEvent = toMouseEvent(event);
     HitTestResult result(mouseEvent->absoluteLocation());
 
-    if (Frame* frame = event->target()->toNode()->document().frame())
+    if (LocalFrame* frame = event->target()->toNode()->document().frame())
         result = frame->eventHandler().hitTestResultAtPoint(mouseEvent->absoluteLocation(), HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::ConfusingAndOftenMisusedDisallowShadowContent);
 
     if (!result.innerNonSharedNode())

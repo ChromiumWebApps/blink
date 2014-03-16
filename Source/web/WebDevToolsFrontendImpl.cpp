@@ -42,7 +42,6 @@
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8DOMWrapper.h"
-#include "bindings/v8/V8Utilities.h"
 #include "core/clipboard/Pasteboard.h"
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
@@ -51,7 +50,7 @@
 #include "core/inspector/InspectorFrontendHost.h"
 #include "core/page/ContextMenuController.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/page/Page.h"
 #include "core/frame/Settings.h"
 #include "platform/ContextMenuItem.h"
@@ -116,7 +115,7 @@ void WebDevToolsFrontendImpl::resume()
     // We should call maybeDispatch asynchronously here because we are not allowed to update activeDOMObjects list in
     // resume (See ExecutionContext::resumeActiveDOMObjects).
     if (!m_inspectorFrontendDispatchTimer.isActive())
-        m_inspectorFrontendDispatchTimer.startOneShot(0);
+        m_inspectorFrontendDispatchTimer.startOneShot(0, FROM_HERE);
 }
 
 void WebDevToolsFrontendImpl::maybeDispatch(WebCore::Timer<WebDevToolsFrontendImpl>*)

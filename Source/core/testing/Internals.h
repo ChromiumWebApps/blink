@@ -51,7 +51,7 @@ class Document;
 class DocumentMarker;
 class Element;
 class ExceptionState;
-class Frame;
+class LocalFrame;
 class GCObservation;
 class InspectorFrontendChannelDummy;
 class InternalProfilers;
@@ -69,7 +69,6 @@ class ShadowRoot;
 class TypeConversions;
 
 class Internals FINAL : public RefCountedWillBeGarbageCollectedFinalized<Internals>, public ContextLifecycleObserver {
-    DECLARE_GC_INFO;
 public:
     static PassRefPtrWillBeRawPtr<Internals> create(Document*);
     virtual ~Internals();
@@ -137,7 +136,7 @@ public:
     Vector<String> formControlStateOfHistoryItem(ExceptionState&);
     void setFormControlStateOfHistoryItem(const Vector<String>&, ExceptionState&);
     void setEnableMockPagePopup(bool, ExceptionState&);
-    PassRefPtr<PagePopupController> pagePopupController();
+    PassRefPtrWillBeRawPtr<PagePopupController> pagePopupController();
 
     PassRefPtr<ClientRect> unscaledViewportRect(ExceptionState&);
 
@@ -183,6 +182,7 @@ public:
     Vector<AtomicString> userPreferredLanguages() const;
     void setUserPreferredLanguages(const Vector<String>&);
 
+    unsigned activeDOMObjectCount(Document*, ExceptionState&);
     unsigned wheelEventHandlerCount(Document*, ExceptionState&);
     unsigned touchEventHandlerCount(Document*, ExceptionState&);
     PassRefPtrWillBeRawPtr<LayerRectList> touchEventTargetLayerRects(Document*, ExceptionState&);
@@ -314,10 +314,15 @@ public:
 
     void trace(Visitor*);
 
+    void startSpeechInput(Element*);
+    void setValueForUser(Element*, const String&);
+
+    String textSurroundingNode(Node*, int x, int y, unsigned long maxLength);
+
 private:
     explicit Internals(Document*);
     Document* contextDocument() const;
-    Frame* frame() const;
+    LocalFrame* frame() const;
     Vector<String> iconURLs(Document*, int iconTypesMask) const;
     PassRefPtr<ClientRectList> annotatedRegions(Document*, bool draggable, ExceptionState&);
 

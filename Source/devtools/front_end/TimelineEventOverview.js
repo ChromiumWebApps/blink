@@ -40,14 +40,14 @@ WebInspector.TimelineEventOverview = function(model)
     this.element.id = "timeline-overview-events";
 
     this._fillStyles = {};
-    var categories = WebInspector.TimelinePresentationModel.categories();
+    var categories = WebInspector.TimelineUIUtils.categories();
     for (var category in categories) {
-        this._fillStyles[category] = WebInspector.TimelinePresentationModel.createFillStyleForCategory(this._context, 0, WebInspector.TimelineEventOverview._stripGradientHeight, categories[category]);
+        this._fillStyles[category] = WebInspector.TimelineUIUtils.createFillStyleForCategory(this._context, 0, WebInspector.TimelineEventOverview._stripGradientHeight, categories[category]);
         categories[category].addEventListener(WebInspector.TimelineCategory.Events.VisibilityChanged, this._onCategoryVisibilityChanged, this);
     }
 
-    this._disabledCategoryFillStyle = WebInspector.TimelinePresentationModel.createFillStyle(this._context, 0, WebInspector.TimelineEventOverview._stripGradientHeight,
-        "rgb(218, 218, 218)", "rgb(170, 170, 170)", "rgb(143, 143, 143)");
+    this._disabledCategoryFillStyle = WebInspector.TimelineUIUtils.createFillStyle(this._context, 0, WebInspector.TimelineEventOverview._stripGradientHeight,
+        "hsl(0, 0%, 85%)", "hsl(0, 0%, 67%)", "hsl(0, 0%, 56%)");
 
     this._disabledCategoryBorderStyle = "rgb(143, 143, 143)";
 }
@@ -75,15 +75,16 @@ WebInspector.TimelineEventOverview.prototype = {
             this._context.fillRect(0.5, i * stripHeight + 0.5, this._canvas.width, stripHeight);
 
         /**
+         * @param {!WebInspector.TimelineModel.Record} record
          * @this {WebInspector.TimelineEventOverview}
          */
         function appendRecord(record)
         {
             if (record.type === WebInspector.TimelineModel.RecordType.BeginFrame)
                 return;
-            var recordStart = Math.floor((WebInspector.TimelineModel.startTimeInSeconds(record) - timeOffset) * scale);
-            var recordEnd = Math.ceil((WebInspector.TimelineModel.endTimeInSeconds(record) - timeOffset) * scale);
-            var category = WebInspector.TimelinePresentationModel.categoryForRecord(record);
+            var recordStart = Math.floor((record.startTime - timeOffset) * scale);
+            var recordEnd = Math.ceil((record.endTime - timeOffset) * scale);
+            var category = WebInspector.TimelineUIUtils.categoryForRecord(record);
             if (category.overviewStripGroupIndex < 0)
                 return;
             var bar = lastBarByGroup[category.overviewStripGroupIndex];
@@ -98,7 +99,7 @@ WebInspector.TimelineEventOverview.prototype = {
                 this._renderBar(bar.start, bar.end, stripHeight, bar.category);
             lastBarByGroup[category.overviewStripGroupIndex] = { start: recordStart, end: recordEnd, category: category };
         }
-        WebInspector.TimelinePresentationModel.forAllRecords(this._model.records, appendRecord.bind(this));
+        this._model.forAllRecords(appendRecord.bind(this));
         for (var i = 0; i < lastBarByGroup.length; ++i) {
             if (lastBarByGroup[i])
                 this._renderBar(lastBarByGroup[i].start, lastBarByGroup[i].end, stripHeight, lastBarByGroup[i].category);

@@ -33,10 +33,10 @@
 
 #include "HTMLNames.h"
 #include "core/dom/Element.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/rendering/RenderBox.h"
 #include "core/rendering/RenderObject.h"
 #include "platform/Widget.h"
@@ -179,7 +179,7 @@ void getPluginOcclusions(Element* element, Widget* parentWidget, const IntRect& 
 
         RenderObject* iframeRenderer = element->renderer();
 
-        if (element->hasTagName(HTMLNames::iframeTag) && intersectsRect(iframeRenderer, frameRect)) {
+        if (isHTMLIFrameElement(*element) && intersectsRect(iframeRenderer, frameRect)) {
             getObjectStack(iframeRenderer, &iframeZstack);
             if (iframeIsAbovePlugin(iframeZstack, pluginZstack))
                 addToOcclusions(toRenderBox(iframeRenderer), occlusions);

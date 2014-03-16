@@ -43,13 +43,14 @@
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLLIElement.h"
 #include "core/html/HTMLOListElement.h"
 #include "core/html/HTMLParagraphElement.h"
+#include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLUListElement.h"
-#include "core/frame/Frame.h"
 #include "core/rendering/RenderObject.h"
 #include "wtf/Assertions.h"
 #include "wtf/StdLibExtras.h"
@@ -65,13 +66,15 @@ using namespace HTMLNames;
 // purposes of editing.
 bool isAtomicNode(const Node *node)
 {
-    return node && (!node->hasChildNodes() || editingIgnoresContent(node));
+    return node && (!node->hasChildren() || editingIgnoresContent(node));
 }
 
 // Compare two positions, taking into account the possibility that one or both
 // could be inside a shadow tree. Only works for non-null values.
 int comparePositions(const Position& a, const Position& b)
 {
+    ASSERT(a.isNotNull());
+    ASSERT(b.isNotNull());
     TreeScope* commonScope = commonTreeScope(a.containerNode(), b.containerNode());
 
     ASSERT(commonScope);
@@ -120,14 +123,14 @@ Node* highestEditableRoot(const Position& position, EditableType editableType)
     if (!highestRoot)
         return 0;
 
-    if (highestRoot->hasTagName(bodyTag))
+    if (isHTMLBodyElement(*highestRoot))
         return highestRoot;
 
     node = highestRoot->parentNode();
     while (node) {
         if (node->rendererIsEditable(editableType))
             highestRoot = node;
-        if (node->hasTagName(bodyTag))
+        if (isHTMLBodyElement(*node))
             break;
         node = node->parentNode();
     }
@@ -140,7 +143,7 @@ Node* lowestEditableAncestor(Node* node)
     while (node) {
         if (node->rendererIsEditable())
             return node->rootEditableElement();
-        if (node->hasTagName(bodyTag))
+        if (isHTMLBodyElement(*node))
             break;
         node = node->parentNode();
     }
@@ -259,7 +262,7 @@ VisiblePosition firstEditablePositionAfterPositionInRoot(const Position& positio
 {
     // position falls before highestRoot.
     if (comparePositions(position, firstPositionInNode(highestRoot)) == -1 && highestRoot->rendererIsEditable())
-        return firstPositionInNode(highestRoot);
+        return VisiblePosition(firstPositionInNode(highestRoot));
 
     Position p = position;
 
@@ -272,7 +275,7 @@ VisiblePosition firstEditablePositionAfterPositionInRoot(const Position& positio
     }
 
     while (p.deprecatedNode() && !isEditablePosition(p) && p.deprecatedNode()->isDescendantOf(highestRoot))
-        p = isAtomicNode(p.deprecatedNode()) ? positionInParentAfterNode(p.deprecatedNode()) : nextVisuallyDistinctCandidate(p);
+        p = isAtomicNode(p.deprecatedNode()) ? positionInParentAfterNode(*p.deprecatedNode()) : nextVisuallyDistinctCandidate(p);
 
     if (p.deprecatedNode() && p.deprecatedNode() != highestRoot && !p.deprecatedNode()->isDescendantOf(highestRoot))
         return VisiblePosition();
@@ -284,7 +287,7 @@ VisiblePosition lastEditablePositionBeforePositionInRoot(const Position& positio
 {
     // When position falls after highestRoot, the result is easy to compute.
     if (comparePositions(position, lastPositionInNode(highestRoot)) == 1)
-        return lastPositionInNode(highestRoot);
+        return VisiblePosition(lastPositionInNode(highestRoot));
 
     Position p = position;
 
@@ -297,7 +300,7 @@ VisiblePosition lastEditablePositionBeforePositionInRoot(const Position& positio
     }
 
     while (p.deprecatedNode() && !isEditablePosition(p) && p.deprecatedNode()->isDescendantOf(highestRoot))
-        p = isAtomicNode(p.deprecatedNode()) ? positionInParentBeforeNode(p.deprecatedNode()) : previousVisuallyDistinctCandidate(p);
+        p = isAtomicNode(p.deprecatedNode()) ? positionInParentBeforeNode(*p.deprecatedNode()) : previousVisuallyDistinctCandidate(p);
 
     if (p.deprecatedNode() && p.deprecatedNode() != highestRoot && !p.deprecatedNode()->isDescendantOf(highestRoot))
         return VisiblePosition();
@@ -348,8 +351,8 @@ int lastOffsetForEditing(const Node* node)
     if (node->offsetInCharacters())
         return node->maxCharacterOffset();
 
-    if (node->hasChildNodes())
-        return node->childNodeCount();
+    if (node->hasChildren())
+        return node->countChildren();
 
     // NOTE: This should preempt the childNodeCount for, e.g., select nodes
     if (editingIgnoresContent(node))
@@ -460,7 +463,7 @@ Position positionBeforeContainingSpecialElement(const Position& pos, Node** cont
     Node* n = firstInSpecialElement(pos);
     if (!n)
         return pos;
-    Position result = positionInParentBeforeNode(n);
+    Position result = positionInParentBeforeNode(*n);
     if (result.isNull() || result.deprecatedNode()->rootEditableElement() != pos.deprecatedNode()->rootEditableElement())
         return pos;
     if (containingSpecialElement)
@@ -473,7 +476,7 @@ Position positionAfterContainingSpecialElement(const Position& pos, Node **conta
     Node* n = lastInSpecialElement(pos);
     if (!n)
         return pos;
-    Position result = positionInParentAfterNode(n);
+    Position result = positionInParentAfterNode(*n);
     if (result.isNull() || result.deprecatedNode()->rootEditableElement() != pos.deprecatedNode()->rootEditableElement())
         return pos;
     if (containingSpecialElement)
@@ -500,25 +503,23 @@ Node* isLastPositionBeforeTable(const VisiblePosition& visiblePosition)
 }
 
 // Returns the visible position at the beginning of a node
-VisiblePosition visiblePositionBeforeNode(Node* node)
+VisiblePosition visiblePositionBeforeNode(Node& node)
 {
-    ASSERT(node);
-    if (node->hasChildNodes())
-        return VisiblePosition(firstPositionInOrBeforeNode(node), DOWNSTREAM);
-    ASSERT(node->parentNode());
-    ASSERT(!node->parentNode()->isShadowRoot());
-    return positionInParentBeforeNode(node);
+    if (node.hasChildren())
+        return VisiblePosition(firstPositionInOrBeforeNode(&node), DOWNSTREAM);
+    ASSERT(node.parentNode());
+    ASSERT(!node.parentNode()->isShadowRoot());
+    return VisiblePosition(positionInParentBeforeNode(node));
 }
 
 // Returns the visible position at the ending of a node
-VisiblePosition visiblePositionAfterNode(Node* node)
+VisiblePosition visiblePositionAfterNode(Node& node)
 {
-    ASSERT(node);
-    if (node->hasChildNodes())
-        return VisiblePosition(lastPositionInOrAfterNode(node), DOWNSTREAM);
-    ASSERT(node->parentNode());
-    ASSERT(!node->parentNode()->isShadowRoot());
-    return positionInParentAfterNode(node);
+    if (node.hasChildren())
+        return VisiblePosition(lastPositionInOrAfterNode(&node), DOWNSTREAM);
+    ASSERT(node.parentNode());
+    ASSERT(!node.parentNode()->isShadowRoot());
+    return VisiblePosition(positionInParentAfterNode(node));
 }
 
 // Create a range object with two visible positions, start and end.
@@ -533,12 +534,12 @@ PassRefPtr<Range> createRange(Document& document, const VisiblePosition& start, 
     return selectedRange.release();
 }
 
-bool isListElement(Node *n)
+bool isListElement(Node* n)
 {
-    return (n && (n->hasTagName(ulTag) || n->hasTagName(olTag) || n->hasTagName(dlTag)));
+    return (n && (isHTMLUListElement(*n) || isHTMLOListElement(*n) || isHTMLDListElement(*n)));
 }
 
-bool isListItem(const Node *n)
+bool isListItem(const Node* n)
 {
     return n && n->renderer() && n->renderer()->isListItem();
 }
@@ -651,7 +652,7 @@ HTMLElement* enclosingList(Node* node)
     Node* root = highestEditableRoot(firstPositionInOrBeforeNode(node));
 
     for (ContainerNode* n = node->parentNode(); n; n = n->parentNode()) {
-        if (n->hasTagName(ulTag) || n->hasTagName(olTag))
+        if (isHTMLUListElement(*n) || isHTMLOListElement(*n))
             return toHTMLElement(n);
         if (n == root)
             return 0;
@@ -670,7 +671,7 @@ Node* enclosingListChild(Node *node)
 
     // FIXME: This function is inappropriately named if it starts with node instead of node->parentNode()
     for (Node* n = node; n && n->parentNode(); n = n->parentNode()) {
-        if (n->hasTagName(liTag) || (isListElement(n->parentNode()) && n != root))
+        if (isHTMLLIElement(*n) || (isListElement(n->parentNode()) && n != root))
             return n;
         if (n == root || isTableCell(n))
             return 0;
@@ -719,16 +720,13 @@ bool canMergeLists(Element* firstList, Element* secondList)
     return firstList->hasTagName(secondList->tagQName()) // make sure the list types match (ol vs. ul)
     && firstList->rendererIsEditable() && secondList->rendererIsEditable() // both lists are editable
     && firstList->rootEditableElement() == secondList->rootEditableElement() // don't cross editing boundaries
-    && isVisiblyAdjacent(positionInParentAfterNode(firstList), positionInParentBeforeNode(secondList));
+    && isVisiblyAdjacent(positionInParentAfterNode(*firstList), positionInParentBeforeNode(*secondList));
     // Make sure there is no visible content between this li and the previous list
 }
 
 bool isRenderedTableElement(const Node* node)
 {
-    if (!node || !node->isElementNode())
-        return false;
-
-    return node->renderer() && node->hasTagName(tableTag);
+    return isHTMLTableElement(*node) && node->renderer();
 }
 
 bool isRenderedTable(const Node* node)
@@ -742,11 +740,9 @@ bool isRenderedTable(const Node* node)
 
 bool isTableCell(const Node* node)
 {
+    ASSERT(node);
     RenderObject* r = node->renderer();
-    if (!r)
-        return node->hasTagName(tdTag) || node->hasTagName(thTag);
-
-    return r->isTableCell();
+    return r ? r->isTableCell() : isHTMLTableCellElement(*node);
 }
 
 bool isEmptyTableCell(const Node* node)
@@ -825,17 +821,17 @@ PassRefPtr<HTMLElement> createHTMLElement(Document& document, const AtomicString
     return HTMLElementFactory::createHTMLElement(tagName, document, 0, false);
 }
 
-bool isTabSpanNode(const Node *node)
+bool isTabSpanNode(const Node* node)
 {
-    return node && node->hasTagName(spanTag) && node->isElementNode() && toElement(node)->getAttribute(classAttr) == AppleTabSpanClass;
+    return isHTMLSpanElement(node) && toElement(node)->getAttribute(classAttr) == AppleTabSpanClass;
 }
 
-bool isTabSpanTextNode(const Node *node)
+bool isTabSpanTextNode(const Node* node)
 {
     return node && node->isTextNode() && node->parentNode() && isTabSpanNode(node->parentNode());
 }
 
-Node* tabSpanNode(const Node *node)
+Node* tabSpanNode(const Node* node)
 {
     return isTabSpanTextNode(node) ? node->parentNode() : 0;
 }
@@ -890,7 +886,7 @@ unsigned numEnclosingMailBlockquotes(const Position& p)
     return num;
 }
 
-void updatePositionForNodeRemoval(Position& position, Node* node)
+void updatePositionForNodeRemoval(Position& position, Node& node)
 {
     if (position.isNull())
         return;
@@ -904,17 +900,17 @@ void updatePositionForNodeRemoval(Position& position, Node* node)
             position = positionInParentAfterNode(node);
         break;
     case Position::PositionIsOffsetInAnchor:
-        if (position.containerNode() == node->parentNode() && static_cast<unsigned>(position.offsetInContainerNode()) > node->nodeIndex())
+        if (position.containerNode() == node.parentNode() && static_cast<unsigned>(position.offsetInContainerNode()) > node.nodeIndex())
             position.moveToOffset(position.offsetInContainerNode() - 1);
-        else if (node->containsIncludingShadowDOM(position.containerNode()))
+        else if (node.containsIncludingShadowDOM(position.containerNode()))
             position = positionInParentBeforeNode(node);
         break;
     case Position::PositionIsAfterAnchor:
-        if (node->containsIncludingShadowDOM(position.anchorNode()))
+        if (node.containsIncludingShadowDOM(position.anchorNode()))
             position = positionInParentAfterNode(node);
         break;
     case Position::PositionIsBeforeAnchor:
-        if (node->containsIncludingShadowDOM(position.anchorNode()))
+        if (node.containsIncludingShadowDOM(position.anchorNode()))
             position = positionInParentBeforeNode(node);
         break;
     }
@@ -956,7 +952,7 @@ bool lineBreakExistsAtPosition(const Position& position)
     if (position.isNull())
         return false;
 
-    if (position.anchorNode()->hasTagName(brTag) && position.atFirstEditingPositionForNode())
+    if (isHTMLBRElement(*position.anchorNode()) && position.atFirstEditingPositionForNode())
         return true;
 
     if (!position.anchorNode()->renderer())
@@ -1044,20 +1040,18 @@ bool isVisiblyAdjacent(const Position& first, const Position& second)
 
 // Determines whether a node is inside a range or visibly starts and ends at the boundaries of the range.
 // Call this function to determine whether a node is visibly fit inside selectedRange
-bool isNodeVisiblyContainedWithin(Node* node, const Range* selectedRange)
+bool isNodeVisiblyContainedWithin(Node& node, const Range& selectedRange)
 {
-    ASSERT(node);
-    ASSERT(selectedRange);
     // If the node is inside the range, then it surely is contained within
-    if (selectedRange->compareNode(node, IGNORE_EXCEPTION) == Range::NODE_INSIDE)
+    if (selectedRange.compareNode(&node, IGNORE_EXCEPTION) == Range::NODE_INSIDE)
         return true;
 
-    bool startIsVisuallySame = visiblePositionBeforeNode(node) == selectedRange->startPosition();
-    if (startIsVisuallySame && comparePositions(positionInParentAfterNode(node), selectedRange->endPosition()) < 0)
+    bool startIsVisuallySame = visiblePositionBeforeNode(node) == VisiblePosition(selectedRange.startPosition());
+    if (startIsVisuallySame && comparePositions(positionInParentAfterNode(node), selectedRange.endPosition()) < 0)
         return true;
 
-    bool endIsVisuallySame = visiblePositionAfterNode(node) == selectedRange->endPosition();
-    if (endIsVisuallySame && comparePositions(selectedRange->startPosition(), positionInParentBeforeNode(node)) < 0)
+    bool endIsVisuallySame = visiblePositionAfterNode(node) == VisiblePosition(selectedRange.endPosition());
+    if (endIsVisuallySame && comparePositions(selectedRange.startPosition(), positionInParentBeforeNode(node)) < 0)
         return true;
 
     return startIsVisuallySame && endIsVisuallySame;
@@ -1106,7 +1100,7 @@ Position adjustedSelectionStartForStyleComputation(const VisibleSelection& selec
     // It is important to skip certain irrelevant content at the start of the selection, so we do not wind up
     // with a spurious "mixed" style.
 
-    VisiblePosition visiblePosition = selection.start();
+    VisiblePosition visiblePosition(selection.start());
     if (visiblePosition.isNull())
         return Position();
 

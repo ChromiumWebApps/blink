@@ -63,7 +63,7 @@ String CSSViewportRule::cssText() const
     StringBuilder result;
     result.appendLiteral("@viewport { ");
 
-    String decls = m_viewportRule->properties()->asText();
+    String decls = m_viewportRule->properties().asText();
     result.append(decls);
     if (!decls.isEmpty())
         result.append(' ');
@@ -79,6 +79,12 @@ void CSSViewportRule::reattach(StyleRuleBase* rule)
     m_viewportRule = toStyleRuleViewport(rule);
     if (m_propertiesCSSOMWrapper)
         m_propertiesCSSOMWrapper->reattach(m_viewportRule->mutableProperties());
+}
+
+void CSSViewportRule::trace(Visitor* visitor)
+{
+    visitor->trace(m_viewportRule);
+    CSSRule::trace(visitor);
 }
 
 } // namespace WebCore

@@ -43,12 +43,11 @@ class SourceBuffer;
 class GenericEventQueue;
 
 class SourceBufferList FINAL : public RefCountedWillBeRefCountedGarbageCollected<SourceBufferList>, public ScriptWrappable, public EventTargetWithInlineData {
-    DECLARE_GC_INFO;
     DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<SourceBufferList>);
 public:
     static PassRefPtrWillBeRawPtr<SourceBufferList> create(ExecutionContext* context, GenericEventQueue* asyncEventQueue)
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new SourceBufferList(context, asyncEventQueue));
+        return adoptRefWillBeRefCountedGarbageCollected(new SourceBufferList(context, asyncEventQueue));
     }
     virtual ~SourceBufferList();
 

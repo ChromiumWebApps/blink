@@ -27,12 +27,12 @@
 
 namespace WebCore {
 
-PassRefPtr<MediaQueryList> MediaQueryList::create(PassRefPtr<MediaQueryMatcher> vector, PassRefPtr<MediaQuerySet> media, bool matches)
+PassRefPtrWillBeRawPtr<MediaQueryList> MediaQueryList::create(PassRefPtrWillBeRawPtr<MediaQueryMatcher> vector, PassRefPtrWillBeRawPtr<MediaQuerySet> media, bool matches)
 {
-    return adoptRef(new MediaQueryList(vector, media, matches));
+    return adoptRefWillBeNoop(new MediaQueryList(vector, media, matches));
 }
 
-MediaQueryList::MediaQueryList(PassRefPtr<MediaQueryMatcher> vector, PassRefPtr<MediaQuerySet> media, bool matches)
+MediaQueryList::MediaQueryList(PassRefPtrWillBeRawPtr<MediaQueryMatcher> vector, PassRefPtrWillBeRawPtr<MediaQuerySet> media, bool matches)
     : m_matcher(vector)
     , m_media(media)
     , m_evaluationRound(m_matcher->evaluationRound())
@@ -41,16 +41,14 @@ MediaQueryList::MediaQueryList(PassRefPtr<MediaQueryMatcher> vector, PassRefPtr<
 {
 }
 
-MediaQueryList::~MediaQueryList()
-{
-}
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(MediaQueryList)
 
 String MediaQueryList::media() const
 {
     return m_media->mediaText();
 }
 
-void MediaQueryList::addListener(PassRefPtr<MediaQueryListListener> listener)
+void MediaQueryList::addListener(PassRefPtrWillBeRawPtr<MediaQueryListListener> listener)
 {
     if (!listener)
         return;
@@ -58,7 +56,7 @@ void MediaQueryList::addListener(PassRefPtr<MediaQueryListListener> listener)
     m_matcher->addListener(listener, this);
 }
 
-void MediaQueryList::removeListener(PassRefPtr<MediaQueryListListener> listener)
+void MediaQueryList::removeListener(PassRefPtrWillBeRawPtr<MediaQueryListListener> listener)
 {
     if (!listener)
         return;
@@ -89,6 +87,12 @@ bool MediaQueryList::matches()
     if (m_evaluationRound != m_matcher->evaluationRound())
         setMatches(m_matcher->evaluate(m_media.get()));
     return m_matches;
+}
+
+void MediaQueryList::trace(Visitor* visitor)
+{
+    visitor->trace(m_matcher);
+    visitor->trace(m_media);
 }
 
 }

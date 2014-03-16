@@ -35,17 +35,17 @@
 #include "core/rendering/RenderBox.h"
 
 namespace WebCore {
-bool ShapeOutsideInfo::isEnabledFor(const RenderBox* box)
+bool ShapeOutsideInfo::isEnabledFor(const RenderBox& box)
 {
-    ShapeValue* shapeValue = box->style()->shapeOutside();
-    if (!box->isFloating() || !shapeValue)
+    ShapeValue* shapeValue = box.style()->shapeOutside();
+    if (!box.isFloating() || !shapeValue)
         return false;
 
     switch (shapeValue->type()) {
     case ShapeValue::Shape:
         return shapeValue->shape();
     case ShapeValue::Image:
-        return shapeValue->isImageValid() && checkShapeImageOrigin(box->document(), *(shapeValue->image()->cachedImage()));
+        return shapeValue->isImageValid() && checkShapeImageOrigin(box.document(), *(shapeValue->image()->cachedImage()));
     case ShapeValue::Box:
         return true;
     case ShapeValue::Outside:
@@ -55,26 +55,29 @@ bool ShapeOutsideInfo::isEnabledFor(const RenderBox* box)
     return false;
 }
 
-void ShapeOutsideInfo::updateDeltasForContainingBlockLine(const RenderBlockFlow* containingBlock, const FloatingObject* floatingObject, LayoutUnit lineTop, LayoutUnit lineHeight)
+void ShapeOutsideInfo::updateDeltasForContainingBlockLine(const RenderBlockFlow& containingBlock, const FloatingObject& floatingObject, LayoutUnit lineTop, LayoutUnit lineHeight)
 {
-    LayoutUnit shapeTop = containingBlock->logicalTopForFloat(floatingObject) + std::max(LayoutUnit(), containingBlock->marginBeforeForChild(m_renderer));
-    LayoutUnit floatRelativeLineTop = lineTop - shapeTop;
+    LayoutUnit borderBoxTop = containingBlock.logicalTopForFloat(&floatingObject) + containingBlock.marginBeforeForChild(&m_renderer);
+    LayoutUnit borderBoxLineTop = lineTop - borderBoxTop;
 
-    if (shapeSizeDirty() || m_lineTop != floatRelativeLineTop || m_lineHeight != lineHeight) {
-        m_lineTop = floatRelativeLineTop;
-        m_shapeLineTop = floatRelativeLineTop - logicalTopOffset();
+    if (isShapeDirty() || m_borderBoxLineTop != borderBoxLineTop || m_lineHeight != lineHeight) {
+        m_borderBoxLineTop = borderBoxLineTop;
+        m_referenceBoxLineTop = borderBoxLineTop - logicalTopOffset();
         m_lineHeight = lineHeight;
 
-        LayoutUnit floatMarginBoxWidth = containingBlock->logicalWidthForFloat(floatingObject);
+        LayoutUnit floatMarginBoxWidth = containingBlock.logicalWidthForFloat(&floatingObject);
 
         if (lineOverlapsShapeBounds()) {
-            SegmentList segments = computeSegmentsForLine(floatRelativeLineTop, lineHeight);
+            SegmentList segments = computeSegmentsForLine(borderBoxLineTop, lineHeight);
             if (segments.size()) {
-                LayoutUnit rawLeftMarginBoxDelta = segments.first().logicalLeft + containingBlock->marginStartForChild(m_renderer);
-                m_leftMarginBoxDelta = clampTo<LayoutUnit>(rawLeftMarginBoxDelta, LayoutUnit(), floatMarginBoxWidth);
+                LayoutUnit logicalLeftMargin = containingBlock.style()->isLeftToRightDirection() ? containingBlock.marginStartForChild(&m_renderer) : containingBlock.marginEndForChild(&m_renderer);
+                LayoutUnit rawLeftMarginBoxDelta = segments.first().logicalLeft + logicalLeftMargin;
+                m_leftMarginBoxDelta = clampToLayoutUnit(rawLeftMarginBoxDelta, LayoutUnit(), floatMarginBoxWidth);
 
-                LayoutUnit rawRightMarginBoxDelta = segments.last().logicalRight - containingBlock->logicalWidthForChild(m_renderer) - containingBlock->marginEndForChild(m_renderer);
-                m_rightMarginBoxDelta = clampTo<LayoutUnit>(rawRightMarginBoxDelta, -floatMarginBoxWidth, LayoutUnit());
+                LayoutUnit logicalRightMargin = containingBlock.style()->isLeftToRightDirection() ? containingBlock.marginEndForChild(&m_renderer) : containingBlock.marginStartForChild(&m_renderer);
+                LayoutUnit rawRightMarginBoxDelta = segments.last().logicalRight - containingBlock.logicalWidthForChild(&m_renderer) - logicalRightMargin;
+                m_rightMarginBoxDelta = clampToLayoutUnit(rawRightMarginBoxDelta, -floatMarginBoxWidth, LayoutUnit());
+                m_lineOverlapsShape = true;
                 return;
             }
         }
@@ -82,19 +85,21 @@ void ShapeOutsideInfo::updateDeltasForContainingBlockLine(const RenderBlockFlow*
         // Lines that do not overlap the shape should act as if the float
         // wasn't there for layout purposes. So we set the deltas to remove the
         // entire width of the float.
-        // FIXME: The latest CSS Shapes spec says that in this case, the
-        // content should interact with previously stacked floats on the line
-        // as if this outermost float did not exist. Perhaps obviously, this
-        // solution cannot do that, and will be revisted when that part of the
-        // spec is implemented.
         m_leftMarginBoxDelta = floatMarginBoxWidth;
         m_rightMarginBoxDelta = -floatMarginBoxWidth;
+        m_lineOverlapsShape = false;
     }
 }
 
 ShapeValue* ShapeOutsideInfo::shapeValue() const
 {
-    return m_renderer->style()->shapeOutside();
+    return m_renderer.style()->shapeOutside();
+}
+
+const RenderStyle* ShapeOutsideInfo::styleForWritingMode() const
+{
+    ASSERT(m_renderer.containingBlock());
+    return m_renderer.containingBlock()->style();
 }
 
 }

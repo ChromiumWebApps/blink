@@ -33,11 +33,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGLinearGradientElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGradientElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGLinearGradientElement::SVGLinearGradientElement(Document& document)
     : SVGGradientElement(SVGNames::linearGradientTag, document)
     , m_x1(SVGAnimatedLength::create(this, SVGNames::x1Attr, SVGLength::create(LengthModeWidth)))
@@ -54,7 +49,6 @@ inline SVGLinearGradientElement::SVGLinearGradientElement(Document& document)
     addToPropertyMap(m_y1);
     addToPropertyMap(m_x2);
     addToPropertyMap(m_y2);
-    registerAnimatedPropertiesForSVGLinearGradientElement();
 }
 
 PassRefPtr<SVGLinearGradientElement> SVGLinearGradientElement::create(Document& document)
@@ -176,7 +170,7 @@ bool SVGLinearGradientElement::collectGradientAttributes(LinearGradientAttribute
             if (!current->renderer())
                 return false;
 
-            setGradientAttributes(current, attributes, current->hasTagName(SVGNames::linearGradientTag));
+            setGradientAttributes(current, attributes, isSVGLinearGradientElement(*current));
             processedGradients.add(current);
         } else {
             return true;

@@ -137,7 +137,7 @@ static HTMLFormElement* closestFormAncestor(Element* element)
 {
     ASSERT(isMainThread());
     while (element) {
-        if (element->hasTagName(formTag))
+        if (isHTMLFormElement(*element))
             return toHTMLFormElement(element);
         ContainerNode* parent = element->parentNode();
         if (!parent || !parent->isElementNode())
@@ -311,7 +311,7 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser, DocumentFragment* f
         // and instead use the DocumentFragment as a root node.
         m_tree.openElements()->pushRootNode(HTMLStackItem::create(fragment, HTMLStackItem::ItemForDocumentFragmentNode));
 
-        if (contextElement->hasTagName(templateTag))
+        if (isHTMLTemplateElement(*contextElement))
             m_templateInsertionModes.append(TemplateContentsMode);
 
         resetInsertionModeAppropriately();
@@ -343,7 +343,7 @@ HTMLTreeBuilder::FragmentParsingContext::FragmentParsingContext()
 HTMLTreeBuilder::FragmentParsingContext::FragmentParsingContext(DocumentFragment* fragment, Element* contextElement)
     : m_fragment(fragment)
 {
-    ASSERT(!fragment->hasChildNodes());
+    ASSERT(!fragment->hasChildren());
     m_contextElementStackItem = HTMLStackItem::create(contextElement, HTMLStackItem::ItemForContextElement);
 }
 
@@ -458,62 +458,12 @@ void HTMLTreeBuilder::processFakeEndTag(const QualifiedName& tagName)
     processFakeEndTag(tagName.localName());
 }
 
-void HTMLTreeBuilder::processFakeCharacters(const String& characters)
-{
-    ASSERT(!characters.isEmpty());
-    CharacterTokenBuffer buffer(characters);
-    processCharacterBuffer(buffer);
-}
-
 void HTMLTreeBuilder::processFakePEndTagIfPInButtonScope()
 {
     if (!m_tree.openElements()->inButtonScope(pTag.localName()))
         return;
     AtomicHTMLToken endP(HTMLToken::EndTag, pTag.localName());
     processEndTag(&endP);
-}
-
-Vector<Attribute> HTMLTreeBuilder::attributesForIsindexInput(AtomicHTMLToken* token)
-{
-    Vector<Attribute> attributes = token->attributes();
-    for (int i = attributes.size() - 1; i >= 0; --i) {
-        const QualifiedName& name = attributes.at(i).name();
-        if (name.matches(nameAttr) || name.matches(actionAttr) || name.matches(promptAttr))
-            attributes.remove(i);
-    }
-
-    attributes.append(Attribute(nameAttr, isindexTag.localName()));
-    return attributes;
-}
-
-void HTMLTreeBuilder::processIsindexStartTagForInBody(AtomicHTMLToken* token)
-{
-    ASSERT(token->type() == HTMLToken::StartTag);
-    ASSERT(token->name() == isindexTag);
-
-    if (m_parser->useCounter())
-        m_parser->useCounter()->count(UseCounter::IsIndexElement);
-
-    parseError(token);
-    if (m_tree.form())
-        return;
-    notImplemented(); // Acknowledge self-closing flag
-    processFakeStartTag(formTag);
-    Attribute* actionAttribute = token->getAttributeItem(actionAttr);
-    if (actionAttribute)
-        m_tree.form()->setAttribute(actionAttr, actionAttribute->value());
-    processFakeStartTag(hrTag);
-    processFakeStartTag(labelTag);
-    Attribute* promptAttribute = token->getAttributeItem(promptAttr);
-    if (promptAttribute)
-        processFakeCharacters(promptAttribute->value());
-    else
-        processFakeCharacters(Locale::defaultLocale().queryString(blink::WebLocalizedString::SearchableIndexIntroduction));
-    processFakeStartTag(inputTag, attributesForIsindexInput(token));
-    notImplemented(); // This second set of characters may be needed by non-english locales.
-    processFakeEndTag(labelTag);
-    processFakeStartTag(hrTag);
-    processFakeEndTag(formTag);
 }
 
 namespace {
@@ -856,10 +806,6 @@ void HTMLTreeBuilder::processStartTagForInBody(AtomicHTMLToken* token)
         m_framesetOk = false;
         return;
     }
-    if (token->name() == isindexTag) {
-        processIsindexStartTagForInBody(token);
-        return;
-    }
     if (token->name() == textareaTag) {
         m_tree.insertHTMLElement(token);
         m_shouldSkipLeadingNewline = true;
@@ -966,7 +912,7 @@ bool HTMLTreeBuilder::processTemplateEndTag(AtomicHTMLToken* token)
 {
     ASSERT(token->name() == templateTag.localName());
     if (!m_tree.openElements()->hasTemplateInHTMLScope()) {
-        ASSERT(m_templateInsertionModes.isEmpty() || (m_templateInsertionModes.size() == 1 && m_fragmentContext.contextElement()->hasTagName(templateTag)));
+        ASSERT(m_templateInsertionModes.isEmpty() || (m_templateInsertionModes.size() == 1 && isHTMLTemplateElement(m_fragmentContext.contextElement())));
         parseError(token);
         return false;
     }
@@ -992,7 +938,7 @@ bool HTMLTreeBuilder::processEndOfFileForInTemplateContents(AtomicHTMLToken* tok
 
 bool HTMLTreeBuilder::processColgroupEndTagForInColumnGroup()
 {
-    if (m_tree.currentIsRootNode() || m_tree.currentNode()->hasTagName(templateTag)) {
+    if (m_tree.currentIsRootNode() || isHTMLTemplateElement(*m_tree.currentNode())) {
         ASSERT(isParsingFragmentOrTemplateContents());
         // FIXME: parse error
         return false;
@@ -2509,7 +2455,7 @@ void HTMLTreeBuilder::processEndOfFile(AtomicHTMLToken* token)
             ASSERT(isParsingFragment());
             return; // FIXME: Should we break here instead of returning?
         }
-        ASSERT(m_tree.currentNode()->hasTagName(colgroupTag) || m_tree.currentNode()->hasTagName(templateTag));
+        ASSERT(m_tree.currentNode()->hasTagName(colgroupTag) || isHTMLTemplateElement(m_tree.currentNode()));
         processColgroupEndTagForInColumnGroup();
         // Fall through
     case InFramesetMode:

@@ -27,7 +27,7 @@
 #ifndef WorkerThread_h
 #define WorkerThread_h
 
-#include "core/frame/ContentSecurityPolicy.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerRunLoop.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Forward.h"
@@ -46,7 +46,7 @@ namespace WebCore {
     class WorkerGlobalScope;
     class WorkerLoaderProxy;
     class WorkerReportingProxy;
-    struct WorkerThreadStartupData;
+    class WorkerThreadStartupData;
 
     enum WorkerThreadStartMode { DontPauseWorkerGlobalScopeOnStart, PauseWorkerGlobalScopeOnStart };
 
@@ -74,10 +74,10 @@ namespace WebCore {
         void setNotificationClient(NotificationClient* client) { m_notificationClient = client; }
 
     protected:
-        WorkerThread(WorkerLoaderProxy&, WorkerReportingProxy&, PassOwnPtr<WorkerThreadStartupData>);
+        WorkerThread(WorkerLoaderProxy&, WorkerReportingProxy&, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>);
 
         // Factory method for creating a new worker context for the thread.
-        virtual PassRefPtr<WorkerGlobalScope> createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData>) = 0;
+        virtual PassRefPtrWillBeRawPtr<WorkerGlobalScope> createWorkerGlobalScope(PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>) = 0;
 
         // Executes the event loop for the worker thread. Derived classes can override to perform actions before/after entering the event loop.
         virtual void runEventLoop();
@@ -95,10 +95,10 @@ namespace WebCore {
         WorkerLoaderProxy& m_workerLoaderProxy;
         WorkerReportingProxy& m_workerReportingProxy;
 
-        RefPtr<WorkerGlobalScope> m_workerGlobalScope;
+        RefPtrWillBePersistent<WorkerGlobalScope> m_workerGlobalScope;
         Mutex m_threadCreationMutex;
 
-        OwnPtr<WorkerThreadStartupData> m_startupData;
+        OwnPtrWillBePersistent<WorkerThreadStartupData> m_startupData;
 
         NotificationClient* m_notificationClient;
 

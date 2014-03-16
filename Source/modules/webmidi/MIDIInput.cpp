@@ -40,7 +40,7 @@ namespace WebCore {
 PassRefPtrWillBeRawPtr<MIDIInput> MIDIInput::create(MIDIAccess* access, const String& id, const String& manufacturer, const String& name, const String& version)
 {
     ASSERT(access);
-    RefPtrWillBeRawPtr<MIDIInput> input = adoptRefCountedWillBeRefCountedGarbageCollected(new MIDIInput(access, id, manufacturer, name, version));
+    RefPtrWillBeRawPtr<MIDIInput> input = adoptRefWillBeRefCountedGarbageCollected(new MIDIInput(access, id, manufacturer, name, version));
     return input.release();
 }
 
@@ -64,6 +64,11 @@ void MIDIInput::didReceiveMIDIData(unsigned portIndex, const unsigned char* data
         return;
     RefPtr<Uint8Array> array = Uint8Array::create(data, length);
     dispatchEvent(MIDIMessageEvent::create(timeStamp, array));
+}
+
+void MIDIInput::trace(Visitor* visitor)
+{
+    MIDIPort::trace(visitor);
 }
 
 } // namespace WebCore

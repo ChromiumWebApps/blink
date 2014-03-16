@@ -47,8 +47,6 @@ enum ParseState {
 
 namespace WebCore {
 
-DEFINE_GC_INFO(CSSCalcExpressionNode);
-
 static CalculationCategory unitCategory(CSSPrimitiveValue::UnitTypes type)
 {
     switch (type) {
@@ -176,9 +174,7 @@ double CSSCalcValue::computeLengthPx(const CSSToLengthConversionData& conversion
     return clampToPermittedRange(m_expression->computeLengthPx(conversionData));
 }
 
-CSSCalcExpressionNode::~CSSCalcExpressionNode()
-{
-}
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(CSSCalcExpressionNode)
 
 class CSSCalcPrimitiveValue FINAL : public CSSCalcExpressionNode {
     WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
@@ -754,12 +750,12 @@ PassRefPtrWillBeRawPtr<CSSCalcValue> CSSCalcValue::create(CSSParserString name, 
         expression = parser.parseCalc(parserValueList);
     // FIXME calc (http://webkit.org/b/16662) Add parsing for min and max here
 
-    return expression ? adoptRefCountedWillBeRefCountedGarbageCollected(new CSSCalcValue(expression, range)) : nullptr;
+    return expression ? adoptRefWillBeRefCountedGarbageCollected(new CSSCalcValue(expression, range)) : nullptr;
 }
 
 PassRefPtrWillBeRawPtr<CSSCalcValue> CSSCalcValue::create(PassRefPtrWillBeRawPtr<CSSCalcExpressionNode> expression, ValueRange range)
 {
-    return adoptRefCountedWillBeRefCountedGarbageCollected(new CSSCalcValue(expression, range));
+    return adoptRefWillBeRefCountedGarbageCollected(new CSSCalcValue(expression, range));
 }
 
 void CSSCalcValue::traceAfterDispatch(Visitor* visitor)

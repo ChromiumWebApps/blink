@@ -34,14 +34,18 @@
 #include "V8TestTypedefs.h"
 
 #include "RuntimeEnabledFeatures.h"
+#include "V8Bar.h"
+#include "V8Foo.h"
 #include "V8TestCallbackInterface.h"
 #include "V8TestInterfaceEmpty.h"
 #include "V8TestSubObj.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/V8DOMConfiguration.h"
+#include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/V8ObjectConstructor.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
+#include "core/frame/DOMWindow.h"
 #include "platform/TraceEvent.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
@@ -331,6 +335,32 @@ static void methodWithSequenceArgMethodCallback(const v8::FunctionCallbackInfo<v
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
+static void fooOrBarMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TestTypedefs* imp = V8TestTypedefs::toNative(info.Holder());
+    bool result0Enabled = false;
+    RefPtr<Foo> result0;
+    bool result1Enabled = false;
+    RefPtr<Bar> result1;
+    imp->fooOrBarMethod(result0Enabled, result0, result1Enabled, result1);
+    if (result0Enabled) {
+        v8SetReturnValue(info, result0.release());
+        return;
+    }
+    if (result1Enabled) {
+        v8SetReturnValue(info, result1.release());
+        return;
+    }
+    v8SetReturnValueNull(info);
+}
+
+static void fooOrBarMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestTypedefsV8Internal::fooOrBarMethodMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
 static void stringArrayFunctionMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "stringArrayFunction", "TestTypedefs", info.Holder(), info.GetIsolate());
@@ -423,6 +453,7 @@ static const V8DOMConfiguration::MethodConfiguration V8TestTypedefsMethods[] = {
     {"setShadow", TestTypedefsV8Internal::setShadowMethodCallback, 0, 3},
     {"voidMethodTestCallbackInterfaceArgument", TestTypedefsV8Internal::voidMethodTestCallbackInterfaceArgumentMethodCallback, 0, 1},
     {"methodWithSequenceArg", TestTypedefsV8Internal::methodWithSequenceArgMethodCallback, 0, 1},
+    {"fooOrBarMethod", TestTypedefsV8Internal::fooOrBarMethodMethodCallback, 0, 0},
     {"stringArrayFunction", TestTypedefsV8Internal::stringArrayFunctionMethodCallback, 0, 1},
     {"stringArrayFunction2", TestTypedefsV8Internal::stringArrayFunction2MethodCallback, 0, 1},
     {"methodWithException", TestTypedefsV8Internal::methodWithExceptionMethodCallback, 0, 0},
@@ -444,7 +475,7 @@ void V8TestTypedefs::constructorCallback(const v8::FunctionCallbackInfo<v8::Valu
     TestTypedefsV8Internal::constructor(info);
 }
 
-static void configureV8TestTypedefsTemplate(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate, WrapperWorldType currentWorldType)
+static void configureV8TestTypedefsTemplate(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
 {
     functionTemplate->ReadOnlyPrototype();
 
@@ -453,7 +484,7 @@ static void configureV8TestTypedefsTemplate(v8::Handle<v8::FunctionTemplate> fun
         V8TestTypedefsAttributes, WTF_ARRAY_LENGTH(V8TestTypedefsAttributes),
         0, 0,
         V8TestTypedefsMethods, WTF_ARRAY_LENGTH(V8TestTypedefsMethods),
-        isolate, currentWorldType);
+        isolate);
     functionTemplate->SetCallHandler(V8TestTypedefs::constructorCallback);
     functionTemplate->SetLength(1);
     v8::Local<v8::ObjectTemplate> ALLOW_UNUSED instanceTemplate = functionTemplate->InstanceTemplate();
@@ -463,25 +494,28 @@ static void configureV8TestTypedefsTemplate(v8::Handle<v8::FunctionTemplate> fun
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::current()->toStringTemplate());
 }
 
-v8::Handle<v8::FunctionTemplate> V8TestTypedefs::domTemplate(v8::Isolate* isolate, WrapperWorldType currentWorldType)
+v8::Handle<v8::FunctionTemplate> V8TestTypedefs::domTemplate(v8::Isolate* isolate)
 {
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    V8PerIsolateData::TemplateMap::iterator result = data->templateMap(currentWorldType).find(&wrapperTypeInfo);
-    if (result != data->templateMap(currentWorldType).end())
-        return result->value.newLocal(isolate);
+    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(const_cast<WrapperTypeInfo*>(&wrapperTypeInfo));
+    if (!result.IsEmpty())
+        return result;
 
     TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BuildDOMTemplate");
-    v8::EscapableHandleScope handleScope(isolate);
-    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
-    configureV8TestTypedefsTemplate(templ, isolate, currentWorldType);
-    data->templateMap(currentWorldType).add(&wrapperTypeInfo, UnsafePersistent<v8::FunctionTemplate>(isolate, templ));
-    return handleScope.Escape(templ);
+    result = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
+    configureV8TestTypedefsTemplate(result, isolate);
+    data->setDOMTemplate(const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), result);
+    return result;
 }
 
 bool V8TestTypedefs::hasInstance(v8::Handle<v8::Value> jsValue, v8::Isolate* isolate)
 {
-    return V8PerIsolateData::from(isolate)->hasInstanceInMainWorld(&wrapperTypeInfo, jsValue)
-        || V8PerIsolateData::from(isolate)->hasInstanceInNonMainWorld(&wrapperTypeInfo, jsValue);
+    return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, jsValue);
+}
+
+v8::Handle<v8::Object> V8TestTypedefs::findInstanceInPrototypeChain(v8::Handle<v8::Value> jsValue, v8::Isolate* isolate)
+{
+    return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, jsValue);
 }
 
 TestTypedefs* V8TestTypedefs::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)

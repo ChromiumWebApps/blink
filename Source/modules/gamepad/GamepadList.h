@@ -29,32 +29,30 @@
 #include "bindings/v8/ScriptWrappable.h"
 #include "heap/Handle.h"
 #include "modules/gamepad/Gamepad.h"
+#include "public/platform/WebGamepads.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
 
-class GamepadList : public RefCountedWillBeGarbageCollected<GamepadList>, public ScriptWrappable {
-    DECLARE_GC_INFO;
+class GamepadList FINAL : public RefCountedWillBeGarbageCollectedFinalized<GamepadList>, public ScriptWrappable {
 public:
-    static PassRefPtrWillBeRawPtr<GamepadList> create() { return adoptRefWillBeNoop(new GamepadList); }
+    static PassRefPtrWillBeRawPtr<GamepadList> create()
+    {
+        return adoptRefWillBeNoop(new GamepadList);
+    }
     ~GamepadList();
 
     void set(unsigned index, PassRefPtrWillBeRawPtr<Gamepad>);
     Gamepad* item(unsigned index);
-    unsigned length() const;
+    unsigned length() const { return blink::WebGamepads::itemsLengthCap; }
 
     void trace(Visitor*);
 
 private:
-    enum { kMaximumGamepads = 4 };
-    GamepadList()
-    {
-        ScriptWrappable::init(this);
-    }
-
-    RefPtrWillBeMember<Gamepad> m_items[kMaximumGamepads];
+    GamepadList();
+    RefPtrWillBeMember<Gamepad> m_items[blink::WebGamepads::itemsLengthCap];
 };
 
 } // namespace WebCore

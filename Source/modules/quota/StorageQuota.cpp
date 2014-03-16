@@ -70,8 +70,6 @@ blink::WebStorageQuotaType stringToStorageQuotaType(const String& type)
 
 } // namespace
 
-DEFINE_GC_INFO(StorageQuota);
-
 StorageQuota::StorageQuota()
 {
     ScriptWrappable::init(this);
@@ -89,8 +87,8 @@ ScriptPromise StorageQuota::queryInfo(ExecutionContext* executionContext, String
 {
     ASSERT(executionContext);
 
-    ScriptPromise promise = ScriptPromise::createPending(executionContext);
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, executionContext);
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(executionContext);
+    ScriptPromise promise = resolver->promise();
 
     SecurityOrigin* securityOrigin = executionContext->securityOrigin();
     if (securityOrigin->isUnique()) {

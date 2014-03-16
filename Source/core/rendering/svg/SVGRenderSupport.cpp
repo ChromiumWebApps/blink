@@ -67,8 +67,6 @@ void SVGRenderSupport::computeFloatRectForRepaint(const RenderObject* object, co
 
 void SVGRenderSupport::mapLocalToContainer(const RenderObject* object, const RenderLayerModelObject* repaintContainer, TransformState& transformState, bool* wasFixed)
 {
-    transformState.applyTransform(object->localToParentTransform());
-
     RenderObject* parent = object->parent();
 
     // At the SVG/HTML boundary (aka RenderSVGRoot), we apply the localToBorderBoxTransform
@@ -76,6 +74,8 @@ void SVGRenderSupport::mapLocalToContainer(const RenderObject* object, const Ren
     // RenderSVGRoot's mapLocalToContainer method expects CSS box coordinates.
     if (parent->isSVGRoot())
         transformState.applyTransform(toRenderSVGRoot(parent)->localToBorderBoxTransform());
+
+    transformState.applyTransform(object->localToParentTransform());
 
     MapCoordinatesFlags mode = UseTransforms;
     parent->mapLocalToContainer(repaintContainer, transformState, mode, wasFixed);
@@ -140,13 +140,9 @@ void SVGRenderSupport::computeContainerBoundingBoxes(const RenderObject* contain
             continue;
 
         const AffineTransform& transform = current->localToParentTransform();
-        if (transform.isIdentity()) {
-            updateObjectBoundingBox(objectBoundingBox, objectBoundingBoxValid, current, current->objectBoundingBox());
-            strokeBoundingBox.unite(current->repaintRectInLocalCoordinates());
-        } else {
-            updateObjectBoundingBox(objectBoundingBox, objectBoundingBoxValid, current, transform.mapRect(current->objectBoundingBox()));
-            strokeBoundingBox.unite(transform.mapRect(current->repaintRectInLocalCoordinates()));
-        }
+        updateObjectBoundingBox(objectBoundingBox, objectBoundingBoxValid, current,
+            transform.mapRect(current->objectBoundingBox()));
+        strokeBoundingBox.unite(transform.mapRect(current->repaintRectInLocalCoordinates()));
     }
 
     repaintBoundingBox = strokeBoundingBox;
@@ -154,9 +150,6 @@ void SVGRenderSupport::computeContainerBoundingBoxes(const RenderObject* contain
 
 bool SVGRenderSupport::paintInfoIntersectsRepaintRect(const FloatRect& localRepaintRect, const AffineTransform& localTransform, const PaintInfo& paintInfo)
 {
-    if (localTransform.isIdentity())
-        return localRepaintRect.intersects(paintInfo.rect);
-
     return localTransform.mapRect(localRepaintRect).intersects(paintInfo.rect);
 }
 
@@ -401,14 +394,6 @@ void SVGRenderSupport::applyStrokeStyleToStrokeData(StrokeData* strokeData, cons
         dashArray.append(dashes->at(i)->value(lengthContext));
 
     strokeData->setLineDash(dashArray, svgStyle->strokeDashOffset()->value(lengthContext));
-}
-
-bool SVGRenderSupport::isEmptySVGInlineText(const RenderObject* object)
-{
-    // RenderSVGInlineText performs whitespace filtering in order to support xml:space
-    // (http://www.w3.org/TR/SVG/struct.html#LangSpaceAttrs), and can end up with an empty string
-    // even when its original constructor argument is non-empty.
-    return object->isSVGInlineText() && toRenderSVGInlineText(object)->hasEmptyText();
 }
 
 bool SVGRenderSupport::isRenderableTextNode(const RenderObject* object)

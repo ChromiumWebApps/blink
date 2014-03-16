@@ -52,10 +52,6 @@ typedef struct HFONT__ *HFONT;
 
 namespace WebCore {
 
-// Return a typeface associated with the hfont, and return its size and
-// from the hfont's LOGFONT.
-PassRefPtr<SkTypeface> CreateTypefaceFromHFont(HFONT, int* size);
-
 class FontDescription;
 class GraphicsContext;
 class HarfBuzzFace;
@@ -69,10 +65,6 @@ public:
     // set everything to NULL.
     FontPlatformData(WTF::HashTableDeletedValueType);
     FontPlatformData();
-#if ENABLE(GDI_FONTS_ON_WINDOWS)
-    // This constructor takes ownership of the HFONT
-    FontPlatformData(HFONT, float size, FontOrientation);
-#endif
     FontPlatformData(float size, bool bold, bool oblique);
     FontPlatformData(const FontPlatformData&);
     FontPlatformData(const FontPlatformData&, float textSize);
@@ -88,11 +80,7 @@ public:
 
     bool isFixedPitch() const;
     float size() const { return m_textSize; }
-#if USE(HARFBUZZ)
     HarfBuzzFace* harfBuzzFace() const;
-#else
-    HFONT hfont() const { return m_font ? m_font->hfont() : 0; }
-#endif
     SkTypeface* typeface() const { return m_typeface.get(); }
     SkFontID uniqueID() const { return m_typeface->uniqueID(); }
     int paintTextFlags() const { return m_paintTextFlags; }
@@ -102,14 +90,7 @@ public:
     FontOrientation orientation() const { return m_orientation; }
     void setOrientation(FontOrientation orientation) { m_orientation = orientation; }
 
-#if ENABLE(GDI_FONTS_ON_WINDOWS)
-    unsigned hash() const
-    {
-        return m_font ? m_font->hash() : NULL;
-    }
-#else
     unsigned hash() const;
-#endif
 
     bool operator==(const FontPlatformData&) const;
 
@@ -122,51 +103,9 @@ public:
     String description() const;
 #endif
 
-#if !USE(HARFBUZZ)
-    SCRIPT_FONTPROPERTIES* scriptFontProperties() const;
-    SCRIPT_CACHE* scriptCache() const { return &m_scriptCache; }
-    static bool ensureFontLoaded(HFONT);
-#endif
-
 private:
     bool static defaultUseSubpixelPositioning();
 
-#if !USE(HARFBUZZ)
-    // We refcount the internal HFONT so that FontPlatformData can be
-    // efficiently copied. WebKit depends on being able to copy it, and we
-    // don't really want to re-create the HFONT.
-    class RefCountedHFONT : public RefCounted<RefCountedHFONT> {
-    public:
-        static PassRefPtr<RefCountedHFONT> create(HFONT hfont)
-        {
-            return adoptRef(new RefCountedHFONT(hfont));
-        }
-
-        ~RefCountedHFONT();
-
-        HFONT hfont() const { return m_hfont; }
-        unsigned hash() const
-        {
-            return StringHasher::hashMemory<sizeof(HFONT)>(&m_hfont);
-        }
-
-        bool operator==(const RefCountedHFONT& other) const
-        {
-            return m_hfont == other.m_hfont;
-        }
-
-    private:
-        // The create() function assumes there is already a refcount of one
-        // so it can do adoptRef.
-        RefCountedHFONT(HFONT hfont) : m_hfont(hfont)
-        {
-        }
-
-        HFONT m_hfont;
-    };
-
-    RefPtr<RefCountedHFONT> m_font;
-#endif // !USE(HARFBUZZ)
     float m_textSize; // Point size of the font in pixels.
     FontOrientation m_orientation;
     bool m_syntheticBold;
@@ -175,12 +114,7 @@ private:
     RefPtr<SkTypeface> m_typeface;
     int m_paintTextFlags;
 
-#if USE(HARFBUZZ)
     mutable RefPtr<HarfBuzzFace> m_harfBuzzFace;
-#else
-    mutable SCRIPT_CACHE m_scriptCache;
-    mutable OwnPtr<SCRIPT_FONTPROPERTIES> m_scriptFontProperties;
-#endif
 
     bool m_isHashTableDeletedValue;
     bool m_useSubpixelPositioning;

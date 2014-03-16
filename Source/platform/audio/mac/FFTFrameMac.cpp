@@ -98,38 +98,15 @@ FFTFrame::~FFTFrame()
 {
 }
 
-void FFTFrame::multiply(const FFTFrame& frame)
-{
-    FFTFrame& frame1 = *this;
-    const FFTFrame& frame2 = frame;
-
-    float* realP1 = frame1.realData();
-    float* imagP1 = frame1.imagData();
-    const float* realP2 = frame2.realData();
-    const float* imagP2 = frame2.imagData();
-
-    unsigned halfSize = m_FFTSize / 2;
-    float real0 = realP1[0];
-    float imag0 = imagP1[0];
-
-    // Complex multiply
-    VectorMath::zvmul(realP1, imagP1, realP2, imagP2, realP1, imagP1, halfSize);
-
-    // Multiply the packed DC/nyquist component
-    realP1[0] = real0 * realP2[0];
-    imagP1[0] = imag0 * imagP2[0];
-
-    // Scale accounts for vecLib's peculiar scaling
-    // This ensures the right scaling all the way back to inverse FFT
-    float scale = 0.5f;
-
-    VectorMath::vsmul(realP1, 1, &scale, realP1, 1, halfSize);
-    VectorMath::vsmul(imagP1, 1, &scale, imagP1, 1, halfSize);
-}
-
 void FFTFrame::doFFT(const float* data)
 {
-    vDSP_ctoz((DSPComplex*)data, 2, &m_frame, 1, m_FFTSize / 2);
+    AudioFloatArray scaledData(m_FFTSize);
+    // veclib fft returns a result that is twice as large as would be expected. Compensate for that
+    // by scaling the input by half so the FFT has the correct scaling.
+    float scale = 0.5f;
+    VectorMath::vsmul(data, 1, &scale, scaledData.data(), 1, m_FFTSize);
+
+    vDSP_ctoz((DSPComplex*)scaledData.data(), 2, &m_frame, 1, m_FFTSize / 2);
     vDSP_fft_zrip(m_FFTSetup, &m_frame, 1, m_log2FFTSize, FFT_FORWARD);
 }
 
@@ -139,7 +116,7 @@ void FFTFrame::doInverseFFT(float* data)
     vDSP_ztoc(&m_frame, 1, (DSPComplex*)data, 2, m_FFTSize / 2);
 
     // Do final scaling so that x == IFFT(FFT(x))
-    float scale = 0.5f / m_FFTSize;
+    float scale = 1.0f / m_FFTSize;
     vDSP_vsmul(data, 1, &scale, data, 1, m_FFTSize);
 }
 

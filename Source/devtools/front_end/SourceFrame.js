@@ -29,14 +29,14 @@
  */
 
 /**
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @constructor
  * @implements {WebInspector.Replaceable}
  * @param {!WebInspector.ContentProvider} contentProvider
  */
 WebInspector.SourceFrame = function(contentProvider)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
     this.element.classList.add("script-view");
 
     this._url = contentProvider.contentURL();
@@ -680,7 +680,7 @@ WebInspector.SourceFrame.prototype = {
 
         // Create the image element in the Inspector's document so we can use relative image URLs.
         messageLineElement.appendChild(imageElement);
-        messageLineElement.appendChild(document.createTextNode(msg.message));
+        messageLineElement.appendChild(document.createTextNode(msg.messageText));
 
         rowMessage.element = messageLineElement;
         rowMessage.repeatCount = msg.totalRepeatCount;
@@ -813,7 +813,7 @@ WebInspector.SourceFrame.prototype = {
             e.consume(true);
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 

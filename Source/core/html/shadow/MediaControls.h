@@ -27,40 +27,31 @@
 #ifndef MediaControls_h
 #define MediaControls_h
 
-#include "core/events/MouseEvent.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/shadow/MediaControlElements.h"
-#include "core/rendering/RenderTheme.h"
 
 namespace WebCore {
 
 class Document;
 class Event;
-class MediaPlayer;
 
-class RenderBox;
-class RenderMedia;
-
-class MediaControls : public HTMLDivElement {
+class MediaControls FINAL : public HTMLDivElement {
 public:
-    virtual ~MediaControls() {}
+    static PassRefPtr<MediaControls> create(HTMLMediaElement&);
 
-    static PassRefPtr<MediaControls> create(Document&);
-
-    virtual void setMediaController(MediaControllerInterface*);
+    HTMLMediaElement& mediaElement() const { return m_mediaElement; }
+    MediaControllerInterface& mediaControllerInterface() const;
 
     void reset();
 
     void show();
     void hide();
 
-    void bufferingProgressed();
-    virtual void playbackStarted();
+    void playbackStarted();
     void playbackProgressed();
-    virtual void playbackStopped();
+    void playbackStopped();
 
     void updateCurrentTimeDisplay();
-    void showVolumeSlider();
 
     void changedMute();
     void changedVolume();
@@ -74,19 +65,15 @@ public:
 
     void updateTextTrackDisplay();
 
-protected:
-    explicit MediaControls(Document&);
-
-    virtual bool initializeControls(Document&);
-
-    virtual bool shouldHideControls();
-
-    virtual void insertTextTrackContainer(PassRefPtr<MediaControlTextTrackContainerElement>);
-
 private:
+    explicit MediaControls(HTMLMediaElement&);
+
+    bool initializeControls();
+
     void makeOpaque();
     void makeTransparent();
 
+    bool shouldHideFullscreenControls();
     void hideFullscreenControlsTimerFired(Timer<MediaControls>*);
     void startHideFullscreenControlsTimer();
     void stopHideFullscreenControlsTimer();
@@ -96,7 +83,7 @@ private:
     void hideTextTrackDisplay();
 
     // Node
-    virtual bool isMediaControls() const OVERRIDE FINAL { return true; }
+    virtual bool isMediaControls() const OVERRIDE { return true; }
     virtual bool willRespondToMouseMoveEvents() OVERRIDE { return true; }
     virtual void defaultEventHandler(Event*) OVERRIDE;
     bool containsRelatedTarget(Event*);
@@ -104,7 +91,7 @@ private:
     // Element
     virtual const AtomicString& shadowPseudoId() const OVERRIDE;
 
-    MediaControllerInterface* m_mediaController;
+    HTMLMediaElement& m_mediaElement;
 
     // Container for the media control elements.
     MediaControlPanelElement* m_panel;
@@ -113,11 +100,13 @@ private:
     MediaControlTextTrackContainerElement* m_textDisplayContainer;
 
     // Media control elements.
+    MediaControlOverlayPlayButtonElement* m_overlayPlayButton;
+    MediaControlOverlayEnclosureElement* m_overlayEnclosure;
     MediaControlPlayButtonElement* m_playButton;
     MediaControlCurrentTimeDisplayElement* m_currentTimeDisplay;
     MediaControlTimelineElement* m_timeline;
-    MediaControlPanelMuteButtonElement* m_panelMuteButton;
-    MediaControlPanelVolumeSliderElement* m_volumeSlider;
+    MediaControlMuteButtonElement* m_muteButton;
+    MediaControlVolumeSliderElement* m_volumeSlider;
     MediaControlToggleClosedCaptionsButtonElement* m_toggleClosedCaptionsButton;
     MediaControlFullscreenButtonElement* m_fullScreenButton;
     MediaControlTimeRemainingDisplayElement* m_durationDisplay;
@@ -128,7 +117,7 @@ private:
     bool m_isMouseOverControls;
 };
 
-DEFINE_NODE_TYPE_CASTS(MediaControls, isMediaControls());
+DEFINE_ELEMENT_TYPE_CASTS(MediaControls, isMediaControls());
 
 }
 

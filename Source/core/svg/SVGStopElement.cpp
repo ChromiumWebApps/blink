@@ -28,11 +28,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGStopElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGStopElement::SVGStopElement(Document& document)
     : SVGElement(SVGNames::stopTag, document)
     , m_offset(SVGAnimatedNumber::create(this, SVGNames::offsetAttr, SVGNumberAcceptPercentage::create()))
@@ -40,7 +35,6 @@ inline SVGStopElement::SVGStopElement(Document& document)
     ScriptWrappable::init(this);
 
     addToPropertyMap(m_offset);
-    registerAnimatedPropertiesForSVGStopElement();
 }
 
 PassRefPtr<SVGStopElement> SVGStopElement::create(Document& document)

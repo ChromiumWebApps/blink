@@ -110,6 +110,7 @@ acceleratedCompositingForFixedPositionEnabled initial=false
 acceleratedCompositingForOverflowScrollEnabled initial=false
 acceleratedCompositingForTransitionEnabled initial=false
 acceleratedCompositingForFixedRootBackgroundEnabled initial=false
+acceleratedCompositingForGpuRasterizationHintEnabled initial=false
 
 forceCompositingMode initial=false
 
@@ -243,6 +244,7 @@ experimentalWebSocketEnabled initial=false
 # crbug.com/304869 tracks removal.
 pinchVirtualViewportEnabled initial=false
 useSolidColorScrollbars initial=false
+pinchOverlayScrollbarThickness type=int, initial=0
 
 mainFrameClipsContent initial=true
 

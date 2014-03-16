@@ -196,6 +196,8 @@ protected:
 
     virtual void setTargetElement(SVGElement*) OVERRIDE;
     virtual void setAttributeName(const QualifiedName&) OVERRIDE;
+    AnimatedPropertyType determineAnimatedPropertyType() const;
+
     bool hasInvalidCSSAttributeType() const { return m_hasInvalidCSSAttributeType; }
 
     virtual void updateAnimationMode();
@@ -223,9 +225,6 @@ private:
     unsigned calculateKeyTimesIndex(float percent) const;
 
     void adjustForInheritance(SVGElement* targetElement, const QualifiedName& attributeName, String&);
-
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGAnimationElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
     void setCalcMode(const AtomicString&);
 

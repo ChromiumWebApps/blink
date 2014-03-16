@@ -22,10 +22,10 @@
 #ifndef SVGElement_h
 #define SVGElement_h
 
+#include "SVGElementTypeHelpers.h"
 #include "core/dom/Element.h"
 #include "core/svg/SVGAnimatedString.h"
 #include "core/svg/SVGParsingError.h"
-#include "core/svg/properties/SVGAnimatedPropertyMacros.h"
 #include "core/svg/properties/SVGPropertyInfo.h"
 #include "platform/Timer.h"
 #include "wtf/HashMap.h"
@@ -38,7 +38,6 @@ class CSSCursorImageValue;
 class Document;
 class NewSVGAnimatedPropertyBase;
 class SubtreeLayoutScope;
-class SVGAttributeToPropertyMap;
 class SVGCursorElement;
 class SVGDocumentExtensions;
 class SVGElementInstance;
@@ -61,7 +60,8 @@ public:
     static bool isAnimatableCSSProperty(const QualifiedName&);
     enum CTMScope {
         NearestViewportScope, // Used by SVGGraphicsElement::getCTM()
-        ScreenScope // Used by SVGGraphicsElement::getScreenCTM()
+        ScreenScope, // Used by SVGGraphicsElement::getScreenCTM()
+        AncestorScope // Used by SVGSVGElement::get{Enclosure|Intersection}List()
     };
     virtual AffineTransform localCoordinateSpaceTransform(CTMScope) const;
     virtual bool needsPendingResourceHandling() const { return true; }
@@ -81,12 +81,10 @@ public:
     SVGSVGElement* ownerSVGElement() const;
     SVGElement* viewportElement() const;
 
-    SVGDocumentExtensions* accessDocumentSVGExtensions();
+    SVGDocumentExtensions& accessDocumentSVGExtensions();
 
     virtual bool isSVGGraphicsElement() const { return false; }
-    virtual bool isSVGSVGElement() const { return false; }
     virtual bool isFilterEffect() const { return false; }
-    virtual bool isGradientStop() const { return false; }
     virtual bool isTextContent() const { return false; }
     virtual bool isTextPositioning() const { return false; }
     virtual bool isStructurallyExternal() const { return false; }
@@ -96,8 +94,8 @@ public:
 
     virtual void svgAttributeChanged(const QualifiedName&);
 
-    void animatedPropertyTypeForAttribute(const QualifiedName&, Vector<AnimatedPropertyType>&);
     PassRefPtr<NewSVGAnimatedPropertyBase> propertyFromAttribute(const QualifiedName& attributeName);
+    static AnimatedPropertyType animatedPropertyTypeForCSSAttribute(const QualifiedName& attributeName);
 
     void sendSVGLoadEventIfPossible(bool sendParentLoadEvents = false);
     void sendSVGLoadEventIfPossibleAsynchronously();
@@ -106,7 +104,7 @@ public:
 
     virtual AffineTransform* supplementalTransform() { return 0; }
 
-    void invalidateSVGAttributes() { ensureUniqueElementData()->m_animatedSVGAttributesAreDirty = true; }
+    void invalidateSVGAttributes() { ensureUniqueElementData().m_animatedSVGAttributesAreDirty = true; }
 
     const HashSet<SVGElementInstance*>& instancesForElement() const;
 
@@ -123,10 +121,6 @@ public:
     void synchronizeAnimatedSVGAttribute(const QualifiedName&) const;
 
     virtual PassRefPtr<RenderStyle> customStyleForRenderer() OVERRIDE FINAL;
-
-    static void synchronizeRequiredFeatures(SVGElement* contextElement);
-    static void synchronizeRequiredExtensions(SVGElement* contextElement);
-    static void synchronizeSystemLanguage(SVGElement* contextElement);
 
     virtual void synchronizeRequiredFeatures() { }
     virtual void synchronizeRequiredExtensions() { }
@@ -188,25 +182,6 @@ protected:
     void reportAttributeParsingError(SVGParsingError, const QualifiedName&, const AtomicString&);
     bool hasFocusEventListeners() const;
 
-    class CleanUpAnimatedPropertiesCaller {
-    public:
-        CleanUpAnimatedPropertiesCaller()
-        :   m_owner(0)
-        {
-        }
-
-        ~CleanUpAnimatedPropertiesCaller()
-        {
-            ASSERT(m_owner);
-            m_owner->cleanupAnimatedProperties();
-        }
-
-        void setOwner(SVGElement* owner) { m_owner = owner; }
-
-    private:
-        SVGElement* m_owner;
-    };
-
 private:
     friend class SVGElementInstance;
 
@@ -235,13 +210,10 @@ private:
 #if !ASSERT_DISABLED
     bool m_inRelativeLengthClientsInvalidation;
 #endif
-    unsigned m_animatedPropertiesDestructed : 1;
     unsigned m_isContextElement : 1;
     unsigned m_hasSVGRareData : 1;
 
     RefPtr<SVGAnimatedString> m_className;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
 
 struct SVGAttributeHashTranslator {
@@ -256,7 +228,7 @@ struct SVGAttributeHashTranslator {
     static bool equal(const QualifiedName& a, const QualifiedName& b) { return a.matches(b); }
 };
 
-DEFINE_NODE_TYPE_CASTS(SVGElement, isSVGElement());
+DEFINE_ELEMENT_TYPE_CASTS(SVGElement, isSVGElement());
 
 }
 

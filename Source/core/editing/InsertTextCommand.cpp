@@ -32,7 +32,7 @@
 #include "core/editing/Editor.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 
 namespace WebCore {
 
@@ -164,7 +164,8 @@ void InsertTextCommand::doApply()
 
     // It is possible for the node that contains startPosition to contain only unrendered whitespace,
     // and so deleteInsignificantText could remove it.  Save the position before the node in case that happens.
-    Position positionBeforeStartNode(positionInParentBeforeNode(startPosition.containerNode()));
+    ASSERT(startPosition.containerNode());
+    Position positionBeforeStartNode(positionInParentBeforeNode(*startPosition.containerNode()));
     deleteInsignificantText(startPosition, startPosition.downstream());
     if (!startPosition.inDocument())
         startPosition = positionBeforeStartNode;

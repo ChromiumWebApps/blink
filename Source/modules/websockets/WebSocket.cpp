@@ -41,10 +41,11 @@
 #include "core/events/MessageEvent.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/ConsoleTypes.h"
-#include "core/frame/ContentSecurityPolicy.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ScriptCallStack.h"
+#include "heap/Handle.h"
 #include "modules/websockets/CloseEvent.h"
 #include "platform/Logging.h"
 #include "platform/blob/BlobData.h"
@@ -106,7 +107,7 @@ void WebSocket::EventQueue::resume()
     if (m_state != Suspended || m_resumeTimer.isActive())
         return;
 
-    m_resumeTimer.startOneShot(0);
+    m_resumeTimer.startOneShot(0, FROM_HERE);
 }
 
 void WebSocket::EventQueue::stop()
@@ -627,7 +628,7 @@ void WebSocket::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
         binaryData->swap(*rawData->mutableData());
         OwnPtr<BlobData> blobData = BlobData::create();
         blobData->appendData(rawData.release(), 0, BlobDataItem::toEndOfFile);
-        RefPtr<Blob> blob = Blob::create(BlobDataHandle::create(blobData.release(), size));
+        RefPtrWillBeRawPtr<Blob> blob = Blob::create(BlobDataHandle::create(blobData.release(), size));
         m_eventQueue->dispatch(MessageEvent::create(blob.release(), SecurityOrigin::create(m_url)->toString()));
         break;
     }

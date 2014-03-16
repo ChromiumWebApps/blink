@@ -36,6 +36,9 @@
 #include "WebCryptoKey.h"
 #include "WebPrivatePtr.h"
 
+// FIXME: Remove this once chromium side is updated.
+#define WEBCRYPTO_HMAC_BITS 1
+
 namespace WebCore { class CryptoResult; }
 
 #if INSIDE_BLINK

@@ -40,7 +40,7 @@
 namespace WebCore {
 
 class Document;
-class Frame;
+class LocalFrame;
 class GeolocationController;
 class GeolocationError;
 class GeolocationPosition;
@@ -49,7 +49,6 @@ class ExecutionContext;
 
 class Geolocation FINAL : public RefCountedWillBeGarbageCollectedFinalized<Geolocation>, public ScriptWrappable, public ActiveDOMObject
 {
-    DECLARE_GC_INFO;
 public:
     static PassRefPtrWillBeRawPtr<Geolocation> create(ExecutionContext*);
     virtual ~Geolocation();
@@ -57,7 +56,7 @@ public:
 
     virtual void stop() OVERRIDE;
     Document* document() const;
-    Frame* frame() const;
+    LocalFrame* frame() const;
 
     // Creates a oneshot and attempts to obtain a position that meets the
     // constraints of the options.
@@ -96,7 +95,6 @@ private:
     // options, manages a timer to limit the time to wait for the system to
     // obtain a position.
     class GeoNotifier : public RefCountedWillBeGarbageCollectedFinalized<GeoNotifier> {
-        DECLARE_GC_INFO;
     public:
         static PassRefPtrWillBeRawPtr<GeoNotifier> create(Geolocation* geolocation, PassOwnPtr<PositionCallback> positionCallback, PassOwnPtr<PositionErrorCallback> positionErrorCallback, PassRefPtrWillBeRawPtr<PositionOptions> options)
         {

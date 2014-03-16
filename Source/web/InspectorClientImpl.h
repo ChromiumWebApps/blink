@@ -51,7 +51,8 @@ public:
     virtual void highlight() OVERRIDE;
     virtual void hideHighlight() OVERRIDE;
 
-    virtual bool sendMessageToFrontend(const WTF::String&) OVERRIDE;
+    virtual void sendMessageToFrontend(PassRefPtr<WebCore::JSONObject>) OVERRIDE;
+    virtual void flush() OVERRIDE;
 
     virtual void updateInspectorStateCookie(const WTF::String&) OVERRIDE;
 
@@ -74,7 +75,8 @@ public:
     virtual void dispatchKeyEvent(const WebCore::PlatformKeyboardEvent&) OVERRIDE;
     virtual void dispatchMouseEvent(const WebCore::PlatformMouseEvent&) OVERRIDE;
 
-    virtual void setTraceEventCallback(TraceEventCallback) OVERRIDE;
+    virtual void setTraceEventCallback(const String& categoryFilter, TraceEventCallback) OVERRIDE;
+    virtual void resetTraceEventCallback() OVERRIDE;
 
     virtual void startGPUEventsRecording() OVERRIDE;
     virtual void stopGPUEventsRecording() OVERRIDE;

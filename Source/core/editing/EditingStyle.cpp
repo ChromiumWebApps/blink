@@ -49,7 +49,7 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/HTMLInterchange.h"
 #include "core/editing/htmlediting.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFontElement.h"
 #include "core/rendering/style/RenderStyle.h"
 
@@ -290,12 +290,13 @@ void HTMLAttributeEquivalent::addToStyle(Element* element, EditingStyle* style) 
 PassRefPtrWillBeRawPtr<CSSValue> HTMLAttributeEquivalent::attributeValueAsCSSValue(Element* element) const
 {
     ASSERT(element);
-    if (!element->hasAttribute(m_attrName))
+    const AtomicString& value = element->getAttribute(m_attrName);
+    if (value.isNull())
         return nullptr;
 
     RefPtr<MutableStylePropertySet> dummyStyle;
     dummyStyle = MutableStylePropertySet::create();
-    dummyStyle->setProperty(m_propertyID, element->getAttribute(m_attrName));
+    dummyStyle->setProperty(m_propertyID, value);
     return dummyStyle->getPropertyCSSValue(m_propertyID);
 }
 
@@ -319,10 +320,11 @@ HTMLFontSizeEquivalent::HTMLFontSizeEquivalent()
 PassRefPtrWillBeRawPtr<CSSValue> HTMLFontSizeEquivalent::attributeValueAsCSSValue(Element* element) const
 {
     ASSERT(element);
-    if (!element->hasAttribute(m_attrName))
+    const AtomicString& value = element->getAttribute(m_attrName);
+    if (value.isNull())
         return nullptr;
     CSSValueID size;
-    if (!HTMLFontElement::cssValueFromFontSizeNumber(element->getAttribute(m_attrName), size))
+    if (!HTMLFontElement::cssValueFromFontSizeNumber(value, size))
         return nullptr;
     return CSSPrimitiveValue::createIdentifier(size);
 }
@@ -879,8 +881,9 @@ bool EditingStyle::styleIsPresentInComputedStyleOfNode(Node* node) const
 
 bool EditingStyle::elementIsStyledSpanOrHTMLEquivalent(const HTMLElement* element)
 {
+    ASSERT(element);
     bool elementIsSpanOrElementEquivalent = false;
-    if (element->hasTagName(HTMLNames::spanTag))
+    if (isHTMLSpanElement(*element))
         elementIsSpanOrElementEquivalent = true;
     else {
         const Vector<OwnPtr<HTMLElementEquivalent> >& HTMLElementEquivalents = htmlElementEquivalents();
@@ -1118,7 +1121,7 @@ static PassRefPtr<MutableStylePropertySet> styleFromMatchedRulesForElement(Eleme
     RefPtr<StyleRuleList> matchedRules = element->document().ensureStyleResolver().styleRulesForElement(element, rulesToInclude);
     if (matchedRules) {
         for (unsigned i = 0; i < matchedRules->m_list.size(); ++i)
-            style->mergeAndOverrideOnConflict(matchedRules->m_list[i]->properties());
+            style->mergeAndOverrideOnConflict(&matchedRules->m_list[i]->properties());
     }
     return style.release();
 }
@@ -1405,7 +1408,6 @@ static void setTextDecorationProperty(MutableStylePropertySet* style, const CSSV
         style->setProperty(propertyID, newTextDecoration->cssText(), style->propertyIsImportant(propertyID));
     else {
         // text-decoration: none is redundant since it does not remove any text decorations.
-        ASSERT(!style->propertyIsImportant(propertyID));
         style->removeProperty(propertyID);
     }
 }

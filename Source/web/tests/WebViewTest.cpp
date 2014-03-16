@@ -42,7 +42,6 @@
 #include "WebFrame.h"
 #include "WebFrameClient.h"
 #include "WebFrameImpl.h"
-#include "WebHelperPlugin.h"
 #include "WebHitTestResult.h"
 #include "WebInputEvent.h"
 #include "WebSettings.h"
@@ -60,7 +59,6 @@
 #include "core/page/Chrome.h"
 #include "core/frame/Settings.h"
 #include "platform/KeyboardCodes.h"
-#include "platform/Timer.h"
 #include "platform/graphics/Color.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebDragData.h"
@@ -176,54 +174,6 @@ private:
     OwnPtr<WebLayerTreeView> m_layerTreeView;
 };
 
-class HelperPluginCreatingWebViewClient : public WebViewClient {
-public:
-    // WebViewClient methods
-    virtual blink::WebWidget* createPopupMenu(blink::WebPopupType popupType) OVERRIDE
-    {
-        EXPECT_EQ(WebPopupTypeHelperPlugin, popupType);
-        // The caller owns the object, but we retain a pointer for use in closeWidgetNow().
-        m_helperPluginWebWidget = blink::WebHelperPlugin::create(this);
-        return m_helperPluginWebWidget;
-    }
-
-    virtual void initializeHelperPluginWebFrame(blink::WebHelperPlugin* plugin) OVERRIDE
-    {
-        ASSERT_TRUE(m_webFrameClient);
-        plugin->initializeFrame(m_webFrameClient);
-    }
-
-    // WebWidgetClient methods
-    virtual void closeWidgetSoon() OVERRIDE
-    {
-        ASSERT_TRUE(m_helperPluginWebWidget);
-        // m_helperPluginWebWidget->close() must be called asynchronously.
-        if (!m_closeTimer.isActive())
-            m_closeTimer.startOneShot(0);
-    }
-
-    void closeWidgetNow(WebCore::Timer<HelperPluginCreatingWebViewClient>* timer)
-    {
-        m_helperPluginWebWidget->close();
-        m_helperPluginWebWidget = 0;
-    }
-
-    // Local methods
-    HelperPluginCreatingWebViewClient()
-        : m_helperPluginWebWidget(0)
-        , m_webFrameClient(0)
-        , m_closeTimer(this, &HelperPluginCreatingWebViewClient::closeWidgetNow)
-    {
-    }
-
-    void setWebFrameClient(WebFrameClient* client) { m_webFrameClient = client; }
-
-private:
-    WebWidget* m_helperPluginWebWidget;
-    WebFrameClient* m_webFrameClient;
-    WebCore::Timer<HelperPluginCreatingWebViewClient> m_closeTimer;
-};
-
 class DateTimeChooserWebViewClient : public WebViewClient {
 public:
     WebDateTimeChooserCompletion* chooserCompletion()
@@ -261,6 +211,11 @@ public:
     }
 
 protected:
+    void registerMockedHttpURLLoad(const std::string& fileName)
+    {
+        URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8(fileName.c_str()));
+    }
+
     void testAutoResize(const WebSize& minAutoResize, const WebSize& maxAutoResize,
                         const std::string& pageWidth, const std::string& pageHeight,
                         int expectedWidth, int expectedHeight,
@@ -268,6 +223,7 @@ protected:
 
     void testTextInputType(WebTextInputType expectedType, const std::string& htmlFile);
     void testInputMode(const WebString& expectedInputMode, const std::string& htmlFile);
+    void testSelectionRootBounds(const char* htmlFile, float pageScaleFactor);
 
     std::string m_baseURL;
     FrameTestHelpers::WebViewHelper m_webViewHelper;
@@ -825,23 +781,10 @@ TEST_F(WebViewTest, HistoryResetScrollAndScaleState)
     EXPECT_EQ(2.0f, webViewImpl->pageScaleFactor());
     EXPECT_EQ(116, webViewImpl->mainFrame()->scrollOffset().width);
     EXPECT_EQ(84, webViewImpl->mainFrame()->scrollOffset().height);
-    webViewImpl->page()->mainFrame()->loader().saveDocumentAndScrollState();
-
-    // Confirm that restoring the page state restores the parameters.
-    webViewImpl->setPageScaleFactor(1.5f, WebPoint(16, 24));
-    EXPECT_EQ(1.5f, webViewImpl->pageScaleFactor());
-    EXPECT_EQ(16, webViewImpl->mainFrame()->scrollOffset().width);
-    EXPECT_EQ(24, webViewImpl->mainFrame()->scrollOffset().height);
-    // WebViewImpl::setPageScaleFactor is performing user scrolls, which will set the
-    // wasScrolledByUser flag on the main frame, and prevent restoreScrollPositionAndViewState
-    // from restoring the scrolling position.
-    webViewImpl->page()->mainFrame()->view()->setWasScrolledByUser(false);
-    webViewImpl->page()->mainFrame()->loader().setLoadType(WebCore::FrameLoadTypeBackForward);
-    webViewImpl->page()->mainFrame()->loader().restoreScrollPositionAndViewState();
-    EXPECT_EQ(2.0f, webViewImpl->pageScaleFactor());
-    EXPECT_EQ(116, webViewImpl->mainFrame()->scrollOffset().width);
-    EXPECT_EQ(84, webViewImpl->mainFrame()->scrollOffset().height);
-    webViewImpl->page()->mainFrame()->loader().saveDocumentAndScrollState();
+    webViewImpl->page()->mainFrame()->loader().saveScrollState();
+    EXPECT_EQ(2.0f, webViewImpl->page()->mainFrame()->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(116, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().x());
+    EXPECT_EQ(84, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().y());
 
     // Confirm that resetting the page state resets the saved scroll position.
     // The HistoryController treats a page scale factor of 0.0f as special and avoids
@@ -850,10 +793,9 @@ TEST_F(WebViewTest, HistoryResetScrollAndScaleState)
     EXPECT_EQ(1.0f, webViewImpl->pageScaleFactor());
     EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().width);
     EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().height);
-    webViewImpl->page()->mainFrame()->loader().restoreScrollPositionAndViewState();
-    EXPECT_EQ(1.0f, webViewImpl->pageScaleFactor());
-    EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().width);
-    EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().height);
+    EXPECT_EQ(0.0f, webViewImpl->page()->mainFrame()->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(0, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().x());
+    EXPECT_EQ(0, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().y());
 }
 
 class EnterFullscreenWebViewClient : public WebViewClient {
@@ -1193,7 +1135,16 @@ public:
     virtual ~MockAutofillClient() { }
 
     virtual void setIgnoreTextChanges(bool ignore) OVERRIDE { m_ignoreTextChanges = ignore; }
+    // FIXME: This function is to be removed once both chromium and blink changes
+    // for BUG332557 are in.
     virtual void textFieldDidChange(const WebInputElement&) OVERRIDE
+    {
+        if (m_ignoreTextChanges)
+            ++m_textChangesWhileIgnored;
+        else
+            ++m_textChangesWhileNotIgnored;
+    }
+    virtual void textFieldDidChange(const WebFormControlElement&) OVERRIDE
     {
         if (m_ignoreTextChanges)
             ++m_textChangesWhileIgnored;
@@ -1319,25 +1270,6 @@ TEST_F(WebViewTest, ShadowRoot)
         EXPECT_TRUE(shadowRoot.isNull());
     }
 }
-
-TEST_F(WebViewTest, HelperPlugin)
-{
-    HelperPluginCreatingWebViewClient client;
-    WebViewImpl* webViewImpl = m_webViewHelper.initialize(true, 0, &client);
-
-    WebFrameImpl* frame = toWebFrameImpl(webViewImpl->mainFrame());
-    client.setWebFrameClient(frame->client());
-
-    OwnPtr<WebHelperPlugin> helperPlugin = adoptPtr(webViewImpl->createHelperPlugin("dummy-plugin-type", frame->document()));
-    EXPECT_TRUE(helperPlugin);
-    EXPECT_EQ(0, helperPlugin->getPlugin()); // Invalid plugin type means no plugin.
-
-    helperPlugin.clear();
-    runPendingTasks();
-
-    m_webViewHelper.reset(); // Explicitly reset to break dependency on locally scoped client.
-}
-
 
 class ViewCreatingWebViewClient : public WebViewClient {
 public:
@@ -1725,6 +1657,94 @@ TEST_F(WebViewTest, HasTouchEventHandlers)
     document->didRemoveTouchEventHandler(childFrame);
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
+}
+
+static WebRect ExpectedRootBounds(WebCore::Document* document, float scaleFactor)
+{
+    WebCore::Element* element = document->getElementById("root");
+    if (!element)
+        element = document->getElementById("target");
+    if (element->hasTagName(WebCore::HTMLNames::iframeTag))
+        return ExpectedRootBounds(toHTMLIFrameElement(element)->contentDocument(), scaleFactor);
+
+    WebCore::IntRect boundingBox = element->pixelSnappedBoundingBox();
+    boundingBox = document->frame()->view()->contentsToWindow(boundingBox);
+    boundingBox.scale(scaleFactor);
+    return boundingBox;
+}
+
+void WebViewTest::testSelectionRootBounds(const char* htmlFile, float pageScaleFactor)
+{
+    std::string url = m_baseURL + htmlFile;
+
+    WebView* webView = m_webViewHelper.initializeAndLoad(url, true);
+    webView->resize(WebSize(640, 480));
+    webView->setPageScaleFactor(pageScaleFactor, WebPoint(0, 0));
+    webView->layout();
+    runPendingTasks();
+
+    WebFrameImpl* frame = toWebFrameImpl(webView->mainFrame());
+    EXPECT_TRUE(frame->frame()->document()->isHTMLDocument());
+    WebCore::HTMLDocument* document = WebCore::toHTMLDocument(frame->frame()->document());
+
+    WebRect expectedRootBounds = ExpectedRootBounds(document, webView->pageScaleFactor());
+    WebRect actualRootBounds;
+    webView->getSelectionRootBounds(actualRootBounds);
+    ASSERT_EQ(expectedRootBounds, actualRootBounds);
+
+    WebRect anchor, focus;
+    webView->selectionBounds(anchor, focus);
+    WebCore::IntRect expectedIntRect = expectedRootBounds;
+    ASSERT_TRUE(expectedIntRect.contains(anchor));
+    // The "overflow" tests have the focus boundary outside of the element box.
+    ASSERT_EQ(url.find("overflow") == std::string::npos, expectedIntRect.contains(focus));
+}
+
+TEST_F(WebViewTest, GetSelectionRootBounds)
+{
+    // Register all the pages we will be using.
+    registerMockedHttpURLLoad("select_range_basic.html");
+    registerMockedHttpURLLoad("select_range_div_editable.html");
+    registerMockedHttpURLLoad("select_range_scroll.html");
+    registerMockedHttpURLLoad("select_range_span_editable.html");
+    registerMockedHttpURLLoad("select_range_input.html");
+    registerMockedHttpURLLoad("select_range_input_overflow.html");
+    registerMockedHttpURLLoad("select_range_textarea.html");
+    registerMockedHttpURLLoad("select_range_textarea_overflow.html");
+    registerMockedHttpURLLoad("select_range_iframe.html");
+    registerMockedHttpURLLoad("select_range_iframe_div_editable.html");
+    registerMockedHttpURLLoad("select_range_iframe_scroll.html");
+    registerMockedHttpURLLoad("select_range_iframe_span_editable.html");
+    registerMockedHttpURLLoad("select_range_iframe_input.html");
+    registerMockedHttpURLLoad("select_range_iframe_input_overflow.html");
+    registerMockedHttpURLLoad("select_range_iframe_textarea.html");
+    registerMockedHttpURLLoad("select_range_iframe_textarea_overflow.html");
+
+    // Test with simple pages.
+    testSelectionRootBounds("select_range_basic.html", 1.0f);
+    testSelectionRootBounds("select_range_div_editable.html", 1.0f);
+    testSelectionRootBounds("select_range_scroll.html", 1.0f);
+    testSelectionRootBounds("select_range_span_editable.html", 1.0f);
+    testSelectionRootBounds("select_range_input.html", 1.0f);
+    testSelectionRootBounds("select_range_input_overflow.html", 1.0f);
+    testSelectionRootBounds("select_range_textarea.html", 1.0f);
+    testSelectionRootBounds("select_range_textarea_overflow.html", 1.0f);
+
+    // Test with the same pages as above in iframes.
+    testSelectionRootBounds("select_range_iframe.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_div_editable.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_scroll.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_span_editable.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_input.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_input_overflow.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_textarea.html", 1.0f);
+    testSelectionRootBounds("select_range_iframe_textarea_overflow.html", 1.0f);
+
+    // Basic page with scale factor.
+    testSelectionRootBounds("select_range_basic.html", 0.0f);
+    testSelectionRootBounds("select_range_basic.html", 0.1f);
+    testSelectionRootBounds("select_range_basic.html", 1.5f);
+    testSelectionRootBounds("select_range_basic.html", 2.0f);
 }
 
 } // namespace

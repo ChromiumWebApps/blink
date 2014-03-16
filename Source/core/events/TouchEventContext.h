@@ -27,6 +27,7 @@
 #ifndef TouchEventContext_h
 #define TouchEventContext_h
 
+#include "heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
@@ -36,21 +37,23 @@ namespace WebCore {
 class Event;
 class TouchList;
 
-class TouchEventContext : public RefCounted<TouchEventContext> {
+class TouchEventContext : public RefCountedWillBeGarbageCollected<TouchEventContext> {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(TouchEventContext);
 public:
-    static PassRefPtr<TouchEventContext> create();
-    ~TouchEventContext();
+    static PassRefPtrWillBeRawPtr<TouchEventContext> create();
     void handleLocalEvents(Event*) const;
     TouchList& touches() { return *m_touches; }
     TouchList& targetTouches() { return *m_targetTouches; }
     TouchList& changedTouches() { return *m_changedTouches; }
 
+    void trace(Visitor*);
+
 private:
     TouchEventContext();
 
-    RefPtr<TouchList> m_touches;
-    RefPtr<TouchList> m_targetTouches;
-    RefPtr<TouchList> m_changedTouches;
+    RefPtrWillBeMember<TouchList> m_touches;
+    RefPtrWillBeMember<TouchList> m_targetTouches;
+    RefPtrWillBeMember<TouchList> m_changedTouches;
 };
 
 }

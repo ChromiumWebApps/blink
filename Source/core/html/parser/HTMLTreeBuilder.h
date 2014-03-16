@@ -44,7 +44,7 @@ class AtomicHTMLToken;
 class Document;
 class DocumentFragment;
 class Element;
-class Frame;
+class LocalFrame;
 class HTMLToken;
 class HTMLDocument;
 class Node;
@@ -153,7 +153,6 @@ private:
     void processFakeStartTag(const QualifiedName&, const Vector<Attribute>& attributes = Vector<Attribute>());
     void processFakeEndTag(const QualifiedName&);
     void processFakeEndTag(const AtomicString&);
-    void processFakeCharacters(const String&);
     void processFakePEndTagIfPInButtonScope();
 
     void processGenericRCDATAStartTag(AtomicHTMLToken*);

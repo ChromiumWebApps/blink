@@ -68,8 +68,7 @@ InspectorTest.selectNodeWithId = function(idValue, callback)
     callback = InspectorTest.safeWrap(callback);
     function onNodeFound(node)
     {
-        if (node)
-            WebInspector._updateFocusedNode(node.id);
+        WebInspector.Revealer.reveal(node);
         callback(node);
     }
     InspectorTest.nodeWithId(idValue, onNodeFound);
@@ -91,7 +90,7 @@ InspectorTest.waitForStyles = function(idValue, callback, requireRebuild)
 
 InspectorTest.selectNodeAndWaitForStyles = function(idValue, callback)
 {
-    WebInspector.showPanel("elements");
+    WebInspector.inspectorView.showPanel("elements");
 
     callback = InspectorTest.safeWrap(callback);
 
@@ -466,7 +465,7 @@ InspectorTest.expandElementsTree = function(callback)
         expand(WebInspector.panels.elements.treeOutline);
         callback();
     }
-    WebInspector.showPanel("elements");
+    WebInspector.inspectorView.showPanel("elements");
     InspectorTest.findNode(function() { return false; }, onAllNodesAvailable);
 };
 
@@ -623,10 +622,10 @@ InspectorTest.dumpStyle = function(style, currentIndent)
     }
     for (var i = 0; i < style.cssProperties.length; ++i) {
         var property = style.cssProperties[i];
-        if (property.status !== "disabled")
-            InspectorTest.addResult(currentIndent + "['" + property.name + "':'" + property.value + "'" + (property.priority === "important" ? " is-important" : "") + (("parsedOk" in property) ? " non-parsed" : "") +"] @" + InspectorTest.rangeText(property.range) + " " + (property.status || "style"));
+        if (!property.disabled)
+            InspectorTest.addResult(currentIndent + "['" + property.name + "':'" + property.value + "'" + (property.important ? " is-important" : "") + (("parsedOk" in property) ? " non-parsed" : "") +"] @" + InspectorTest.rangeText(property.range) + " ");
         else
-            InspectorTest.addResult(currentIndent + "[text='" + property.text + "'] " + property.status);
+            InspectorTest.addResult(currentIndent + "[text='" + property.text + "'] disabled");
     }
 }
 
@@ -640,10 +639,10 @@ InspectorTest.dumpCSSStyleDeclaration = function(style, currentIndent)
     var properties = style.allProperties;
     for (var i = 0; i < properties.length; ++i) {
         var property = properties[i];
-        if (property.status !== "disabled")
-            InspectorTest.addResult(currentIndent + "['" + property.name + "':'" + property.value + "'" + (property.priority === "important" ? " is-important" : "") + (!property["parsedOk"] ? " non-parsed" : "") +"] @" + InspectorTest.rangeText(property.range) + " " + (property.status || "style"));
+        if (!property.disabled)
+            InspectorTest.addResult(currentIndent + "['" + property.name + "':'" + property.value + "'" + (property.important ? " is-important" : "") + (!property["parsedOk"] ? " non-parsed" : "") +"] @" + InspectorTest.rangeText(property.range) + " ");
         else
-            InspectorTest.addResult(currentIndent + "[text='" + property.text + "'] " + property.status);
+            InspectorTest.addResult(currentIndent + "[text='" + property.text + "'] disabled");
     }
 }
 
@@ -652,7 +651,7 @@ InspectorTest.dumpBreadcrumb = function(message)
     if (message)
         InspectorTest.addResult(message + ":");
     var result = [];
-    var crumbs = WebInspector.panel("elements").crumbsElement;
+    var crumbs = WebInspector.inspectorView.panel("elements").crumbsElement;
     var crumb = crumbs.lastChild;
     while (crumb) {
         result.unshift(crumb.textContent);
@@ -667,6 +666,17 @@ InspectorTest.matchingSelectors = function(rule)
     for (var i = 0; i < rule.matchingSelectors.length; ++i)
         selectors.push(rule.selectors[rule.matchingSelectors[i]].value);
     return "[" + selectors.join(", ") + "]";
+}
+
+InspectorTest.addNewRule = function(selector, callback)
+{
+    // Click "Add new rule".
+    document.getElementById("add-style-button-test-id").click();
+    var section = WebInspector.panels.elements.sidebarPanes.styles.sections[0][2];
+    if (typeof selector === "string")
+        section._selectorElement.textContent = selector;
+    section._selectorElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
+    InspectorTest.addSniffer(WebInspector.BlankStylePropertiesSection.prototype, "makeNormal", callback);
 }
 
 };

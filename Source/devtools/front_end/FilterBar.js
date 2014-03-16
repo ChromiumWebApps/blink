@@ -172,8 +172,9 @@ WebInspector.FilterUI.prototype = {
 
 /**
  * @constructor
- * @implements {WebInspector.FilterUI}
  * @extends {WebInspector.Object}
+ * @implements {WebInspector.FilterUI}
+ * @implements {WebInspector.SuggestBoxDelegate}
  * @param {boolean=} supportRegex
  */
 WebInspector.TextFilterUI = function(supportRegex)
@@ -189,7 +190,14 @@ WebInspector.TextFilterUI = function(supportRegex)
     this._filterInputElement.id = "filter-input-field";
     this._filterInputElement.addEventListener("mousedown", this._onFilterFieldManualFocus.bind(this), false); // when the search field is manually selected
     this._filterInputElement.addEventListener("input", this._onInput.bind(this), false);
-    this._filterInputElement.addEventListener("change", this._onInput.bind(this), false);
+    this._filterInputElement.addEventListener("change", this._onChange.bind(this), false);
+    this._filterInputElement.addEventListener("keydown", this._onInputKeyDown.bind(this), true);
+    this._filterInputElement.addEventListener("blur", this._onBlur.bind(this), true);
+
+    /** @type {?WebInspector.TextFilterUI.SuggestionBuilder} */
+    this._suggestionBuilder = null;
+
+    this._suggestBox = new WebInspector.SuggestBox(this, this._filterElement);
 
     if (this._supportRegex) {
         this._filterElement.classList.add("supports-regex");
@@ -235,7 +243,7 @@ WebInspector.TextFilterUI.prototype = {
     setValue: function(value)
     {
         this._filterInputElement.value = value;
-        this._valueChanged();
+        this._valueChanged(false);
     },
 
     /**
@@ -255,11 +263,35 @@ WebInspector.TextFilterUI.prototype = {
     },
 
     /**
+     * @param {?Event} event
+     */
+    _onBlur: function(event)
+    {
+        this._cancelSuggestion();
+    },
+
+    _cancelSuggestion: function()
+    {
+        if (this._suggestionBuilder && this._suggestBox.visible) {
+            this._suggestionBuilder.unapplySuggestion(this._filterInputElement);
+            this._suggestBox.hide();
+        }
+    },
+
+    /**
      * @param {!WebInspector.Event} event
      */
     _onInput: function(event)
     {
-        this._valueChanged();
+        this._valueChanged(true);
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onChange: function(event)
+    {
+        this._valueChanged(false);
     },
 
     focus: function()
@@ -267,7 +299,41 @@ WebInspector.TextFilterUI.prototype = {
         this._filterInputElement.focus();
     },
 
-    _valueChanged: function() {
+    /**
+     * @param {?WebInspector.TextFilterUI.SuggestionBuilder} suggestionBuilder
+     */
+    setSuggestionBuilder: function(suggestionBuilder)
+    {
+        this._cancelSuggestion();
+        this._suggestionBuilder = suggestionBuilder;
+    },
+
+    _updateSuggestions: function()
+    {
+        if (!this._suggestionBuilder)
+            return;
+        var suggestions = this._suggestionBuilder.buildSuggestions(this._filterInputElement);
+        if (suggestions && suggestions.length) {
+            if (this._suppressSuggestion)
+                delete this._suppressSuggestion;
+            else
+                this._suggestionBuilder.applySuggestion(this._filterInputElement, suggestions[0], true);
+            this._suggestBox.updateSuggestions(null, suggestions, 0, true, "");
+        } else {
+            this._suggestBox.hide();
+        }
+    },
+
+    /**
+     * @param {boolean} showSuggestions
+     */
+    _valueChanged: function(showSuggestions)
+    {
+        if (showSuggestions)
+            this._updateSuggestions();
+        else
+            this._suggestBox.hide();
+
         var filterQuery = this.value();
 
         this._regex = null;
@@ -284,10 +350,89 @@ WebInspector.TextFilterUI.prototype = {
             }
         }
 
+        this._dispatchFilterChanged();
+    },
+
+    _dispatchFilterChanged: function()
+    {
         this.dispatchEventToListeners(WebInspector.FilterUI.Events.FilterChanged, null);
     },
 
+    /**
+     * @param {!KeyboardEvent} event
+     * @return {boolean}
+     */
+    _onInputKeyDown: function(event)
+    {
+        var handled = false;
+        if (event.keyIdentifier === "U+0008") { // Backspace
+            this._suppressSuggestion = true;
+        } else if (this._suggestBox.visible()) {
+            if (event.keyIdentifier === "U+001B") { // Esc
+                this._cancelSuggestion();
+                handled = true;
+            } else if (event.keyIdentifier === "U+0009") { // Tab
+                this._suggestBox.acceptSuggestion();
+                this._valueChanged(true);
+                handled = true;
+            } else {
+                handled = this._suggestBox.keyPressed(event);
+            }
+        }
+        if (handled)
+            event.consume(true);
+        return handled;
+    },
+
+    /**
+     * @override
+     * @param {string} suggestion
+     * @param {boolean=} isIntermediateSuggestion
+     */
+    applySuggestion: function(suggestion, isIntermediateSuggestion)
+    {
+        if (!this._suggestionBuilder)
+            return;
+        this._suggestionBuilder.applySuggestion(this._filterInputElement, suggestion, !!isIntermediateSuggestion);
+        if (isIntermediateSuggestion)
+            this._dispatchFilterChanged();
+    },
+
+    /** @override */
+    acceptSuggestion: function()
+    {
+        this._filterInputElement.scrollLeft = this._filterInputElement.scrollWidth;
+        this._valueChanged(true);
+    },
+
     __proto__: WebInspector.Object.prototype
+}
+
+/**
+ * @interface
+ */
+WebInspector.TextFilterUI.SuggestionBuilder = function()
+{
+}
+
+WebInspector.TextFilterUI.SuggestionBuilder.prototype = {
+    /**
+     * @param {!HTMLInputElement} input
+     * @return {?Array.<string>}
+     */
+    buildSuggestions: function(input) { },
+
+    /**
+     * @param {!HTMLInputElement} input
+     * @param {string} suggestion
+     * @param {boolean} isIntermediate
+     */
+    applySuggestion: function(input, suggestion, isIntermediate) { },
+
+    /**
+     * @param {!HTMLInputElement} input
+     */
+    unapplySuggestion: function(input) { }
 }
 
 /**
@@ -365,7 +510,7 @@ WebInspector.NamedBitSetFilterUI.prototype = {
             this._allowedTypes[WebInspector.NamedBitSetFilterUI.ALL_TYPES] = true;
         }
         for (var typeName in this._typeFilterElements)
-            this._typeFilterElements[typeName].enableStyleClass("selected", this._allowedTypes[typeName]);
+            this._typeFilterElements[typeName].classList.toggle("selected", this._allowedTypes[typeName]);
         this.dispatchEventToListeners(WebInspector.FilterUI.Events.FilterChanged, null);
     },
 
@@ -559,7 +704,7 @@ WebInspector.CheckboxFilterUI.prototype = {
 
     _update: function()
     {
-        this._checkElement.enableStyleClass("checkbox-filter-checkbox-checked", this._checked);
+        this._checkElement.classList.toggle("checkbox-filter-checkbox-checked", this._checked);
         this.dispatchEventToListeners(WebInspector.FilterUI.Events.FilterChanged, null);
     },
 

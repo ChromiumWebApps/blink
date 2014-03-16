@@ -339,22 +339,15 @@ void BaseMultipleFieldsDateAndTimeInputType::createShadowSubtree()
     ContainerNode* container = element().userAgentShadowRoot();
 
     container->appendChild(DateTimeEditElement::create(document, *this));
-    updateView();
+    element().updateView();
     container->appendChild(ClearButtonElement::create(document, *this));
     container->appendChild(SpinButtonElement::create(document, *this));
 
-    bool shouldAddPickerIndicator = false;
-    if (InputType::themeSupportsDataListUI(this))
-        shouldAddPickerIndicator = true;
-    if (RenderTheme::theme().supportsCalendarPicker(formControlType())) {
-        shouldAddPickerIndicator = true;
+    if (RenderTheme::theme().supportsCalendarPicker(formControlType()))
         m_pickerIndicatorIsAlwaysVisible = true;
-    }
-    if (shouldAddPickerIndicator) {
-        container->appendChild(PickerIndicatorElement::create(document, *this));
-        m_pickerIndicatorIsVisible = true;
-        updatePickerIndicatorVisibility();
-    }
+    container->appendChild(PickerIndicatorElement::create(document, *this));
+    m_pickerIndicatorIsVisible = true;
+    updatePickerIndicatorVisibility();
 }
 
 void BaseMultipleFieldsDateAndTimeInputType::destroyShadowSubtree()
@@ -479,7 +472,7 @@ void BaseMultipleFieldsDateAndTimeInputType::setValue(const String& sanitizedVal
     InputType::setValue(sanitizedValue, valueChanged, eventBehavior);
     DateTimeEditElement* edit = dateTimeEditElement();
     if (valueChanged || (sanitizedValue.isEmpty() && edit && edit->anyEditableFieldsHaveValues())) {
-        updateView();
+        element().updateView();
         element().setNeedsValidityCheck();
     }
 }
@@ -503,7 +496,11 @@ void BaseMultipleFieldsDateAndTimeInputType::updateView()
     DateTimeEditElement::LayoutParameters layoutParameters(element().locale(), createStepRange(AnyIsDefaultStep));
 
     DateComponents date;
-    const bool hasValue = parseToDateComponents(element().value(), &date);
+    bool hasValue = false;
+    if (!element().suggestedValue().isNull())
+        hasValue = parseToDateComponents(element().suggestedValue(), &date);
+    else
+        hasValue = parseToDateComponents(element().value(), &date);
     if (!hasValue)
         setMillisecondToDateComponents(layoutParameters.stepRange.minimum().toDouble(), &date);
 

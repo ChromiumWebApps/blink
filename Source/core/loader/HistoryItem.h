@@ -56,10 +56,8 @@ public:
     // url but a new item wasn't created.
     void generateNewSequenceNumbers();
 
-    const String& originalURLString() const;
     const String& urlString() const;
     KURL url() const;
-    KURL originalURL() const;
 
     const Referrer& referrer() const;
     const String& target() const;
@@ -80,7 +78,6 @@ public:
 
     void setURL(const KURL&);
     void setURLString(const String&);
-    void setOriginalURLString(const String&);
     void setReferrer(const Referrer&);
     void setTarget(const String&);
 
@@ -92,9 +89,6 @@ public:
 
     void setDocumentSequenceNumber(long long number) { m_documentSequenceNumber = number; }
     long long documentSequenceNumber() const { return m_documentSequenceNumber; }
-
-    void setTargetFrameID(int64_t id) { m_targetFrameID = id; }
-    int64_t targetFrameID() const { return m_targetFrameID; }
 
     void setFormInfoFromRequest(const ResourceRequest&);
     void setFormData(PassRefPtr<FormData>);
@@ -111,7 +105,6 @@ private:
     explicit HistoryItem(const HistoryItem&);
 
     String m_urlString;
-    String m_originalURLString;
     Referrer m_referrer;
     String m_target;
 
@@ -131,8 +124,6 @@ private:
     // refer to the same instance of a document. Traversing history from one
     // such HistoryItem to another preserves the document.
     int64_t m_documentSequenceNumber;
-
-    int64_t m_targetFrameID;
 
     // Support for HTML5 History
     RefPtr<SerializedScriptValue> m_stateObject;

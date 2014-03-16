@@ -6,7 +6,7 @@
 #include "modules/filesystem/InspectorFrontendHostFileSystem.h"
 
 #include "core/dom/Document.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorFrontendHost.h"
 #include "core/page/Page.h"
 #include "modules/filesystem/DOMFileSystem.h"
@@ -14,7 +14,7 @@
 
 namespace WebCore {
 
-PassRefPtr<DOMFileSystem> InspectorFrontendHostFileSystem::isolatedFileSystem(InspectorFrontendHost& host, const String& fileSystemName, const String& rootURL)
+PassRefPtrWillBeRawPtr<DOMFileSystem> InspectorFrontendHostFileSystem::isolatedFileSystem(InspectorFrontendHost& host, const String& fileSystemName, const String& rootURL)
 {
     ExecutionContext* context = host.frontendPage()->mainFrame()->document();
     return DOMFileSystem::create(context, fileSystemName, FileSystemTypeIsolated, KURL(ParsedURLString, rootURL));

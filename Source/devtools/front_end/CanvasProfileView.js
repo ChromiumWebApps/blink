@@ -30,12 +30,12 @@
 
 /**
  * @constructor
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @param {!WebInspector.CanvasProfileHeader} profile
  */
 WebInspector.CanvasProfileView = function(profile)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
     this.registerRequiredCSS("canvasProfiler.css");
     this.element.classList.add("canvas-profile-view");
     this._profile = profile;
@@ -44,18 +44,18 @@ WebInspector.CanvasProfileView = function(profile)
     this._linkifier = new WebInspector.Linkifier();
 
     const defaultReplayLogWidthPercent = 0.34;
-    this._replayInfoSplitView = new WebInspector.SplitView(true, true, "canvasProfileViewReplaySplitLocation", defaultReplayLogWidthPercent);
+    this._replayInfoSplitView = new WebInspector.SplitView(true, true, "canvasProfileViewReplaySplitViewState", defaultReplayLogWidthPercent);
     this._replayInfoSplitView.setMainElementConstraints(defaultReplayLogWidthPercent, defaultReplayLogWidthPercent);
     this._replayInfoSplitView.show(this.element);
 
-    this._imageSplitView = new WebInspector.SplitView(false, true, "canvasProfileViewSplitLocation", 300);
+    this._imageSplitView = new WebInspector.SplitView(false, true, "canvasProfileViewSplitViewState", 300);
     this._imageSplitView.show(this._replayInfoSplitView.mainElement());
 
     var replayImageContainer = this._imageSplitView.mainElement().createChild("div");
     replayImageContainer.id = "canvas-replay-image-container";
     this._replayImageElement = replayImageContainer.createChild("img", "canvas-replay-image");
     this._debugInfoElement = replayImageContainer.createChild("div", "canvas-debug-info hidden");
-    this._spinnerIcon = replayImageContainer.createChild("img", "canvas-spinner-icon hidden");
+    this._spinnerIcon = replayImageContainer.createChild("div", "spinner-icon small hidden");
 
     var replayLogContainer = this._imageSplitView.sidebarElement();
     var controlsContainer = replayLogContainer.createChild("div", "status-bar");
@@ -136,37 +136,19 @@ WebInspector.CanvasProfileView.prototype = {
     _installReplayInfoSidebarWidgets: function(controlsContainer)
     {
         this._replayInfoResizeWidgetElement = controlsContainer.createChild("div", "resizer-widget");
+        this._replayInfoSplitView.addEventListener(WebInspector.SplitView.Events.ShowModeChanged, this._updateReplayInfoResizeWidget, this);
+        this._updateReplayInfoResizeWidget();
         this._replayInfoSplitView.installResizer(this._replayInfoResizeWidgetElement);
 
-        this._toggleReplayStateSidebarButton = new WebInspector.StatusBarButton("", "right-sidebar-show-hide-button canvas-sidebar-show-hide-button", 3);
-        this._toggleReplayStateSidebarButton.addEventListener("click", clickHandler, this);
-        controlsContainer.appendChild(this._toggleReplayStateSidebarButton.element);
-        this._enableReplayInfoSidebar(false);
+        this._toggleReplayStateSidebarButton = this._replayInfoSplitView.createShowHideSidebarButton("sidebar", "canvas-sidebar-show-hide-button");
 
-        /**
-         * @this {WebInspector.CanvasProfileView}
-         */
-        function clickHandler()
-        {
-            this._enableReplayInfoSidebar(this._toggleReplayStateSidebarButton.state === "left");
-        }
+        controlsContainer.appendChild(this._toggleReplayStateSidebarButton.element);
+        this._replayInfoSplitView.hideSidebar();
     },
 
-    /**
-     * @param {boolean} show
-     */
-    _enableReplayInfoSidebar: function(show)
+    _updateReplayInfoResizeWidget: function()
     {
-        if (show) {
-            this._toggleReplayStateSidebarButton.state = "right";
-            this._toggleReplayStateSidebarButton.title = WebInspector.UIString("Hide sidebar.");
-            this._replayInfoSplitView.showBoth();
-        } else {
-            this._toggleReplayStateSidebarButton.state = "left";
-            this._toggleReplayStateSidebarButton.title = WebInspector.UIString("Show sidebar.");
-            this._replayInfoSplitView.hideSidebar();
-        }
-        this._replayInfoResizeWidgetElement.enableStyleClass("hidden", !show);
+        this._replayInfoResizeWidgetElement.classList.toggle("hidden", this._replayInfoSplitView.showMode() !== WebInspector.SplitView.ShowMode.Both);
     },
 
     /**
@@ -176,7 +158,7 @@ WebInspector.CanvasProfileView.prototype = {
     {
         var resourceLinkElement = event.target.enclosingNodeOrSelfWithClass("canvas-formatted-resource");
         if (resourceLinkElement) {
-            this._enableReplayInfoSidebar(true);
+            this._replayInfoSplitView.showBoth();
             this._replayStateView.selectResource(resourceLinkElement.__resourceId);
             event.consume(true);
             return;
@@ -292,8 +274,8 @@ WebInspector.CanvasProfileView.prototype = {
      */
     _enableWaitIcon: function(enable)
     {
-        this._spinnerIcon.enableStyleClass("hidden", !enable);
-        this._debugInfoElement.enableStyleClass("hidden", enable);
+        this._spinnerIcon.classList.toggle("hidden", !enable);
+        this._debugInfoElement.classList.toggle("hidden", enable);
     },
 
     _replayTraceLog: function()
@@ -616,7 +598,7 @@ WebInspector.CanvasProfileView.prototype = {
         rootNode.removeChild(frameNode);
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**
@@ -926,7 +908,7 @@ WebInspector.CanvasProfileType.prototype = {
 
     _dispatchViewUpdatedEvent: function()
     {
-        this._frameSelector.element.enableStyleClass("hidden", this._frameSelector.size() <= 1);
+        this._frameSelector.element.classList.toggle("hidden", this._frameSelector.size() <= 1);
         this.dispatchEventToListeners(WebInspector.ProfileType.Events.ViewUpdated);
     },
 
@@ -990,7 +972,7 @@ WebInspector.CanvasDispatcher.prototype = {
  */
 WebInspector.CanvasProfileHeader = function(type, traceLogId, frameId)
 {
-    WebInspector.ProfileHeader.call(this, type, WebInspector.UIString("Trace Log %d", traceLogId));
+    WebInspector.ProfileHeader.call(this, type, WebInspector.UIString("Trace Log %d", type._nextProfileUid));
     /** @type {!CanvasAgent.TraceLogId} */
     this._traceLogId = traceLogId || "";
     this._frameId = frameId;

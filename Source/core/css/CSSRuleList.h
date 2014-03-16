@@ -22,6 +22,7 @@
 #ifndef CSSRuleList_h
 #define CSSRuleList_h
 
+#include "heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
@@ -31,18 +32,23 @@ namespace WebCore {
 class CSSRule;
 class CSSStyleSheet;
 
-class CSSRuleList {
-    WTF_MAKE_NONCOPYABLE(CSSRuleList); WTF_MAKE_FAST_ALLOCATED;
+class CSSRuleList : public NoBaseWillBeGarbageCollectedFinalized<CSSRuleList> {
+    WTF_MAKE_NONCOPYABLE(CSSRuleList);
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
     virtual ~CSSRuleList();
 
+#if !ENABLE(OILPAN)
     virtual void ref() = 0;
     virtual void deref() = 0;
+#endif
 
     virtual unsigned length() const = 0;
     virtual CSSRule* item(unsigned index) const = 0;
 
     virtual CSSStyleSheet* styleSheet() const = 0;
+
+    virtual void trace(Visitor*) = 0;
 
 protected:
     CSSRuleList();
@@ -50,14 +56,21 @@ protected:
 
 class StaticCSSRuleList FINAL : public CSSRuleList {
 public:
-    static PassRefPtr<StaticCSSRuleList> create() { return adoptRef(new StaticCSSRuleList()); }
+    static PassRefPtrWillBeRawPtr<StaticCSSRuleList> create()
+    {
+        return adoptRefWillBeNoop(new StaticCSSRuleList());
+    }
 
+#if !ENABLE(OILPAN)
     virtual void ref() OVERRIDE { ++m_refCount; }
     virtual void deref() OVERRIDE;
+#endif
 
-    Vector<RefPtr<CSSRule> >& rules() { return m_rules; }
+    WillBeHeapVector<RefPtrWillBeMember<CSSRule> >& rules() { return m_rules; }
 
     virtual CSSStyleSheet* styleSheet() const OVERRIDE { return 0; }
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
     StaticCSSRuleList();
@@ -66,25 +79,38 @@ private:
     virtual unsigned length() const OVERRIDE { return m_rules.size(); }
     virtual CSSRule* item(unsigned index) const OVERRIDE { return index < m_rules.size() ? m_rules[index].get() : 0; }
 
-    Vector<RefPtr<CSSRule> > m_rules;
+    WillBeHeapVector<RefPtrWillBeMember<CSSRule> > m_rules;
+#if !ENABLE(OILPAN)
     unsigned m_refCount;
+#endif
 };
 
-// The rule owns the live list.
 template <class Rule>
 class LiveCSSRuleList FINAL : public CSSRuleList {
 public:
-    LiveCSSRuleList(Rule* rule) : m_rule(rule) { }
+    static PassOwnPtrWillBeRawPtr<LiveCSSRuleList> create(Rule* rule)
+    {
+        return adoptPtrWillBeNoop(new LiveCSSRuleList(rule));
+    }
 
+#if !ENABLE(OILPAN)
     virtual void ref() OVERRIDE { m_rule->ref(); }
     virtual void deref() OVERRIDE { m_rule->deref(); }
+#endif
+
+    virtual void trace(Visitor* visitor) OVERRIDE
+    {
+        visitor->trace(m_rule);
+    }
 
 private:
+    LiveCSSRuleList(Rule* rule) : m_rule(rule) { }
+
     virtual unsigned length() const OVERRIDE { return m_rule->length(); }
     virtual CSSRule* item(unsigned index) const OVERRIDE { return m_rule->item(index); }
     virtual CSSStyleSheet* styleSheet() const OVERRIDE { return m_rule->parentStyleSheet(); }
 
-    Rule* m_rule;
+    RawPtrWillBeMember<Rule> m_rule;
 };
 
 } // namespace WebCore

@@ -23,187 +23,185 @@
 
 #include "core/rendering/svg/RenderSVGInlineText.h"
 #include "core/rendering/svg/RenderSVGText.h"
+#include "core/rendering/svg/SVGTextMetrics.h"
+#include "platform/fonts/WidthIterator.h"
 #include "platform/text/TextPath.h"
+#include "platform/text/TextRun.h"
+#include "wtf/Vector.h"
 
 namespace WebCore {
 
-SVGTextMetricsBuilder::SVGTextMetricsBuilder()
-    : m_text(0)
-    , m_run(static_cast<const UChar*>(0), 0)
-    , m_textPosition(0)
+class SVGTextMetricsCalculator {
+public:
+    SVGTextMetricsCalculator(RenderSVGInlineText*);
+
+    SVGTextMetrics computeMetricsForCharacter(unsigned textPosition);
+    unsigned textLength() const { return static_cast<unsigned>(m_run.charactersLength()); }
+
+    bool characterStartsSurrogatePair(unsigned textPosition) const
+    {
+        return U16_IS_LEAD(m_run[textPosition]) && textPosition + 1 < textLength() && U16_IS_TRAIL(m_run[textPosition + 1]);
+    }
+    bool characterIsWhiteSpace(unsigned textPosition) const
+    {
+        return m_run[textPosition] == ' ';
+    }
+
+private:
+    SVGTextMetrics computeMetricsForCharacterSimple(unsigned textPosition);
+    SVGTextMetrics computeMetricsForCharacterComplex(unsigned textPosition);
+
+    RenderSVGInlineText* m_text;
+    TextRun m_run;
+    bool m_isComplexText;
+    float m_totalWidth;
+
+    // Simple text only.
+    OwnPtr<WidthIterator> m_simpleWidthIterator;
+};
+
+SVGTextMetricsCalculator::SVGTextMetricsCalculator(RenderSVGInlineText* text)
+    : m_text(text)
+    , m_run(SVGTextMetrics::constructTextRun(text, 0, text->textLength()))
     , m_isComplexText(false)
     , m_totalWidth(0)
 {
-}
-
-inline bool SVGTextMetricsBuilder::currentCharacterStartsSurrogatePair() const
-{
-    return U16_IS_LEAD(m_run[m_textPosition]) && int(m_textPosition + 1) < m_run.charactersLength() && U16_IS_TRAIL(m_run[m_textPosition + 1]);
-}
-
-bool SVGTextMetricsBuilder::advance()
-{
-    m_textPosition += m_currentMetrics.length();
-    if (int(m_textPosition) >= m_run.charactersLength())
-        return false;
-
-    if (m_isComplexText)
-        advanceComplexText();
-    else
-        advanceSimpleText();
-
-    return m_currentMetrics.length() > 0;
-}
-
-void SVGTextMetricsBuilder::advanceSimpleText()
-{
-    GlyphBuffer glyphBuffer;
-    unsigned metricsLength = m_simpleWidthIterator->advance(m_textPosition + 1, &glyphBuffer);
-    if (!metricsLength) {
-        m_currentMetrics = SVGTextMetrics();
-        return;
-    }
-
-    float currentWidth = m_simpleWidthIterator->runWidthSoFar() - m_totalWidth;
-    m_totalWidth = m_simpleWidthIterator->runWidthSoFar();
-
-#if ENABLE(SVG_FONTS)
-    m_currentMetrics = SVGTextMetrics(m_text, m_textPosition, metricsLength, currentWidth, m_simpleWidthIterator->lastGlyphName());
-#else
-    m_currentMetrics = SVGTextMetrics(m_text, m_textPosition, metricsLength, currentWidth, emptyString());
-#endif
-}
-
-void SVGTextMetricsBuilder::advanceComplexText()
-{
-    unsigned metricsLength = currentCharacterStartsSurrogatePair() ? 2 : 1;
-    m_currentMetrics = SVGTextMetrics::measureCharacterRange(m_text, m_textPosition, metricsLength);
-    m_complexStartToCurrentMetrics = SVGTextMetrics::measureCharacterRange(m_text, 0, m_textPosition + metricsLength);
-    ASSERT(m_currentMetrics.length() == metricsLength);
-
-    // Frequent case for Arabic text: when measuring a single character the arabic isolated form is taken
-    // when rendering the glyph "in context" (with it's surrounding characters) it changes due to shaping.
-    // So whenever currentWidth != currentMetrics.width(), we are processing a text run whose length is
-    // not equal to the sum of the individual lengths of the glyphs, when measuring them isolated.
-    float currentWidth = m_complexStartToCurrentMetrics.width() - m_totalWidth;
-    if (currentWidth != m_currentMetrics.width())
-        m_currentMetrics.setWidth(currentWidth);
-
-    m_totalWidth = m_complexStartToCurrentMetrics.width();
-}
-
-void SVGTextMetricsBuilder::initializeMeasurementWithTextRenderer(RenderSVGInlineText* text)
-{
-    m_text = text;
-    m_textPosition = 0;
-    m_currentMetrics = SVGTextMetrics();
-    m_complexStartToCurrentMetrics = SVGTextMetrics();
-    m_totalWidth = 0;
-
     const Font& scaledFont = text->scaledFont();
-    m_run = SVGTextMetrics::constructTextRun(text, 0, text->textLength());
     CodePath codePath = scaledFont.codePath(m_run);
     m_isComplexText = codePath == ComplexPath;
     m_run.setCharacterScanForCodePath(!m_isComplexText);
 
-    if (m_isComplexText)
-        m_simpleWidthIterator.clear();
-    else
+    if (!m_isComplexText)
         m_simpleWidthIterator = adoptPtr(new WidthIterator(&scaledFont, m_run));
+}
+
+SVGTextMetrics SVGTextMetricsCalculator::computeMetricsForCharacterSimple(unsigned textPosition)
+{
+    GlyphBuffer glyphBuffer;
+    unsigned metricsLength = m_simpleWidthIterator->advance(textPosition + 1, &glyphBuffer);
+    if (!metricsLength)
+        return SVGTextMetrics();
+
+    float currentWidth = m_simpleWidthIterator->runWidthSoFar() - m_totalWidth;
+    m_totalWidth = m_simpleWidthIterator->runWidthSoFar();
+
+    Glyph glyphId = glyphBuffer.glyphAt(0);
+    return SVGTextMetrics(m_text, textPosition, metricsLength, currentWidth, glyphId);
+}
+
+SVGTextMetrics SVGTextMetricsCalculator::computeMetricsForCharacterComplex(unsigned textPosition)
+{
+    unsigned metricsLength = characterStartsSurrogatePair(textPosition) ? 2 : 1;
+    SVGTextMetrics metrics = SVGTextMetrics::measureCharacterRange(m_text, textPosition, metricsLength);
+    ASSERT(metrics.length() == metricsLength);
+
+    SVGTextMetrics complexStartToCurrentMetrics = SVGTextMetrics::measureCharacterRange(m_text, 0, textPosition + metricsLength);
+    // Frequent case for Arabic text: when measuring a single character the arabic isolated form is taken
+    // when rendering the glyph "in context" (with it's surrounding characters) it changes due to shaping.
+    // So whenever currentWidth != currentMetrics.width(), we are processing a text run whose length is
+    // not equal to the sum of the individual lengths of the glyphs, when measuring them isolated.
+    float currentWidth = complexStartToCurrentMetrics.width() - m_totalWidth;
+    if (currentWidth != metrics.width())
+        metrics.setWidth(currentWidth);
+
+    m_totalWidth = complexStartToCurrentMetrics.width();
+    return metrics;
+}
+
+SVGTextMetrics SVGTextMetricsCalculator::computeMetricsForCharacter(unsigned textPosition)
+{
+    if (m_isComplexText)
+        return computeMetricsForCharacterComplex(textPosition);
+
+    return computeMetricsForCharacterSimple(textPosition);
 }
 
 struct MeasureTextData {
     MeasureTextData(SVGCharacterDataMap* characterDataMap)
         : allCharactersMap(characterDataMap)
-        , hasLastCharacter(false)
-        , lastCharacter(0)
-        , processRenderer(false)
+        , lastCharacterWasWhiteSpace(true)
         , valueListPosition(0)
-        , skippedCharacters(0)
     {
     }
 
     SVGCharacterDataMap* allCharactersMap;
-    bool hasLastCharacter;
-    UChar lastCharacter;
-    bool processRenderer;
+    bool lastCharacterWasWhiteSpace;
     unsigned valueListPosition;
-    unsigned skippedCharacters;
 };
 
-void SVGTextMetricsBuilder::measureTextRenderer(RenderSVGInlineText* text, MeasureTextData* data)
+static void measureTextRenderer(RenderSVGInlineText* text, MeasureTextData* data, bool processRenderer)
 {
     ASSERT(text);
 
     SVGTextLayoutAttributes* attributes = text->layoutAttributes();
     Vector<SVGTextMetrics>* textMetricsValues = &attributes->textMetricsValues();
-    if (data->processRenderer) {
+    if (processRenderer) {
         if (data->allCharactersMap)
             attributes->clear();
         else
             textMetricsValues->clear();
     }
 
-    initializeMeasurementWithTextRenderer(text);
+    SVGTextMetricsCalculator calculator(text);
     bool preserveWhiteSpace = text->style()->whiteSpace() == PRE;
-    int surrogatePairCharacters = 0;
+    unsigned surrogatePairCharacters = 0;
+    unsigned skippedCharacters = 0;
+    unsigned textPosition = 0;
+    unsigned textLength = calculator.textLength();
 
-    while (advance()) {
-        UChar currentCharacter = m_run[m_textPosition];
-        if (currentCharacter == ' ' && !preserveWhiteSpace && (!data->hasLastCharacter || data->lastCharacter == ' ')) {
-            if (data->processRenderer)
+    SVGTextMetrics currentMetrics;
+    for (; textPosition < textLength; textPosition += currentMetrics.length()) {
+        currentMetrics = calculator.computeMetricsForCharacter(textPosition);
+        if (!currentMetrics.length())
+            break;
+
+        bool characterIsWhiteSpace = calculator.characterIsWhiteSpace(textPosition);
+        if (characterIsWhiteSpace && !preserveWhiteSpace && data->lastCharacterWasWhiteSpace) {
+            if (processRenderer)
                 textMetricsValues->append(SVGTextMetrics(SVGTextMetrics::SkippedSpaceMetrics));
             if (data->allCharactersMap)
-                data->skippedCharacters += m_currentMetrics.length();
+                skippedCharacters += currentMetrics.length();
             continue;
         }
 
-        if (data->processRenderer) {
+        if (processRenderer) {
             if (data->allCharactersMap) {
-                const SVGCharacterDataMap::const_iterator it = data->allCharactersMap->find(data->valueListPosition + m_textPosition - data->skippedCharacters - surrogatePairCharacters + 1);
+                const SVGCharacterDataMap::const_iterator it = data->allCharactersMap->find(data->valueListPosition + textPosition - skippedCharacters - surrogatePairCharacters + 1);
                 if (it != data->allCharactersMap->end())
-                    attributes->characterDataMap().set(m_textPosition + 1, it->value);
+                    attributes->characterDataMap().set(textPosition + 1, it->value);
             }
-            textMetricsValues->append(m_currentMetrics);
+            textMetricsValues->append(currentMetrics);
         }
 
-        if (data->allCharactersMap && currentCharacterStartsSurrogatePair())
+        if (data->allCharactersMap && calculator.characterStartsSurrogatePair(textPosition))
             surrogatePairCharacters++;
 
-        data->hasLastCharacter = true;
-        data->lastCharacter = currentCharacter;
+        data->lastCharacterWasWhiteSpace = characterIsWhiteSpace;
     }
 
     if (!data->allCharactersMap)
         return;
 
-    data->valueListPosition += m_textPosition - data->skippedCharacters;
-    data->skippedCharacters = 0;
+    data->valueListPosition += textPosition - skippedCharacters;
 }
 
-void SVGTextMetricsBuilder::walkTree(RenderObject* start, RenderSVGInlineText* stopAtLeaf, MeasureTextData* data)
+static void walkTree(RenderObject* start, RenderSVGInlineText* stopAtLeaf, MeasureTextData* data)
 {
-    for (RenderObject* child = start->firstChild(); child; child = child->nextSibling()) {
+    RenderObject* child = start->firstChild();
+    while (child) {
         if (child->isSVGInlineText()) {
             RenderSVGInlineText* text = toRenderSVGInlineText(child);
-            if (stopAtLeaf && stopAtLeaf != text) {
-                data->processRenderer = false;
-                measureTextRenderer(text, data);
+            measureTextRenderer(text, data, !stopAtLeaf || stopAtLeaf == text);
+            if (stopAtLeaf && stopAtLeaf == text)
+                return;
+        } else if (child->isSVGInline()) {
+            // Visit children of text content elements.
+            if (RenderObject* inlineChild = child->firstChild()) {
+                child = inlineChild;
                 continue;
             }
-
-            data->processRenderer = true;
-            measureTextRenderer(text, data);
-            if (stopAtLeaf)
-                return;
-
-            continue;
         }
-
-        if (!child->isSVGInline())
-            continue;
-
-        walkTree(child, stopAtLeaf, data);
+        child = child->nextInPreOrderAfterChildren(start);
     }
 }
 

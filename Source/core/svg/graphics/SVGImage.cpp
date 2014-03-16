@@ -31,17 +31,18 @@
 
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ComposedTreeWalker.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/Chrome.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/Settings.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/svg/RenderSVGRoot.h"
 #include "core/svg/SVGDocument.h"
 #include "core/svg/SVGFEImageElement.h"
 #include "core/svg/SVGImageElement.h"
 #include "core/svg/SVGSVGElement.h"
+#include "core/svg/animation/SMILTimeContainer.h"
 #include "core/svg/graphics/SVGImageChromeClient.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/IntRect.h"
@@ -85,7 +86,7 @@ bool SVGImage::currentFrameHasSingleSecurityOrigin() const
     if (!m_page)
         return true;
 
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
 
     RELEASE_ASSERT(frame->document()->loadEventFinished());
 
@@ -97,13 +98,13 @@ bool SVGImage::currentFrameHasSingleSecurityOrigin() const
     // single-origin since these can leak cross-origin information.
     ComposedTreeWalker walker(rootElement);
     while (Node* node = walker.get()) {
-        if (node->hasTagName(SVGNames::foreignObjectTag))
+        if (isSVGForeignObjectElement(*node))
             return false;
-        if (node->hasTagName(SVGNames::imageTag)) {
-            if (!toSVGImageElement(node)->currentFrameHasSingleSecurityOrigin())
+        if (isSVGImageElement(*node)) {
+            if (!toSVGImageElement(*node).currentFrameHasSingleSecurityOrigin())
                 return false;
-        } else if (node->hasTagName(SVGNames::feImageTag)) {
-            if (!toSVGFEImageElement(node)->currentFrameHasSingleSecurityOrigin())
+        } else if (isSVGFEImageElement(*node)) {
+            if (!toSVGFEImageElement(*node).currentFrameHasSingleSecurityOrigin())
                 return false;
         }
         walker.next();
@@ -119,17 +120,17 @@ void SVGImage::setContainerSize(const IntSize& size)
     if (!m_page || !usesContainerSize())
         return;
 
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
-        return;
-    RenderSVGRoot* renderer = toRenderSVGRoot(rootElement->renderer());
-    if (!renderer)
         return;
 
     FrameView* view = frameView();
     view->resize(this->containerSize());
 
+    RenderSVGRoot* renderer = toRenderSVGRoot(rootElement->renderer());
+    if (!renderer)
+        return;
     renderer->setContainerSize(size);
 }
 
@@ -137,7 +138,7 @@ IntSize SVGImage::containerSize() const
 {
     if (!m_page)
         return IntSize();
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return IntSize();
@@ -247,9 +248,12 @@ void SVGImage::draw(GraphicsContext* context, const FloatRect& dstRect, const Fl
     context->clip(enclosingIntRect(dstRect));
 
     bool compositingRequiresTransparencyLayer = compositeOp != CompositeSourceOver || blendMode != blink::WebBlendModeNormal;
-    if (compositingRequiresTransparencyLayer) {
-        context->beginTransparencyLayer(1);
-        context->setCompositeOperation(CompositeSourceOver, blink::WebBlendModeNormal);
+    float opacity = context->getNormalizedAlpha() / 255.f;
+    bool requiresTransparencyLayer = compositingRequiresTransparencyLayer || opacity < 1;
+    if (requiresTransparencyLayer) {
+        context->beginTransparencyLayer(opacity);
+        if (compositingRequiresTransparencyLayer)
+            context->setCompositeOperation(CompositeSourceOver, blink::WebBlendModeNormal);
     }
 
     FloatSize scale(dstRect.width() / srcRect.width(), dstRect.height() / srcRect.height());
@@ -270,7 +274,7 @@ void SVGImage::draw(GraphicsContext* context, const FloatRect& dstRect, const Fl
 
     view->paint(context, enclosingIntRect(srcRect));
 
-    if (compositingRequiresTransparencyLayer)
+    if (requiresTransparencyLayer)
         context->endLayer();
 
     stateSaver.restore();
@@ -283,7 +287,7 @@ RenderBox* SVGImage::embeddedContentBox() const
 {
     if (!m_page)
         return 0;
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return 0;
@@ -302,7 +306,7 @@ bool SVGImage::hasRelativeWidth() const
 {
     if (!m_page)
         return false;
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return false;
@@ -313,7 +317,7 @@ bool SVGImage::hasRelativeHeight() const
 {
     if (!m_page)
         return false;
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return false;
@@ -324,7 +328,7 @@ void SVGImage::computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrin
 {
     if (!m_page)
         return;
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return;
@@ -344,7 +348,7 @@ void SVGImage::startAnimation(bool /* catchUpIfNecessary */)
 {
     if (!m_page)
         return;
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return;
@@ -356,7 +360,7 @@ void SVGImage::stopAnimation()
 {
     if (!m_page)
         return;
-    Frame* frame = m_page->mainFrame();
+    LocalFrame* frame = m_page->mainFrame();
     SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
     if (!rootElement)
         return;
@@ -366,6 +370,17 @@ void SVGImage::stopAnimation()
 void SVGImage::resetAnimation()
 {
     stopAnimation();
+}
+
+bool SVGImage::hasAnimations() const
+{
+    if (!m_page)
+        return false;
+    LocalFrame* frame = m_page->mainFrame();
+    SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
+    if (!rootElement)
+        return false;
+    return rootElement->timeContainer()->hasAnimations();
 }
 
 bool SVGImage::dataChanged(bool allDataReceived)
@@ -390,12 +405,12 @@ bool SVGImage::dataChanged(bool allDataReceived)
         // This will become an issue when SVGImage will be able to load other
         // SVGImage objects, but we're safe now, because SVGImage can only be
         // loaded by a top-level document.
-        m_page = adoptPtr(new Page(pageClients));
-        m_page->settings().setScriptEnabled(false);
-        m_page->settings().setPluginsEnabled(false);
-        m_page->settings().setAcceleratedCompositingEnabled(false);
+        OwnPtr<Page> page = adoptPtr(new Page(pageClients));
+        page->settings().setScriptEnabled(false);
+        page->settings().setPluginsEnabled(false);
+        page->settings().setAcceleratedCompositingEnabled(false);
 
-        RefPtr<Frame> frame = Frame::create(FrameInit::create(0, &m_page->frameHost(), dummyFrameLoaderClient));
+        RefPtr<LocalFrame> frame = LocalFrame::create(dummyFrameLoaderClient, &page->frameHost(), 0);
         frame->setView(FrameView::create(frame.get()));
         frame->init();
         FrameLoader& loader = frame->loader();
@@ -404,6 +419,8 @@ bool SVGImage::dataChanged(bool allDataReceived)
         frame->view()->setScrollbarsSuppressed(true);
         frame->view()->setCanHaveScrollbars(false); // SVG Images will always synthesize a viewBox, if it's not available, and thus never see scrollbars.
         frame->view()->setTransparent(true); // SVG Images are transparent.
+
+        m_page = page.release();
 
         loader.load(FrameLoadRequest(0, blankURL(), SubstituteData(data(), "image/svg+xml", "UTF-8", KURL(), ForceSynchronousLoad)));
         // Set the intrinsic size before a container size is available.

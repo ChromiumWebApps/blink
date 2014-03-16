@@ -193,7 +193,7 @@
     # compiler optimizations, see crbug.com/237063
     'msvs_disabled_warnings': [ 4267, 4334, 4724 ],
     'conditions': [
-      ['OS=="linux" or OS=="android"', {
+      ['OS=="linux" or OS=="android" or OS=="win"', {
         'sources/': [
           # Cherry-pick files excluded by the broader regular expressions above.
           ['include', 'fonts/harfbuzz/FontHarfBuzz\\.cpp$'],
@@ -303,7 +303,7 @@
           ['exclude', 'fonts/harfbuzz/HarfBuzzFaceCoreText\\.cpp$'],
         ],
       }],
-      ['OS != "linux" and OS != "mac" and (OS != "win" or (OS == "win" and "ENABLE_GDI_FONTS_ON_WINDOWS=1" in feature_defines))', {
+      ['OS != "linux" and OS != "mac" and OS != "win"', {
         'sources/': [
           ['exclude', 'VDMX[^/]+\\.(cpp|h)$'],
         ],
@@ -316,59 +316,25 @@
 
           ['include', 'clipboard/ClipboardUtilitiesWin\\.(cpp|h)$'],
 
+          ['include', 'fonts/opentype/'],
+          ['include', 'fonts/skia/FontCustomPlatformDataSkia\\.cpp$'],
+          ['include', 'fonts/skia/FontCustomPlatformDataSkia\\.cpp$'],
+          ['include', 'fonts/skia/GlyphPageTreeNodeSkia\\.cpp$'],
+          ['include', 'fonts/skia/SimpleFontDataSkia\\.cpp$'],
+          ['include', 'fonts/win/FontCacheSkiaWin\\.cpp$'],
           ['include', 'fonts/win/FontFallbackWin\\.(cpp|h)$'],
           ['include', 'fonts/win/FontPlatformDataWin\\.(cpp|h)$'],
-          ['include', 'fonts/win/FontWin\\.cpp$'],
-          ['include', 'fonts/opentype/'],
-          ['include', 'fonts/skia/SkiaFontWin\\.(cpp|h)$'],
-          ['include', 'fonts/win/UniscribeHelper\\.(cpp|h)$'],
-          ['include', 'fonts/win/UniscribeHelperTextRun\\.(cpp|h)$'],
+          ['include', 'fonts/win/SkiaFontWin\\.(cpp|h)$'],
+          ['exclude', 'fonts/harfbuzz/FontPlatformDataHarfBuzz\\.cpp$'],
 
           # SystemInfo.cpp is useful and we don't want to copy it.
           ['include', 'win/SystemInfo\\.cpp$'],
-        ],
-        'conditions': [
-          ['"ENABLE_GDI_FONTS_ON_WINDOWS=1" in feature_defines', {
-            'sources/': [
-              ['include', 'fonts/win/FontCustomPlatformDataWin\\.cpp$'],
-              ['exclude', 'fonts/skia/SimpleFontDataSkia\\.cpp$'],
-              ['exclude', 'fonts/skia/GlyphPageTreeNodeSkia\\.cpp$'],
-              ['exclude', 'fonts/skia/FontCacheSkia\\.cpp$'],
-              ['exclude', 'fonts/skia/FontCacheSkiaWin\\.cpp$'],
-              ['exclude', 'fonts/skia/FontCustomPlatformDataSkia\\.cpp$'],
-            ],
-          },{ # ENABLE_GDI_FONTS_ON_WINDOWS!=1
-            'sources/': [
-              ['include', 'fonts/skia/SimpleFontDataSkia\\.cpp$'],
-              ['include', 'fonts/skia/GlyphPageTreeNodeSkia\\.cpp$'],
-              ['include', 'fonts/skia/FontCacheSkiaWin\\.cpp$'],
-              ['include', 'fonts/skia/FontCustomPlatformDataSkia\\.cpp$'],
-              ['include', 'fonts/skia/FontCustomPlatformDataSkia\\.cpp$'],
-              ['exclude', 'fonts/win/FontCustomPlatformDataWin\\.cpp$'],
-              ['exclude', 'fonts/win/SimpleFontDataWin\\.cpp$'],
-              ['exclude', 'fonts/GlyphPageTreeNodeWin\\.cpp$'],
-              ['exclude', 'fonts/FontCacheWin\\.cpp$'],
-            ],
-          }],
-          ['"ENABLE_HARFBUZZ_ON_WINDOWS=1" in feature_defines', {
-            'sources/': [
-              ['include', 'fonts/harfbuzz/FontHarfBuzz\\.cpp$'],
-              ['include', 'fonts/harfbuzz/HarfBuzzFace\\.(cpp|h)$'],
-              ['include', 'fonts/harfbuzz/HarfBuzzFaceSkia\\.cpp$'],
-              ['include', 'fonts/harfbuzz/HarfBuzzShaper\\.(cpp|h)$'],
-              ['exclude', 'fonts/win/FontWin\\.cpp$'],
-              ['exclude', '/(Uniscribe)[^/]*\\.(cpp|h)$'],
-            ],
-            'dependencies': [
-              '<(DEPTH)/third_party/harfbuzz-ng/harfbuzz.gyp:harfbuzz-ng',
-            ],
-          }],
         ],
       }, { # OS!="win"
         'sources/': [
           ['exclude', 'win/'],
           ['exclude', 'Win\\.cpp$'],
-          ['exclude', '/(Windows|Uniscribe)[^/]*\\.cpp$'],
+          ['exclude', '/(Windows)[^/]*\\.cpp$'],
           ['include', 'fonts/opentype/OpenTypeSanitizer\\.cpp$'],
         ],
       }],

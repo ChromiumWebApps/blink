@@ -53,7 +53,7 @@ void HTMLTablePartElement::collectStyleForPresentationAttribute(const QualifiedN
     else if (name == backgroundAttr) {
         String url = stripLeadingAndTrailingHTMLSpaces(value);
         if (!url.isEmpty())
-            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, CSSImageValue::create(document().completeURL(url))));
+            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, CSSImageValue::create(url, document().completeURL(url))));
     } else if (name == valignAttr) {
         if (equalIgnoringCase(value, "top"))
             addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign, CSSValueTop);
@@ -86,7 +86,7 @@ void HTMLTablePartElement::collectStyleForPresentationAttribute(const QualifiedN
 HTMLTableElement* HTMLTablePartElement::findParentTable() const
 {
     ContainerNode* parent = NodeRenderingTraversal::parent(this);
-    while (parent && !parent->hasTagName(tableTag))
+    while (parent && !isHTMLTableElement(*parent))
         parent = NodeRenderingTraversal::parent(parent);
     return toHTMLTableElement(parent);
 }

@@ -309,9 +309,20 @@ def CheckChangeOnCommit(input_api, output_api):
     results.extend(_CheckSubversionConfig(input_api, output_api))
     return results
 
-def GetPreferredTrySlaves(project, change):
-    return [
-        'linux_blink_rel', 'mac_blink_rel', 'win_blink_rel',
-        'linux_blink', 'mac_layout:webkit_lint', 'win_layout:webkit_lint',
-        'blink_android_compile_rel', 'blink_android_compile_dbg',
-    ]
+
+def GetPreferredTryMasters(project, change):
+    return {
+        'tryserver.blink': {
+            'blink_presubmit': set(['defaulttests']),
+            'linux_blink_dbg': set(['defaulttests']),
+            'linux_blink_rel': set(['defaulttests']),
+            'mac_blink_compile_dbg': set(['defaulttests']),
+            'mac_blink_rel': set(['defaulttests']),
+            'win_blink_compile_dbg': set(['defaulttests']),
+            'win_blink_rel': set(['defaulttests']),
+        },
+        'tryserver.chromium': {
+            'blink_android_compile_dbg': set(['defaulttests']),
+            'blink_android_compile_rel': set(['defaulttests']),
+        }
+    }

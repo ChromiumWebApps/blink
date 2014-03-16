@@ -45,6 +45,8 @@ typedef uint32_t SnapshotObjectId;
 
 namespace HeapProfilerAgentState {
 static const char heapProfilerEnabled[] = "heapProfilerEnabled";
+static const char heapObjectsTrackingEnabled[] = "heapObjectsTrackingEnabled";
+static const char allocationTrackingEnabled[] = "allocationTrackingEnabled";
 }
 
 class InspectorHeapProfilerAgent::HeapStatsUpdateTask {
@@ -97,6 +99,8 @@ void InspectorHeapProfilerAgent::restore()
 {
     if (m_state->getBoolean(HeapProfilerAgentState::heapProfilerEnabled))
         m_frontend->resetProfiles();
+    if (m_state->getBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled))
+        startTrackingHeapObjectsInternal(m_state->getBoolean(HeapProfilerAgentState::allocationTrackingEnabled));
 }
 
 void InspectorHeapProfilerAgent::collectGarbage(WebCore::ErrorString*)
@@ -120,7 +124,7 @@ void InspectorHeapProfilerAgent::HeapStatsUpdateTask::onTimer(Timer<HeapStatsUpd
 void InspectorHeapProfilerAgent::HeapStatsUpdateTask::startTimer()
 {
     ASSERT(!m_timer.isActive());
-    m_timer.startRepeating(0.05);
+    m_timer.startRepeating(0.05, FROM_HERE);
 }
 
 class InspectorHeapProfilerAgent::HeapStatsStream FINAL : public ScriptProfiler::OutputStream {
@@ -142,11 +146,10 @@ private:
 
 void InspectorHeapProfilerAgent::startTrackingHeapObjects(ErrorString*, const bool* trackAllocations)
 {
-    if (m_heapStatsUpdateTask)
-        return;
-    ScriptProfiler::startTrackingHeapObjects(trackAllocations && *trackAllocations);
-    m_heapStatsUpdateTask = adoptPtr(new HeapStatsUpdateTask(this));
-    m_heapStatsUpdateTask->startTimer();
+    m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, true);
+    bool allocationTrackingEnabled = trackAllocations && *trackAllocations;
+    m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled, allocationTrackingEnabled);
+    startTrackingHeapObjectsInternal(allocationTrackingEnabled);
 }
 
 void InspectorHeapProfilerAgent::requestHeapStatsUpdate()
@@ -179,6 +182,15 @@ void InspectorHeapProfilerAgent::stopTrackingHeapObjects(ErrorString* error, con
     stopTrackingHeapObjectsInternal();
 }
 
+void InspectorHeapProfilerAgent::startTrackingHeapObjectsInternal(bool trackAllocations)
+{
+    if (m_heapStatsUpdateTask)
+        return;
+    ScriptProfiler::startTrackingHeapObjects(trackAllocations);
+    m_heapStatsUpdateTask = adoptPtr(new HeapStatsUpdateTask(this));
+    m_heapStatsUpdateTask->startTimer();
+}
+
 void InspectorHeapProfilerAgent::stopTrackingHeapObjectsInternal()
 {
     if (!m_heapStatsUpdateTask)
@@ -186,6 +198,8 @@ void InspectorHeapProfilerAgent::stopTrackingHeapObjectsInternal()
     ScriptProfiler::stopTrackingHeapObjects();
     m_heapStatsUpdateTask->resetTimer();
     m_heapStatsUpdateTask.clear();
+    m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, false);
+    m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled, false);
 }
 
 void InspectorHeapProfilerAgent::enable(ErrorString*)
@@ -212,14 +226,18 @@ void InspectorHeapProfilerAgent::takeHeapSnapshot(ErrorString* errorString, cons
         }
         virtual void Worked(int workDone) OVERRIDE
         {
-            if (m_frontend)
+            if (m_frontend) {
                 m_frontend->reportHeapSnapshotProgress(workDone, m_totalWork, 0);
+                m_frontend->flush();
+            }
         }
         virtual void Done() OVERRIDE
         {
             const bool finished = true;
-            if (m_frontend)
+            if (m_frontend) {
                 m_frontend->reportHeapSnapshotProgress(m_totalWork, m_totalWork, &finished);
+                m_frontend->flush();
+            }
         }
         virtual bool isCanceled() OVERRIDE { return false; }
     private:
@@ -239,7 +257,11 @@ void InspectorHeapProfilerAgent::takeHeapSnapshot(ErrorString* errorString, cons
     public:
         explicit OutputStream(InspectorFrontend::HeapProfiler* frontend)
             : m_frontend(frontend) { }
-        void Write(const String& chunk) { m_frontend->addHeapSnapshotChunk(chunk); }
+        void Write(const String& chunk)
+        {
+            m_frontend->addHeapSnapshotChunk(chunk);
+            m_frontend->flush();
+        }
         void Close() { }
     private:
         InspectorFrontend::HeapProfiler* m_frontend;

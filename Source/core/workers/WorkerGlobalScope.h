@@ -33,10 +33,11 @@
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "core/events/ThreadLocalEventNames.h"
-#include "core/frame/ContentSecurityPolicy.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerConsole.h"
 #include "core/workers/WorkerEventQueue.h"
-#include "core/workers/WorkerSupplementable.h"
+#include "heap/Handle.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashMap.h"
 #include "wtf/OwnPtr.h"
@@ -48,7 +49,6 @@
 namespace WebCore {
 
     class Blob;
-    class DOMURL;
     class ExceptionState;
     class ScheduledAction;
     class WorkerClients;
@@ -58,8 +58,9 @@ namespace WebCore {
     class WorkerNavigator;
     class WorkerThread;
 
-    class WorkerGlobalScope : public RefCounted<WorkerGlobalScope>, public ScriptWrappable, public SecurityContext, public ExecutionContext, public ExecutionContextClient, public WorkerSupplementable, public EventTargetWithInlineData {
-        REFCOUNTED_EVENT_TARGET(WorkerGlobalScope);
+    class WorkerGlobalScope : public RefCountedWillBeRefCountedGarbageCollected<WorkerGlobalScope>, public ScriptWrappable, public SecurityContext, public ExecutionContext, public ExecutionContextClient, public WillBeHeapSupplementable<WorkerGlobalScope>, public EventTargetWithInlineData {
+        WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WorkerGlobalScope);
+        DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<WorkerGlobalScope>);
     public:
         virtual ~WorkerGlobalScope();
 
@@ -80,6 +81,9 @@ namespace WebCore {
         WorkerScriptController* script() { return m_script.get(); }
         void clearScript() { m_script.clear(); }
         void clearInspector();
+
+        void willStopActiveDOMObjects();
+        void dispose();
 
         WorkerThread* thread() const { return m_thread; }
 
@@ -115,22 +119,6 @@ namespace WebCore {
 
         bool isClosing() { return m_closing; }
 
-        // An observer interface to be notified when the worker thread is getting stopped.
-        class Observer {
-            WTF_MAKE_NONCOPYABLE(Observer);
-        public:
-            Observer(WorkerGlobalScope*);
-            virtual ~Observer();
-            virtual void notifyStop() = 0;
-            void stopObserving();
-        private:
-            WorkerGlobalScope* m_context;
-        };
-        friend class Observer;
-        void registerObserver(Observer*);
-        void unregisterObserver(Observer*);
-        void notifyObserversOfStop();
-
         bool idleNotification();
 
         double timeOrigin() const { return m_timeOrigin; }
@@ -140,9 +128,11 @@ namespace WebCore {
         using SecurityContext::securityOrigin;
         using SecurityContext::contentSecurityPolicy;
 
+        virtual void trace(Visitor*);
+
     protected:
         WorkerGlobalScope(const KURL&, const String& userAgent, WorkerThread*, double timeOrigin, PassOwnPtr<WorkerClients>);
-        void applyContentSecurityPolicyFromString(const String& contentSecurityPolicy, ContentSecurityPolicy::HeaderType);
+        void applyContentSecurityPolicyFromString(const String& contentSecurityPolicy, ContentSecurityPolicyHeaderType);
 
         virtual void logExceptionToConsole(const String& errorMessage, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) OVERRIDE;
         void addMessageToWorkerConsole(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber, PassRefPtr<ScriptCallStack>, ScriptState*);
@@ -163,18 +153,15 @@ namespace WebCore {
         KURL m_url;
         String m_userAgent;
 
-        mutable RefPtr<WorkerConsole> m_console;
-        mutable RefPtr<WorkerLocation> m_location;
-        mutable RefPtr<WorkerNavigator> m_navigator;
+        mutable RefPtrWillBeMember<WorkerConsole> m_console;
+        mutable RefPtrWillBeMember<WorkerLocation> m_location;
+        mutable RefPtrWillBeMember<WorkerNavigator> m_navigator;
 
         OwnPtr<WorkerScriptController> m_script;
         WorkerThread* m_thread;
 
-        mutable RefPtr<DOMURL> m_domURL;
         OwnPtr<WorkerInspectorController> m_workerInspectorController;
         bool m_closing;
-
-        HashSet<Observer*> m_workerObservers;
 
         OwnPtr<WorkerEventQueue> m_eventQueue;
 

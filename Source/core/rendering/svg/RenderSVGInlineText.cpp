@@ -94,12 +94,12 @@ void RenderSVGInlineText::styleDidChange(StyleDifference diff, const RenderStyle
 
     // The text metrics may be influenced by style changes.
     if (RenderSVGText* textRenderer = RenderSVGText::locateRenderSVGTextAncestor(this))
-        textRenderer->subtreeStyleDidChange(this);
+        textRenderer->setNeedsLayout();
 }
 
 InlineTextBox* RenderSVGInlineText::createTextBox()
 {
-    InlineTextBox* box = new SVGInlineTextBox(this);
+    InlineTextBox* box = new SVGInlineTextBox(*this);
     box->setHasVirtualLogicalHeight();
     return box;
 }
@@ -186,8 +186,7 @@ PositionWithAffinity RenderSVGInlineText::positionForPoint(const LayoutPoint& po
             const SVGTextFragment& fragment = fragments.at(i);
             FloatRect fragmentRect(fragment.x, fragment.y - baseline, fragment.width, fragment.height);
             fragment.buildFragmentTransform(fragmentTransform);
-            if (!fragmentTransform.isIdentity())
-                fragmentRect = fragmentTransform.mapRect(fragmentRect);
+            fragmentRect = fragmentTransform.mapRect(fragmentRect);
 
             float distance = powf(fragmentRect.x() - absolutePoint.x(), 2) +
                              powf(fragmentRect.y() + fragmentRect.height() / 2 - absolutePoint.y(), 2);
@@ -226,7 +225,7 @@ void RenderSVGInlineText::computeNewScaledFontForStyle(RenderObject* renderer, c
         return;
     }
 
-    if (style->fontDescription().textRenderingMode() == GeometricPrecision)
+    if (style->fontDescription().textRendering() == GeometricPrecision)
         scalingFactor = 1;
 
     FontDescription fontDescription(style->fontDescription());

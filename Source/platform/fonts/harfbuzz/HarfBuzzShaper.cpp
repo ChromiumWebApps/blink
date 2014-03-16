@@ -389,81 +389,6 @@ HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run, ForTextEmph
     setFontFeatures();
 }
 
-static void normalizeSpacesAndMirrorChars(const UChar* source, unsigned length, UChar* destination, unsigned* destinationLength, HarfBuzzShaper::NormalizeMode normalizeMode)
-{
-    unsigned position = 0;
-    bool error = false;
-    // Iterate characters in source and mirror character if needed.
-    *destinationLength = 0;
-    while (position < length) {
-        UChar32 character;
-        U16_NEXT(source, position, length, character);
-        // Don't normalize tabs as they are not treated as spaces for word-end
-        if (Character::treatAsSpace(character) && character != '\t')
-            character = ' ';
-        else if (Character::treatAsZeroWidthSpace(character))
-            character = zeroWidthSpace;
-        else if (normalizeMode == HarfBuzzShaper::NormalizeMirrorChars)
-            character = u_charMirror(character);
-        U16_APPEND(destination, *destinationLength, length, character, error);
-        ASSERT_UNUSED(error, !error);
-    }
-}
-
-void HarfBuzzShaper::setNormalizedBuffer(NormalizeMode normalizeMode)
-{
-    // Normalize the text run in three ways:
-    // 1) Convert the |originalRun| to NFC normalized form if combining diacritical marks
-    // (U+0300..) are used in the run. This conversion is necessary since most OpenType
-    // fonts (e.g., Arial) don't have substitution rules for the diacritical marks in
-    // their GSUB tables.
-    //
-    // Note that we don't use the icu::Normalizer::isNormalized(UNORM_NFC) API here since
-    // the API returns FALSE (= not normalized) for complex runs that don't require NFC
-    // normalization (e.g., Arabic text). Unless the run contains the diacritical marks,
-    // HarfBuzz will do the same thing for us using the GSUB table.
-    // 2) Convert spacing characters into plain spaces, as some fonts will provide glyphs
-    // for characters like '\n' otherwise.
-    // 3) Convert mirrored characters such as parenthesis for rtl text.
-
-    // Convert to NFC form if the text has diacritical marks.
-    icu::UnicodeString normalizedString;
-    UErrorCode error = U_ZERO_ERROR;
-
-    const UChar* runCharacters;
-    String stringFor8BitRun;
-    if (m_run.is8Bit()) {
-        stringFor8BitRun = String::make16BitFrom8BitSource(m_run.characters8(), m_run.length());
-        runCharacters = stringFor8BitRun.characters16();
-    } else
-        runCharacters = m_run.characters16();
-
-    for (int i = 0; i < m_run.length(); ++i) {
-        UChar ch = runCharacters[i];
-        if (::ublock_getCode(ch) == UBLOCK_COMBINING_DIACRITICAL_MARKS) {
-            icu::Normalizer::normalize(icu::UnicodeString(runCharacters,
-                m_run.length()), UNORM_NFC, 0 /* no options */,
-                normalizedString, error);
-            if (U_FAILURE(error))
-                normalizedString.remove();
-            break;
-        }
-    }
-
-    const UChar* sourceText;
-    unsigned sourceLength;
-    if (normalizedString.isEmpty()) {
-        sourceLength = m_run.length();
-        sourceText = runCharacters;
-    } else {
-        sourceLength = normalizedString.length();
-        sourceText = normalizedString.getBuffer();
-    }
-
-    m_normalizedBuffer = adoptArrayPtr(new UChar[sourceLength + 1]);
-    normalizeSpacesAndMirrorChars(sourceText, sourceLength, m_normalizedBuffer.get(), &m_normalizedBufferLength, normalizeMode);
-}
-
 bool HarfBuzzShaper::isWordEnd(unsigned index)
 {
     // This could refer a high-surrogate, but should work.
@@ -574,6 +499,17 @@ void HarfBuzzShaper::setFontFeatures()
         break;
     case FontDescription::EnabledLigaturesState:
         m_features.append(hlig);
+        break;
+    case FontDescription::NormalLigaturesState:
+        break;
+    }
+    static hb_feature_t noCalt = { HB_TAG('c', 'a', 'l', 't'), 0, 0, static_cast<unsigned>(-1) };
+    switch (description.contextualLigaturesState()) {
+    case FontDescription::DisabledLigaturesState:
+        m_features.append(noCalt);
+        break;
+    case FontDescription::EnabledLigaturesState:
+        // calt is on by default
         break;
     case FontDescription::NormalLigaturesState:
         break;
@@ -887,7 +823,7 @@ bool HarfBuzzShaper::shapeHarfBuzzRuns()
         static const uint16_t preContext = ' ';
         hb_buffer_add_utf16(harfBuzzBuffer.get(), &preContext, 1, 1, 0);
 
-        if (m_font->fontDescription().smallCaps() && u_islower(m_normalizedBuffer[currentRun->startIndex()])) {
+        if (m_font->fontDescription().variant() && u_islower(m_normalizedBuffer[currentRun->startIndex()])) {
             String upperText = String(m_normalizedBuffer.get() + currentRun->startIndex(), currentRun->numCharacters()).upper();
             currentFontData = m_font->glyphDataForCharacter(upperText[0], false, SmallCapsVariant).fontData;
             ASSERT(!upperText.is8Bit()); // m_normalizedBuffer is 16 bit, therefore upperText is 16 bit, even after we call makeUpper().

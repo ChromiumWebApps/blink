@@ -138,6 +138,10 @@ var allDescriptors = [
                 className: "WebInspector.AdvancedSearchController.ViewFactory"
             },
             {
+                type: "@WebInspector.DrawerEditor",
+                className: "WebInspector.SourcesPanel.DrawerEditor"
+            },
+            {
                 type: "@WebInspector.Revealer",
                 contextTypes: ["WebInspector.UILocation"],
                 className: "WebInspector.SourcesPanel.UILocationRevealer"
@@ -223,8 +227,14 @@ var allDescriptors = [
                 title: "Console",
                 order: "0",
                 className: "WebInspector.ConsolePanel.ViewFactory"
+            },
+            {
+                type: "@WebInspector.Revealer",
+                contextTypes: ["WebInspector.ConsoleModel"],
+                className: "WebInspector.ConsolePanel.ConsoleRevealer"
             }
-        ]
+        ],
+        scripts: [ "ConsolePanel.js" ]
     },
     {
         extensions: [
@@ -245,6 +255,11 @@ var allDescriptors = [
                 title: "Layers",
                 order: 7,
                 className: "WebInspector.LayersPanel"
+            },
+            {
+                type: "@WebInspector.Revealer",
+                contextTypes: ["WebInspector.LayerTreeSnapshot"],
+                className: "WebInspector.LayersPanel.LayerTreeRevealer"
             }
         ],
         scripts: [ "LayersPanel.js" ]

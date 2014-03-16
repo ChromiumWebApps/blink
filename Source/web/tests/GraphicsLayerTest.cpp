@@ -48,7 +48,7 @@ namespace {
 
 class MockGraphicsLayerClient : public GraphicsLayerClient {
 public:
-    virtual void notifyAnimationStarted(const GraphicsLayer*, double wallClockTime, double monotonicTime) OVERRIDE { }
+    virtual void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime) OVERRIDE { }
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& inClip) OVERRIDE { }
     virtual String debugName(const GraphicsLayer*) OVERRIDE { return String(); }
 };
@@ -134,7 +134,6 @@ public:
     virtual int visibleHeight() const OVERRIDE { return 10; }
     virtual IntSize contentsSize() const OVERRIDE { return IntSize(100, 100); }
     virtual bool scrollbarsCanBeActive() const OVERRIDE { return false; }
-    virtual ScrollableArea* enclosingScrollableArea() const OVERRIDE { return 0; }
     virtual IntRect scrollableAreaBoundingBox() const OVERRIDE { return IntRect(); }
     virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&) OVERRIDE { }
     virtual void invalidateScrollCornerRect(const IntRect&) OVERRIDE { }
@@ -164,18 +163,6 @@ TEST_F(GraphicsLayerTest, applyScrollToScrollableArea)
     m_graphicsLayer->didScroll();
 
     EXPECT_EQ(scrollPosition, WebPoint(scrollableArea.scrollPosition()));
-}
-
-TEST_F(GraphicsLayerTest, DISABLED_setContentsToSolidColor)
-{
-    m_graphicsLayer->setContentsToSolidColor(Color::transparent);
-    EXPECT_FALSE(m_graphicsLayer->contentsLayer());
-
-    m_graphicsLayer->setContentsToSolidColor(Color::white);
-    EXPECT_TRUE(m_graphicsLayer->contentsLayer());
-
-    m_graphicsLayer->setContentsToSolidColor(Color());
-    EXPECT_FALSE(m_graphicsLayer->contentsLayer());
 }
 
 } // namespace

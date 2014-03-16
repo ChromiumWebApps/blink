@@ -70,26 +70,24 @@ bool SVGAnimateMotionElement::hasValidAttributeType()
         return false;
     // Spec: SVG 1.1 section 19.2.15
     // FIXME: svgTag is missing. Needs to be checked, if transforming <svg> could cause problems.
-    if (targetElement->hasTagName(gTag)
-        || targetElement->hasTagName(defsTag)
-        || targetElement->hasTagName(useTag)
-        || targetElement->hasTagName(SVGNames::imageTag)
-        || targetElement->hasTagName(switchTag)
-        || targetElement->hasTagName(pathTag)
-        || targetElement->hasTagName(rectTag)
-        || targetElement->hasTagName(circleTag)
-        || targetElement->hasTagName(ellipseTag)
-        || targetElement->hasTagName(lineTag)
-        || targetElement->hasTagName(polylineTag)
-        || targetElement->hasTagName(polygonTag)
-        || targetElement->hasTagName(textTag)
-        || targetElement->hasTagName(clipPathTag)
-        || targetElement->hasTagName(maskTag)
-        || targetElement->hasTagName(SVGNames::aTag)
-        || targetElement->hasTagName(foreignObjectTag)
-        )
-        return true;
-    return false;
+    return (isSVGGElement(*targetElement)
+        || isSVGDefsElement(*targetElement)
+        || isSVGUseElement(*targetElement)
+        || isSVGImageElement(*targetElement)
+        || isSVGSwitchElement(*targetElement)
+        || isSVGPathElement(*targetElement)
+        || isSVGRectElement(*targetElement)
+        || isSVGCircleElement(*targetElement)
+        || isSVGEllipseElement(*targetElement)
+        || isSVGLineElement(*targetElement)
+        || isSVGPolylineElement(*targetElement)
+        || isSVGPolygonElement(*targetElement)
+        || isSVGTextElement(*targetElement)
+        || isSVGClipPathElement(*targetElement)
+        || isSVGMaskElement(*targetElement)
+        || isSVGAElement(*targetElement)
+        || isSVGForeignObjectElement(*targetElement)
+        );
 }
 
 bool SVGAnimateMotionElement::hasValidAttributeName()
@@ -140,15 +138,11 @@ void SVGAnimateMotionElement::updateAnimationPath()
     m_animationPath = Path();
     bool foundMPath = false;
 
-    for (Element* child = ElementTraversal::firstWithin(*this); child; child = ElementTraversal::nextSibling(*child)) {
-        if (child->hasTagName(SVGNames::mpathTag)) {
-            SVGMPathElement* mPath = toSVGMPathElement(child);
-            SVGPathElement* pathElement = mPath->pathElement();
-            if (pathElement) {
-                updatePathFromGraphicsElement(pathElement, m_animationPath);
-                foundMPath = true;
-                break;
-            }
+    for (SVGMPathElement* mpath = Traversal<SVGMPathElement>::firstChild(*this); mpath; mpath = Traversal<SVGMPathElement>::nextSibling(*mpath)) {
+        if (SVGPathElement* pathElement = mpath->pathElement()) {
+            updatePathFromGraphicsElement(pathElement, m_animationPath);
+            foundMPath = true;
+            break;
         }
     }
 

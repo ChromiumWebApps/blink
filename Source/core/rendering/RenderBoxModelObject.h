@@ -38,7 +38,7 @@ typedef unsigned BorderEdgeFlags;
 enum BackgroundBleedAvoidance {
     BackgroundBleedNone,
     BackgroundBleedShrinkBackground,
-    BackgroundBleedUseTransparencyLayer,
+    BackgroundBleedClipBackground,
     BackgroundBleedBackgroundOverBorder
 };
 
@@ -48,7 +48,8 @@ enum ContentChangeType {
     CanvasChanged,
     CanvasPixelsChanged,
     VideoChanged,
-    FullScreenChanged
+    FullScreenChanged,
+    CanvasContextChanged
 };
 
 class KeyframeList;
@@ -88,7 +89,7 @@ public:
 
     virtual LayerType layerTypeRequired() const OVERRIDE
     {
-        if (isRoot() || isPositioned() || createsGroup() || hasClipPath() || hasTransform() || hasHiddenBackface() || hasReflection() || style()->specifiesColumns())
+        if (isRoot() || isPositioned() || createsGroup() || hasClipPath() || hasTransform() || hasHiddenBackface() || hasReflection() || style()->specifiesColumns() || style()->hasWillChangeCompositingHint() || style()->hasWillChangeGpuRasterizationHint())
             return NormalLayer;
 
         return NoLayer;
@@ -126,6 +127,9 @@ public:
     virtual int borderAfter() const { return style()->borderAfterWidth(); }
     virtual int borderStart() const { return style()->borderStartWidth(); }
     virtual int borderEnd() const { return style()->borderEndWidth(); }
+
+    int borderWidth() const { return borderLeft() + borderRight(); }
+    int borderHeight() const { return borderTop() + borderBottom(); }
 
     LayoutUnit borderAndPaddingStart() const { return borderStart() + paddingStart(); }
     LayoutUnit borderAndPaddingBefore() const { return borderBefore() + paddingBefore(); }
@@ -181,8 +185,6 @@ public:
 
     virtual void mapAbsoluteToLocalPoint(MapCoordinatesFlags, TransformState&) const OVERRIDE;
     virtual const RenderObject* pushMappingToContainer(const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap&) const OVERRIDE;
-
-    void highQualityRepaintTimerFired(Timer<RenderBoxModelObject>*);
 
     virtual void setSelectionState(SelectionState) OVERRIDE;
 
@@ -264,13 +266,13 @@ protected:
 
     LayoutRect localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset);
 
-    static bool shouldAntialiasLines(GraphicsContext*);
-
     static void clipRoundedInnerRect(GraphicsContext*, const LayoutRect&, const RoundedRect& clipRect);
 
     bool hasAutoHeightOrContainingBlockWithAutoHeight() const;
 
 public:
+    static bool shouldAntialiasLines(GraphicsContext*);
+
     // For RenderBlocks and RenderInlines with m_style->styleType() == FIRST_LETTER, this tracks their remaining text fragments
     RenderTextFragment* firstLetterRemainingText() const;
     void setFirstLetterRemainingText(RenderTextFragment*);
@@ -299,6 +301,9 @@ public:
     }
     void moveChildrenTo(RenderBoxModelObject* toBoxModelObject, RenderObject* startChild, RenderObject* endChild, RenderObject* beforeChild, bool fullRemoveInsert = false);
 
+    enum ScaleByEffectiveZoomOrNot { ScaleByEffectiveZoom, DoNotScaleByEffectiveZoom };
+    IntSize calculateImageIntrinsicDimensions(StyleImage*, const IntSize& scaledPositioningAreaSize, ScaleByEffectiveZoomOrNot) const;
+
 private:
     LayoutUnit computedCSSPadding(Length) const;
     virtual bool isBoxModelObject() const OVERRIDE FINAL { return true; }
@@ -306,9 +311,6 @@ private:
     virtual LayoutRect frameRectForStickyPositioning() const = 0;
 
     IntSize calculateFillTileSize(const FillLayer*, const IntSize& scaledPositioningAreaSize) const;
-
-    enum ScaleByEffectiveZoomOrNot { ScaleByEffectiveZoom, DoNotScaleByEffectiveZoom };
-    IntSize calculateImageIntrinsicDimensions(StyleImage*, const IntSize& scaledPositioningAreaSize, ScaleByEffectiveZoomOrNot) const;
 
     RoundedRect getBackgroundRoundedRect(const LayoutRect&, InlineFlowBox*, LayoutUnit inlineBoxWidth, LayoutUnit inlineBoxHeight,
         bool includeLogicalLeftEdge, bool includeLogicalRightEdge) const;

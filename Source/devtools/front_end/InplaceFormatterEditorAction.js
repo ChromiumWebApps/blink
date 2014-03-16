@@ -36,7 +36,7 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
      */
     _updateButton: function(uiSourceCode)
     {
-        this._button.element.enableStyleClass("hidden", !this._isFormattable(uiSourceCode));
+        this._button.element.classList.toggle("hidden", !this._isFormattable(uiSourceCode));
     },
 
     /**
@@ -55,6 +55,8 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
         this._button = new WebInspector.StatusBarButton(WebInspector.UIString("Format"), "sources-toggle-pretty-print-status-bar-item");
         this._button.toggled = false;
         this._button.addEventListener("click", this._formatSourceInPlace, this);
+        this._updateButton(null);
+
         return this._button.element;
     },
 
@@ -64,7 +66,10 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
      */
     _isFormattable: function(uiSourceCode)
     {
-        return !!uiSourceCode && uiSourceCode.contentType() === WebInspector.resourceTypes.Stylesheet;
+        if (!uiSourceCode)
+            return false;
+        return uiSourceCode.contentType() === WebInspector.resourceTypes.Stylesheet
+            || uiSourceCode.project().type() === WebInspector.projectTypes.Snippets;
     },
 
     _formatSourceInPlace: function()

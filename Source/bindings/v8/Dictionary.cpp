@@ -42,7 +42,6 @@
 #include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8Utilities.h"
 #include "bindings/v8/custom/V8ArrayBufferViewCustom.h"
 #include "bindings/v8/custom/V8Uint8ArrayCustom.h"
 #include "modules/indexeddb/IDBKeyRange.h"
@@ -331,7 +330,7 @@ bool Dictionary::get(const String& key, RefPtr<DOMWindow>& value) const
     return true;
 }
 
-bool Dictionary::get(const String& key, RefPtr<Storage>& value) const
+bool Dictionary::get(const String& key, RefPtrWillBeMember<Storage>& value) const
 {
     v8::Local<v8::Value> v8Value;
     if (!getKey(key, v8Value))
@@ -471,7 +470,7 @@ bool Dictionary::get(const String& key, RefPtr<TrackBase>& value) const
 
         // FIXME: this will need to be changed so it can also return an AudioTrack or a VideoTrack once
         // we add them.
-        v8::Handle<v8::Object> track = wrapper->FindInstanceInPrototypeChain(V8TextTrack::domTemplate(m_isolate, worldType(m_isolate)));
+        v8::Handle<v8::Object> track = V8TextTrack::findInstanceInPrototypeChain(wrapper, m_isolate);
         if (!track.IsEmpty())
             source = V8TextTrack::toNative(track);
     }
@@ -530,7 +529,7 @@ bool Dictionary::get(const String& key, RefPtr<EventTarget>& value) const
     // exists on a prototype chain of v8Value.
     if (v8Value->IsObject()) {
         v8::Handle<v8::Object> wrapper = v8::Handle<v8::Object>::Cast(v8Value);
-        v8::Handle<v8::Object> window = wrapper->FindInstanceInPrototypeChain(V8Window::domTemplate(m_isolate, worldTypeInMainThread(m_isolate)));
+        v8::Handle<v8::Object> window = V8Window::findInstanceInPrototypeChain(wrapper, m_isolate);
         if (!window.IsEmpty()) {
             value = toWrapperTypeInfo(window)->toEventTarget(window);
             return true;
@@ -649,20 +648,13 @@ bool Dictionary::convert(ConversionContext& context, const String& key, ArrayVal
     return get(key, value);
 }
 
-bool Dictionary::get(const String& key, RefPtr<DOMError>& value) const
+bool Dictionary::get(const String& key, RefPtrWillBeRawPtr<DOMError>& value) const
 {
     v8::Local<v8::Value> v8Value;
     if (!getKey(key, v8Value))
         return false;
 
-    DOMError* error = 0;
-    if (v8Value->IsObject()) {
-        v8::Handle<v8::Object> wrapper = v8::Handle<v8::Object>::Cast(v8Value);
-        v8::Handle<v8::Object> domError = wrapper->FindInstanceInPrototypeChain(V8DOMError::domTemplate(m_isolate, worldType(m_isolate)));
-        if (!domError.IsEmpty())
-            error = V8DOMError::toNative(domError);
-    }
-    value = error;
+    value = V8DOMError::toNativeWithTypeCheck(m_isolate, v8Value);
     return true;
 }
 
@@ -750,12 +742,7 @@ Dictionary::ConversionContext& Dictionary::ConversionContext::setConversionType(
 
 void Dictionary::ConversionContext::throwTypeError(const String& detail)
 {
-    if (forConstructor()) {
-        exceptionState().throwTypeError(detail);
-    } else {
-        ASSERT(!methodName().isEmpty());
-        exceptionState().throwTypeError(ExceptionMessages::failedToExecute(interfaceName(), methodName(), detail));
-    }
+    exceptionState().throwTypeError(detail);
 }
 
 } // namespace WebCore

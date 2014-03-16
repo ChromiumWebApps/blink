@@ -46,12 +46,20 @@
       # Disable c4267 warnings until we fix size_t to int truncations.
       'msvs_disabled_warnings': [4127, 4510, 4512, 4610, 4706, 4068, 4267],
       'conditions': [
-        ['os_posix==1 and OS!="mac" and OS!="android" and OS!="ios" and linux_use_tcmalloc==1', {
+        # TODO(dmikurube): Kill linux_use_tcmalloc. http://crbug.com/345554
+        ['os_posix==1 and OS!="mac" and OS!="android" and OS!="ios" and ((use_allocator!="none" and use_allocator!="see_use_tcmalloc") or (use_allocator=="see_use_tcmalloc" and linux_use_tcmalloc==1))', {
           'dependencies': [
             '<(DEPTH)/base/base.gyp:base',
             '<(DEPTH)/base/allocator/allocator.gyp:allocator',
           ],
-        }]
+        }],
+        ['OS=="android" and gtest_target_type == "shared_library"', {
+          'type': 'shared_library',
+          'dependencies': [
+            '<(DEPTH)/testing/android/native_test.gyp:native_test_native_code',
+            '<(DEPTH)/tools/android/forwarder2/forwarder.gyp:forwarder2',
+          ],
+        }],
       ]
     },
     {
@@ -84,5 +92,22 @@
         '<@(wtf_unittest_helper_files)',
       ],
     },
+  ],
+  'conditions': [
+    ['OS=="android" and android_webview_build==0 and gtest_target_type=="shared_library"', {
+      'targets': [{
+        'target_name': 'wtf_unittests_apk',
+        'type': 'none',
+        'dependencies': [
+          '<(DEPTH)/base/base.gyp:base_java',
+          '<(DEPTH)/net/net.gyp:net_java',
+          'wtf_unittests',
+        ],
+        'variables': {
+          'test_suite_name': 'wtf_unittests',
+        },
+        'includes': [ '../../../../build/apk_test.gypi' ],
+      }],
+    }],
   ],
 }

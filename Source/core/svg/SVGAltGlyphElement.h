@@ -49,12 +49,7 @@ private:
     explicit SVGAltGlyphElement(Document&);
 
     virtual RenderObject* createRenderer(RenderStyle*) OVERRIDE;
-
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGAltGlyphElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGAltGlyphElement, hasTagName(SVGNames::altGlyphTag));
 
 } // namespace WebCore
 

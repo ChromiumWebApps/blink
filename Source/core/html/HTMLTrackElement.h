@@ -34,7 +34,7 @@ namespace WebCore {
 
 class HTMLMediaElement;
 
-class HTMLTrackElement FINAL : public HTMLElement, public TextTrackClient {
+class HTMLTrackElement FINAL : public HTMLElement {
 public:
     static PassRefPtr<HTMLTrackElement> create(Document&);
 
@@ -69,22 +69,12 @@ private:
 
     HTMLMediaElement* mediaElement() const;
 
-    // TextTrackClient
-    virtual void textTrackModeChanged(TextTrack*) OVERRIDE;
-    virtual void textTrackKindChanged(TextTrack*) OVERRIDE;
-    virtual void textTrackAddCues(TextTrack*, const TextTrackCueList*) OVERRIDE;
-    virtual void textTrackRemoveCues(TextTrack*, const TextTrackCueList*) OVERRIDE;
-    virtual void textTrackAddCue(TextTrack*, PassRefPtr<TextTrackCue>) OVERRIDE;
-    virtual void textTrackRemoveCue(TextTrack*, PassRefPtr<TextTrackCue>) OVERRIDE;
-
     LoadableTextTrack* ensureTrack();
     bool canLoadUrl(const KURL&);
 
     RefPtr<LoadableTextTrack> m_track;
     Timer<HTMLTrackElement> m_loadTimer;
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLTrackElement, hasTagName(HTMLNames::trackTag));
 
 }
 

@@ -45,7 +45,7 @@ using namespace Unicode;
 namespace WebCore {
 
 SVGFontData::SVGFontData(SVGFontFaceElement* fontFaceElement)
-    : CustomFontData(false)
+    : CustomFontData()
     , m_svgFontFaceElement(fontFaceElement)
     , m_horizontalOriginX(fontFaceElement->horizontalOriginX())
     , m_horizontalOriginY(fontFaceElement->horizontalOriginY())
@@ -176,8 +176,8 @@ bool SVGFontData::applySVGGlyphSelection(WidthIterator& iterator, GlyphData& gly
         if (Element* parentRenderObjectElement = toElement(parentRenderObject->node())) {
             language = parentRenderObjectElement->getAttribute(XMLNames::langAttr);
 
-            if (parentRenderObjectElement->hasTagName(SVGNames::altGlyphTag)) {
-                if (!toSVGAltGlyphElement(parentRenderObjectElement)->hasValidGlyphElements(altGlyphNames))
+            if (isSVGAltGlyphElement(*parentRenderObjectElement)) {
+                if (!toSVGAltGlyphElement(*parentRenderObjectElement).hasValidGlyphElements(altGlyphNames))
                     altGlyphNames.clear();
             }
         }
@@ -187,7 +187,7 @@ bool SVGFontData::applySVGGlyphSelection(WidthIterator& iterator, GlyphData& gly
     size_t altGlyphNamesSize = altGlyphNames.size();
     if (altGlyphNamesSize) {
         for (size_t index = 0; index < altGlyphNamesSize; ++index)
-            associatedFontElement->collectGlyphsForGlyphName(altGlyphNames[index], glyphs);
+            associatedFontElement->collectGlyphsForAltGlyphReference(altGlyphNames[index], glyphs);
 
         // Assign the unicodeStringLength now that its known.
         size_t glyphsSize = glyphs.size();
@@ -198,7 +198,6 @@ bool SVGFontData::applySVGGlyphSelection(WidthIterator& iterator, GlyphData& gly
         // Later code will fail if we do not do this and the glyph is incompatible.
         if (glyphsSize) {
             SVGGlyph& svgGlyph = glyphs[0];
-            iterator.setLastGlyphName(svgGlyph.glyphName);
             glyphData.glyph = svgGlyph.tableEntry;
             advanceLength = svgGlyph.unicodeStringLength;
             return true;
@@ -213,13 +212,11 @@ bool SVGFontData::applySVGGlyphSelection(WidthIterator& iterator, GlyphData& gly
             continue;
         if (!isCompatibleGlyph(svgGlyph, isVerticalText, language, arabicForms, currentCharacter, currentCharacter + svgGlyph.unicodeStringLength))
             continue;
-        iterator.setLastGlyphName(svgGlyph.glyphName);
         glyphData.glyph = svgGlyph.tableEntry;
         advanceLength = svgGlyph.unicodeStringLength;
         return true;
     }
 
-    iterator.setLastGlyphName(String());
     return false;
 }
 

@@ -50,12 +50,6 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<TurbulenceT
     return entries;
 }
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFETurbulenceElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFETurbulenceElement::SVGFETurbulenceElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feTurbulenceTag, document)
     , m_baseFrequency(SVGAnimatedNumberOptionalNumber::create(this, SVGNames::baseFrequencyAttr))
@@ -71,7 +65,6 @@ inline SVGFETurbulenceElement::SVGFETurbulenceElement(Document& document)
     addToPropertyMap(m_stitchTiles);
     addToPropertyMap(m_type);
     addToPropertyMap(m_numOctaves);
-    registerAnimatedPropertiesForSVGFETurbulenceElement();
 }
 
 PassRefPtr<SVGFETurbulenceElement> SVGFETurbulenceElement::create(Document& document)

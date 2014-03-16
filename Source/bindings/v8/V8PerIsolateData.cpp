@@ -30,45 +30,44 @@
 #include "bindings/v8/ScriptGCEvent.h"
 #include "bindings/v8/ScriptProfiler.h"
 #include "bindings/v8/V8Binding.h"
+#include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/V8ObjectConstructor.h"
+#include "bindings/v8/V8PerContextData.h"
 #include "bindings/v8/V8ScriptRunner.h"
-#include "gin/public/isolate_holder.h"
 #include "wtf/MainThread.h"
 
 namespace WebCore {
 
-static gin::IsolateHolder* mainIsolateHolder = 0;
+static V8PerIsolateData* mainThreadPerIsolateData = 0;
 
 V8PerIsolateData::V8PerIsolateData(v8::Isolate* isolate)
     : m_isolate(isolate)
-    , m_isMainThread(WTF::isMainThread())
+    , m_isolateHolder(adoptPtr(new gin::IsolateHolder(m_isolate, v8ArrayBufferAllocator())))
     , m_stringCache(adoptPtr(new StringCache()))
+    , m_hiddenValue(adoptPtr(new V8HiddenValue()))
     , m_constructorMode(ConstructorMode::CreateNewObject)
     , m_recursionLevel(0)
 #ifndef NDEBUG
     , m_internalScriptRecursionLevel(0)
 #endif
     , m_gcEventData(adoptPtr(new GCEventData()))
-    , m_shouldCollectGarbageSoon(false)
     , m_performingMicrotaskCheckpoint(false)
 {
-    if (m_isMainThread)
-        mainIsolateHolder = new gin::IsolateHolder(m_isolate, v8ArrayBufferAllocator());
+    if (isMainThread())
+        mainThreadPerIsolateData = this;
 }
 
 V8PerIsolateData::~V8PerIsolateData()
 {
-    if (m_isMainThread) {
-        delete mainIsolateHolder;
-        mainIsolateHolder = 0;
-    }
+    if (isMainThread())
+        mainThreadPerIsolateData = 0;
 }
 
 v8::Isolate* V8PerIsolateData::mainThreadIsolate()
 {
-    ASSERT(WTF::isMainThread());
-    ASSERT(mainIsolateHolder);
-    return mainIsolateHolder->isolate();
+    ASSERT(isMainThread());
+    ASSERT(mainThreadPerIsolateData);
+    return mainThreadPerIsolateData->isolate();
 }
 
 void V8PerIsolateData::ensureInitialized(v8::Isolate* isolate)
@@ -94,67 +93,80 @@ void V8PerIsolateData::dispose(v8::Isolate* isolate)
     isolate->SetData(gin::kEmbedderBlink, 0);
 }
 
-v8::Handle<v8::FunctionTemplate> V8PerIsolateData::toStringTemplate()
+V8PerIsolateData::DOMTemplateMap& V8PerIsolateData::currentDOMTemplateMap()
 {
-    if (m_toStringTemplate.isEmpty())
-        m_toStringTemplate.set(m_isolate, v8::FunctionTemplate::New(m_isolate, constructorOfToString));
-    return m_toStringTemplate.newLocal(m_isolate);
+    if (DOMWrapperWorld::current(m_isolate)->isMainWorld())
+        return m_domTemplateMapForMainWorld;
+    return m_domTemplateMapForNonMainWorld;
 }
 
-v8::Handle<v8::FunctionTemplate> V8PerIsolateData::domTemplate(WrapperWorldType currentWorldType, void* domTemplateKey, v8::FunctionCallback callback, v8::Handle<v8::Value> data, v8::Handle<v8::Signature> signature, int length)
+v8::Handle<v8::FunctionTemplate> V8PerIsolateData::domTemplate(void* domTemplateKey, v8::FunctionCallback callback, v8::Handle<v8::Value> data, v8::Handle<v8::Signature> signature, int length)
 {
-    TemplateMap& templates = templateMap(currentWorldType);
-    TemplateMap::iterator result = templates.find(domTemplateKey);
-    if (result != templates.end())
+    DOMTemplateMap& domTemplateMap = currentDOMTemplateMap();
+    DOMTemplateMap::iterator result = domTemplateMap.find(domTemplateKey);
+    if (result != domTemplateMap.end())
         return result->value.newLocal(m_isolate);
     v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(m_isolate, callback, data, signature, length);
-    templates.add(domTemplateKey, UnsafePersistent<v8::FunctionTemplate>(m_isolate, templ));
+    domTemplateMap.add(domTemplateKey, UnsafePersistent<v8::FunctionTemplate>(m_isolate, templ));
     return templ;
 }
 
-v8::Handle<v8::FunctionTemplate> V8PerIsolateData::existingDOMTemplate(WrapperWorldType currentWorldType, void* domTemplateKey)
+v8::Handle<v8::FunctionTemplate> V8PerIsolateData::existingDOMTemplate(void* domTemplateKey)
 {
-    TemplateMap& templates = templateMap(currentWorldType);
-    TemplateMap::iterator result = templates.find(domTemplateKey);
-    if (result != templates.end())
+    DOMTemplateMap& domTemplateMap = currentDOMTemplateMap();
+    DOMTemplateMap::iterator result = domTemplateMap.find(domTemplateKey);
+    if (result != domTemplateMap.end())
         return result->value.newLocal(m_isolate);
     return v8::Local<v8::FunctionTemplate>();
 }
 
-void V8PerIsolateData::setDOMTemplate(WrapperWorldType currentWorldType, void* domTemplateKey, v8::Handle<v8::FunctionTemplate> templ)
+void V8PerIsolateData::setDOMTemplate(void* domTemplateKey, v8::Handle<v8::FunctionTemplate> templ)
 {
-    templateMap(currentWorldType).add(domTemplateKey, UnsafePersistent<v8::FunctionTemplate>(m_isolate, templ));
+    currentDOMTemplateMap().add(domTemplateKey, UnsafePersistent<v8::FunctionTemplate>(m_isolate, templ));
 }
 
 v8::Local<v8::Context> V8PerIsolateData::ensureRegexContext()
 {
-    if (m_regexContext.isEmpty()) {
-        v8::HandleScope handleScope(m_isolate);
-        m_regexContext.set(m_isolate, v8::Context::New(m_isolate));
-    }
-    return m_regexContext.newLocal(m_isolate);
+    if (!m_perContextDataForRegex)
+        m_perContextDataForRegex = V8PerContextData::create(v8::Context::New(m_isolate), DOMWrapperWorld::create());
+    return m_perContextDataForRegex->context();
 }
 
-bool V8PerIsolateData::hasInstanceInMainWorld(const WrapperTypeInfo* info, v8::Handle<v8::Value> value)
+bool V8PerIsolateData::hasInstance(const WrapperTypeInfo* info, v8::Handle<v8::Value> value)
 {
-    return hasInstance(info, value, m_templatesForMainWorld);
+    return hasInstance(info, value, m_domTemplateMapForMainWorld)
+        || hasInstance(info, value, m_domTemplateMapForNonMainWorld);
 }
 
-bool V8PerIsolateData::hasInstanceInNonMainWorld(const WrapperTypeInfo* info, v8::Handle<v8::Value> value)
+bool V8PerIsolateData::hasInstance(const WrapperTypeInfo* info, v8::Handle<v8::Value> value, DOMTemplateMap& domTemplateMap)
 {
-    return hasInstance(info, value, m_templatesForNonMainWorld);
-}
-
-bool V8PerIsolateData::hasInstance(const WrapperTypeInfo* info, v8::Handle<v8::Value> value, TemplateMap& templates)
-{
-    TemplateMap::iterator result = templates.find(info);
-    if (result == templates.end())
+    DOMTemplateMap::iterator result = domTemplateMap.find(info);
+    if (result == domTemplateMap.end())
         return false;
-    v8::HandleScope handleScope(m_isolate);
-    return result->value.newLocal(m_isolate)->HasInstance(value);
+    v8::Handle<v8::FunctionTemplate> templ = result->value.newLocal(m_isolate);
+    return templ->HasInstance(value);
 }
 
-void V8PerIsolateData::constructorOfToString(const v8::FunctionCallbackInfo<v8::Value>& info)
+v8::Handle<v8::Object> V8PerIsolateData::findInstanceInPrototypeChain(const WrapperTypeInfo* info, v8::Handle<v8::Value> value)
+{
+    v8::Handle<v8::Object> wrapper = findInstanceInPrototypeChain(info, value, m_domTemplateMapForMainWorld);
+    if (!wrapper.IsEmpty())
+        return wrapper;
+    return findInstanceInPrototypeChain(info, value, m_domTemplateMapForNonMainWorld);
+}
+
+v8::Handle<v8::Object> V8PerIsolateData::findInstanceInPrototypeChain(const WrapperTypeInfo* info, v8::Handle<v8::Value> value, DOMTemplateMap& domTemplateMap)
+{
+    if (value.IsEmpty() || !value->IsObject())
+        return v8::Handle<v8::Object>();
+    DOMTemplateMap::iterator result = domTemplateMap.find(info);
+    if (result == domTemplateMap.end())
+        return v8::Handle<v8::Object>();
+    v8::Handle<v8::FunctionTemplate> templ = result->value.newLocal(m_isolate);
+    return v8::Handle<v8::Object>::Cast(value)->FindInstanceInPrototypeChain(templ);
+}
+
+static void constructorOfToString(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     // The DOM constructors' toString functions grab the current toString
     // for Functions by taking the toString function of itself and then
@@ -170,6 +182,13 @@ void V8PerIsolateData::constructorOfToString(const v8::FunctionCallbackInfo<v8::
         return;
     }
     v8SetReturnValue(info, V8ScriptRunner::callInternalFunction(v8::Handle<v8::Function>::Cast(value), info.This(), 0, 0, v8::Isolate::GetCurrent()));
+}
+
+v8::Handle<v8::FunctionTemplate> V8PerIsolateData::toStringTemplate()
+{
+    if (m_toStringTemplate.isEmpty())
+        m_toStringTemplate.set(m_isolate, v8::FunctionTemplate::New(m_isolate, constructorOfToString));
+    return m_toStringTemplate.newLocal(m_isolate);
 }
 
 } // namespace WebCore

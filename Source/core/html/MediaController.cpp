@@ -153,7 +153,7 @@ double MediaController::currentTime() const
     if (m_position == MediaPlayer::invalidTime()) {
         // Some clocks may return times outside the range of [0..duration].
         m_position = max(0.0, min(duration(), m_clock->currentTime()));
-        m_clearPositionTimer.startOneShot(0);
+        m_clearPositionTimer.startOneShot(0, FROM_HERE);
     }
 
     return m_position;
@@ -261,7 +261,7 @@ void MediaController::setVolume(double level, ExceptionState& exceptionState)
     // If the new value is outside the range 0.0 to 1.0 inclusive, then, on setting, an
     // IndexSizeError exception must be raised instead.
     if (level < 0 || level > 1) {
-        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::failedToSet("volume", "MediaController", "The value provided (" + String::number(level) + ") is not in the range [0.0, 1.0]."));
+        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexOutsideRange("volume", level, 0.0, ExceptionMessages::InclusiveBound, 1.0, ExceptionMessages::InclusiveBound));
         return;
     }
 
@@ -539,7 +539,7 @@ void MediaController::scheduleEvent(const AtomicString& eventName)
 {
     m_pendingEvents.append(Event::createCancelable(eventName));
     if (!m_asyncEventTimer.isActive())
-        m_asyncEventTimer.startOneShot(0);
+        m_asyncEventTimer.startOneShot(0, FROM_HERE);
 }
 
 void MediaController::asyncEventTimerFired(Timer<MediaController>*)
@@ -633,7 +633,7 @@ void MediaController::startTimeupdateTimer()
     if (m_timeupdateTimer.isActive())
         return;
 
-    m_timeupdateTimer.startRepeating(maxTimeupdateEventFrequency);
+    m_timeupdateTimer.startRepeating(maxTimeupdateEventFrequency, FROM_HERE);
 }
 
 void MediaController::timeupdateTimerFired(Timer<MediaController>*)

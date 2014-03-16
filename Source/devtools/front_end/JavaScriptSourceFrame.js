@@ -106,8 +106,17 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         var selection = this.textEditor.selection();
         if (!selection || selection.isEmpty())
             return false;
-        WebInspector.evaluateInConsole(this.textEditor.copyRange(selection));
+        this._evaluateInConsole(this.textEditor.copyRange(selection));
         return true;
+    },
+
+    /**
+     * @param {string} expression
+     */
+    _evaluateInConsole: function(expression)
+    {
+        WebInspector.console.show();
+        WebInspector.console.evaluate(expression);
     },
 
     // View events
@@ -155,7 +164,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
             var addToWatchLabel = WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Add to watch" : "Add to Watch");
             contextMenu.appendItem(addToWatchLabel, this._innerAddToWatch.bind(this, selection));
             var evaluateLabel = WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Evaluate in console" : "Evaluate in Console");
-            contextMenu.appendItem(evaluateLabel, WebInspector.evaluateInConsole.bind(WebInspector, selection));
+            contextMenu.appendItem(evaluateLabel, this._evaluateInConsole.bind(this, selection));
             contextMenu.appendSeparator();
         } else if (!this._uiSourceCode.isEditable() && this._uiSourceCode.contentType() === WebInspector.resourceTypes.Script) {
 
@@ -503,27 +512,6 @@ WebInspector.JavaScriptSourceFrame.prototype = {
             this.textEditor.clearExecutionLine();
         delete this._executionLineNumber;
         delete this._executionCallFrame;
-    },
-
-    _lineNumberAfterEditing: function(lineNumber, oldRange, newRange)
-    {
-        var shiftOffset = lineNumber <= oldRange.startLine ? 0 : newRange.linesCount - oldRange.linesCount;
-
-        // Special case of editing the line itself. We should decide whether the line number should move below or not.
-        if (lineNumber === oldRange.startLine) {
-            var whiteSpacesRegex = /^[\s\xA0]*$/;
-            for (var i = 0; lineNumber + i <= newRange.endLine; ++i) {
-                if (!whiteSpacesRegex.test(this.textEditor.line(lineNumber + i))) {
-                    shiftOffset = i;
-                    break;
-                }
-            }
-        }
-
-        var newLineNumber = Math.max(0, lineNumber + shiftOffset);
-        if (oldRange.startLine < lineNumber && lineNumber < oldRange.endLine)
-            newLineNumber = oldRange.startLine;
-        return newLineNumber;
     },
 
     _onMouseDownAndClick: function(isMouseDown, event)

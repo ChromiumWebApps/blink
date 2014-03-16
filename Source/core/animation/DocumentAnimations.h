@@ -41,9 +41,9 @@ class Node;
 
 class DocumentAnimations  {
 public:
-    static void serviceOnAnimationFrame(Document&, double monotonicAnimationStartTime);
-    static void serviceBeforeGetComputedStyle(Node&, CSSPropertyID);
-    static void serviceAfterStyleRecalc(Document&);
+    static void updateAnimationTimingForAnimationFrame(Document&, double monotonicAnimationStartTime);
+    static void updateAnimationTimingForGetComputedStyle(Node&, CSSPropertyID);
+    static void startPendingAnimations(Document&);
 
 private:
     DocumentAnimations() { }

@@ -55,7 +55,7 @@ int HTMLTableRowElement::rowIndex() const
     if (!table)
         return -1;
     table = table->parentNode();
-    if (!table || !table->hasTagName(tableTag))
+    if (!isHTMLTableElement(table))
         return -1;
 
     // To match Firefox, the row indices work like this:
@@ -66,32 +66,29 @@ int HTMLTableRowElement::rowIndex() const
     int rIndex = 0;
 
     if (HTMLTableSectionElement* head = toHTMLTableElement(table)->tHead()) {
-        for (Element* row = ElementTraversal::firstWithin(*head); row; row = ElementTraversal::nextSibling(*row)) {
+        for (HTMLTableRowElement* row = Traversal<HTMLTableRowElement>::firstChild(*head); row; row = Traversal<HTMLTableRowElement>::nextSibling(*row)) {
             if (row == this)
                 return rIndex;
-            if (row->hasTagName(trTag))
-                ++rIndex;
+            ++rIndex;
         }
     }
 
     for (Element* child = ElementTraversal::firstWithin(*table); child; child = ElementTraversal::nextSibling(*child)) {
         if (child->hasTagName(tbodyTag)) {
             HTMLTableSectionElement* section = toHTMLTableSectionElement(child);
-            for (Element* row = ElementTraversal::firstWithin(*section); row; row = ElementTraversal::nextSibling(*row)) {
+            for (HTMLTableRowElement* row = Traversal<HTMLTableRowElement>::firstChild(*section); row; row = Traversal<HTMLTableRowElement>::nextSibling(*row)) {
                 if (row == this)
                     return rIndex;
-                if (row->hasTagName(trTag))
-                    ++rIndex;
+                ++rIndex;
             }
         }
     }
 
     if (HTMLTableSectionElement* foot = toHTMLTableElement(table)->tFoot()) {
-        for (Element* row = ElementTraversal::firstWithin(*foot); row; row = ElementTraversal::nextSibling(*row)) {
+        for (HTMLTableRowElement* row = Traversal<HTMLTableRowElement>::firstChild(*foot); row; row = Traversal<HTMLTableRowElement>::nextSibling(*row)) {
             if (row == this)
                 return rIndex;
-            if (row->hasTagName(trTag))
-                ++rIndex;
+            ++rIndex;
         }
     }
 
@@ -102,13 +99,12 @@ int HTMLTableRowElement::rowIndex() const
 int HTMLTableRowElement::sectionRowIndex() const
 {
     int rIndex = 0;
-    const Node *n = this;
+    const Node* n = this;
     do {
         n = n->previousSibling();
-        if (n && n->hasTagName(trTag))
-            rIndex++;
-    }
-    while (n);
+        if (n && isHTMLTableRowElement(*n))
+            ++rIndex;
+    } while (n);
 
     return rIndex;
 }

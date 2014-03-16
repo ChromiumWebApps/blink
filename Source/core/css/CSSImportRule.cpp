@@ -38,10 +38,15 @@ CSSImportRule::CSSImportRule(StyleRuleImport* importRule, CSSStyleSheet* parent)
 
 CSSImportRule::~CSSImportRule()
 {
+#if !ENABLE(OILPAN)
     if (m_styleSheetCSSOMWrapper)
         m_styleSheetCSSOMWrapper->clearOwnerRule();
+    // MediaList and the parent CSSImportRule are both on the oilpan heap and die together.
+    // Therefor clearing is not needed nor allowed since it could be touching already
+    // finalized memory.
     if (m_mediaCSSOMWrapper)
         m_mediaCSSOMWrapper->clearParentRule();
+#endif // ENABLE(OILPAN)
 }
 
 String CSSImportRule::href() const
@@ -89,6 +94,14 @@ void CSSImportRule::reattach(StyleRuleBase*)
 {
     // FIXME: Implement when enabling caching for stylesheets with import rules.
     ASSERT_NOT_REACHED();
+}
+
+void CSSImportRule::trace(Visitor* visitor)
+{
+    visitor->trace(m_importRule);
+    visitor->trace(m_mediaCSSOMWrapper);
+    visitor->trace(m_styleSheetCSSOMWrapper);
+    CSSRule::trace(visitor);
 }
 
 } // namespace WebCore

@@ -32,6 +32,8 @@
 #define DirectoryReaderSync_h
 
 #include "bindings/v8/ScriptWrappable.h"
+#include "core/fileapi/FileError.h"
+#include "heap/Handle.h"
 #include "modules/filesystem/DirectoryReaderBase.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -43,19 +45,40 @@ namespace WebCore {
 class EntrySync;
 class ExceptionState;
 
-typedef Vector<RefPtr<EntrySync> > EntrySyncVector;
+typedef WillBeHeapVector<RefPtrWillBeMember<EntrySync> > EntrySyncHeapVector;
 
 class DirectoryReaderSync : public DirectoryReaderBase, public ScriptWrappable {
 public:
-    static PassRefPtr<DirectoryReaderSync> create(PassRefPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
+    static PassRefPtrWillBeRawPtr<DirectoryReaderSync> create(PassRefPtrWillBeRawPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
     {
-        return adoptRef(new DirectoryReaderSync(fileSystem, fullPath));
+        return adoptRefWillBeNoop(new DirectoryReaderSync(fileSystem, fullPath));
     }
 
-    EntrySyncVector readEntries(ExceptionState&);
+    virtual ~DirectoryReaderSync();
+
+    EntrySyncHeapVector readEntries(ExceptionState&);
+
+    void addEntries(const EntrySyncHeapVector& entries)
+    {
+        m_entries.appendVector(entries);
+    }
+
+    void setError(FileError::ErrorCode code)
+    {
+        m_errorCode = code;
+    }
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
-    DirectoryReaderSync(PassRefPtr<DOMFileSystemBase>, const String& fullPath);
+    class EntriesCallbackHelper;
+    class ErrorCallbackHelper;
+
+    DirectoryReaderSync(PassRefPtrWillBeRawPtr<DOMFileSystemBase>, const String& fullPath);
+
+    int m_callbacksId;
+    EntrySyncHeapVector m_entries;
+    FileError::ErrorCode m_errorCode;
 };
 
 } // namespace

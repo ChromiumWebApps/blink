@@ -49,11 +49,12 @@ class SQLTransactionCoordinator;
 class DatabaseBackend : public DatabaseBackendBase {
 public:
     DatabaseBackend(PassRefPtr<DatabaseContext>, const String& name, const String& expectedVersion, const String& displayName, unsigned long estimatedSize);
+    virtual void trace(Visitor*) OVERRIDE;
 
     virtual bool openAndVerifyVersion(bool setVersionInNewDatabase, DatabaseError&, String& errorMessage) OVERRIDE FINAL;
     void close();
 
-    PassRefPtr<SQLTransactionBackend> runTransaction(PassRefPtr<SQLTransaction>, bool readOnly, const ChangeVersionData*);
+    PassRefPtr<SQLTransactionBackend> runTransaction(PassRefPtrWillBeRawPtr<SQLTransaction>, bool readOnly, const ChangeVersionData*);
     void scheduleTransactionStep(SQLTransactionBackend*);
     void inProgressTransactionCompleted();
 

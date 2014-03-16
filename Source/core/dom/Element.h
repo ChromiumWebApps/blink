@@ -154,9 +154,10 @@ public:
     const AtomicString& idForStyleResolution() const;
 
     // Internal methods that assume the existence of attribute storage, one should use hasAttributes()
-    // before calling them.
+    // before calling them. This is not a trivial getter and its return value should be cached for
+    // performance.
     size_t attributeCount() const;
-    const Attribute* attributeItem(unsigned index) const;
+    const Attribute& attributeItem(unsigned index) const;
     const Attribute* getAttributeItem(const QualifiedName&) const;
     size_t getAttributeItemIndex(const QualifiedName& name) const { return elementData()->getAttributeItemIndex(name); }
     size_t getAttributeItemIndex(const AtomicString& name, bool shouldIgnoreAttributeCase) const { return elementData()->getAttributeItemIndex(name, shouldIgnoreAttributeCase); }
@@ -284,7 +285,7 @@ public:
     void stripScriptingAttributes(Vector<Attribute>&) const;
 
     const ElementData* elementData() const { return m_elementData.get(); }
-    UniqueElementData* ensureUniqueElementData();
+    UniqueElementData& ensureUniqueElementData();
 
     void synchronizeAllAttributes() const;
 
@@ -403,6 +404,8 @@ public:
 
     virtual String title() const { return String(); }
 
+    virtual const AtomicString& pseudo() const { return shadowPseudoId(); }
+    void setPseudo(const AtomicString& value) { setShadowPseudoId(value); }
     virtual const AtomicString& shadowPseudoId() const;
     void setShadowPseudoId(const AtomicString&);
 
@@ -432,11 +435,9 @@ public:
     bool matches(const String& selectors, ExceptionState&);
     virtual bool shouldAppearIndeterminate() const { return false; }
 
-    DOMTokenList* classList();
+    DOMTokenList& classList();
 
-    DOMStringMap* dataset();
-
-    virtual bool isMediaElement() const { return false; }
+    DOMStringMap& dataset();
 
 #if ENABLE(INPUT_SPEECH)
     virtual bool isInputFieldSpeechButtonElement() const { return false; }
@@ -503,17 +504,17 @@ public:
     void setSavedLayerScrollOffset(const IntSize&);
 
     ActiveAnimations* activeAnimations() const;
-    ActiveAnimations* ensureActiveAnimations();
+    ActiveAnimations& ensureActiveAnimations();
     bool hasActiveAnimations() const;
 
-    InputMethodContext* inputMethodContext();
+    InputMethodContext& inputMethodContext();
     bool hasInputMethodContext() const;
 
     void setPrefix(const AtomicString&, ExceptionState&);
 
     void synchronizeAttribute(const AtomicString& localName) const;
 
-    MutableStylePropertySet* ensureMutableInlineStyle();
+    MutableStylePropertySet& ensureMutableInlineStyle();
     void clearMutableInlineStyleIfEmpty();
 
 protected:
@@ -668,6 +669,32 @@ private:
 };
 
 DEFINE_NODE_TYPE_CASTS(Element, isElementNode());
+template <typename T> bool isElementOfType(const Element&);
+template <typename T> inline bool isElementOfType(const Node& node) { return node.isElementNode() && isElementOfType<const T>(toElement(node)); }
+template <> inline bool isElementOfType<const Element>(const Element&) { return true; }
+
+// Type casting.
+template<typename T> inline T& toElement(Node& node)
+{
+    ASSERT_WITH_SECURITY_IMPLICATION(isElementOfType<const T>(node));
+    return static_cast<T&>(node);
+}
+template<typename T> inline T* toElement(Node* node)
+{
+    ASSERT_WITH_SECURITY_IMPLICATION(!node || isElementOfType<const T>(*node));
+    return static_cast<T*>(node);
+}
+template<typename T> inline const T& toElement(const Node& node)
+{
+    ASSERT_WITH_SECURITY_IMPLICATION(isElementOfType<const T>(node));
+    return static_cast<const T&>(node);
+}
+template<typename T> inline const T* toElement(const Node* node)
+{
+    ASSERT_WITH_SECURITY_IMPLICATION(!node || isElementOfType<const T>(*node));
+    return static_cast<const T*>(node);
+}
+template<typename T, typename U> inline T* toElement(const RefPtr<U>& node) { return toElement<T>(node.get()); }
 
 inline bool isDisabledFormControl(const Node* node)
 {
@@ -763,7 +790,7 @@ inline size_t Element::attributeCount() const
     return elementData()->length();
 }
 
-inline const Attribute* Element::attributeItem(unsigned index) const
+inline const Attribute& Element::attributeItem(unsigned index) const
 {
     ASSERT(elementData());
     return elementData()->attributeItem(index);
@@ -785,11 +812,11 @@ inline bool Element::hasClass() const
     return elementData() && elementData()->hasClass();
 }
 
-inline UniqueElementData* Element::ensureUniqueElementData()
+inline UniqueElementData& Element::ensureUniqueElementData()
 {
     if (!elementData() || !elementData()->isUnique())
         createUniqueElementData();
-    return static_cast<UniqueElementData*>(m_elementData.get());
+    return static_cast<UniqueElementData&>(*m_elementData);
 }
 
 // Put here to make them inline.
@@ -858,6 +885,16 @@ inline bool isShadowHost(const Element* element)
 {
     return element && element->shadow();
 }
+
+// These macros do the same as their NODE equivalents but additionally provide a template specialization
+// for isElementOfType<>() so that the Traversal<> API works for these Element types.
+#define DEFINE_ELEMENT_TYPE_CASTS(thisType, predicate) \
+    template <> inline bool isElementOfType<const thisType>(const Element& element) { return element.predicate; } \
+    DEFINE_NODE_TYPE_CASTS(thisType, predicate)
+
+#define DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType) \
+    template <> inline bool isElementOfType<const thisType>(const Element& element) { return is##thisType(element); } \
+    DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(thisType)
 
 } // namespace
 

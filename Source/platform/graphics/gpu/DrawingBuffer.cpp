@@ -435,6 +435,12 @@ void DrawingBuffer::releaseResources()
         for (size_t i = 0; i < m_textureMailboxes.size(); i++)
             m_context->deleteTexture(m_textureMailboxes[i]->textureId);
 
+        if (m_multisampleFBO)
+            m_context->deleteFramebuffer(m_multisampleFBO);
+
+        if (m_fbo)
+            m_context->deleteFramebuffer(m_fbo);
+
         if (m_multisampleColorBuffer)
             m_context->deleteRenderbuffer(m_multisampleColorBuffer);
 
@@ -447,11 +453,8 @@ void DrawingBuffer::releaseResources()
         if (m_stencilBuffer)
             m_context->deleteRenderbuffer(m_stencilBuffer);
 
-        if (m_multisampleFBO)
-            m_context->deleteFramebuffer(m_multisampleFBO);
-
-        if (m_fbo)
-            m_context->deleteFramebuffer(m_fbo);
+        if (m_colorBuffer)
+            m_context->deleteTexture(m_colorBuffer);
 
         m_context = 0;
     }
@@ -812,7 +815,7 @@ void DrawingBuffer::paintFramebufferToCanvas(int framebuffer, int width, int hei
 
     const SkBitmap& canvasBitmap = imageBuffer->bitmap();
     const SkBitmap* readbackBitmap = 0;
-    ASSERT(canvasBitmap.config() == SkBitmap::kARGB_8888_Config);
+    ASSERT(canvasBitmap.colorType() == kPMColor_SkColorType);
     if (canvasBitmap.width() == width && canvasBitmap.height() == height) {
         // This is the fastest and most common case. We read back
         // directly into the canvas's backing store.
@@ -823,8 +826,7 @@ void DrawingBuffer::paintFramebufferToCanvas(int framebuffer, int width, int hei
         // pixel data. We will then use Skia to rescale this bitmap to
         // the size of the canvas's backing store.
         if (m_resizingBitmap.width() != width || m_resizingBitmap.height() != height) {
-            m_resizingBitmap.setConfig(SkBitmap::kARGB_8888_Config, width, height);
-            if (!m_resizingBitmap.allocPixels())
+            if (!m_resizingBitmap.allocN32Pixels(width, height))
                 return;
         }
         readbackBitmap = &m_resizingBitmap;

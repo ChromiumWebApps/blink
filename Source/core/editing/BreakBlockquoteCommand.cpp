@@ -116,7 +116,7 @@ void BreakBlockquoteCommand::doApply()
         } else if (pos.deprecatedEditingOffset() > 0)
             splitTextNode(textNode, pos.deprecatedEditingOffset());
     } else if (pos.deprecatedEditingOffset() > 0) {
-        Node* childAtOffset = startNode->childNode(pos.deprecatedEditingOffset());
+        Node* childAtOffset = startNode->traverseToChildAt(pos.deprecatedEditingOffset());
         startNode = childAtOffset ? childAtOffset : NodeTraversal::next(*startNode);
         ASSERT(startNode);
     }
@@ -144,11 +144,11 @@ void BreakBlockquoteCommand::doApply()
     for (size_t i = ancestors.size(); i != 0; --i) {
         RefPtr<Element> clonedChild = ancestors[i - 1]->cloneElementWithoutChildren();
         // Preserve list item numbering in cloned lists.
-        if (clonedChild->isElementNode() && clonedChild->hasTagName(olTag)) {
+        if (isHTMLOListElement(*clonedChild)) {
             Node* listChildNode = i > 1 ? ancestors[i - 2].get() : startNode;
             // The first child of the cloned list might not be a list item element,
             // find the first one so that we know where to start numbering.
-            while (listChildNode && !listChildNode->hasTagName(liTag))
+            while (listChildNode && !isHTMLLIElement(*listChildNode))
                 listChildNode = listChildNode->nextSibling();
             if (listChildNode && listChildNode->renderer() && listChildNode->renderer()->isListItem())
                 setNodeAttribute(clonedChild, startAttr, AtomicString::number(toRenderListItem(listChildNode->renderer())->value()));
@@ -174,7 +174,7 @@ void BreakBlockquoteCommand::doApply()
 
         // If the startNode's original parent is now empty, remove it
         Node* originalParent = ancestors.first().get();
-        if (!originalParent->hasChildNodes())
+        if (!originalParent->hasChildren())
             removeNode(originalParent);
     }
 

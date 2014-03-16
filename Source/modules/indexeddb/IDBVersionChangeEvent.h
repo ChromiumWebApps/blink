@@ -26,6 +26,8 @@
 #ifndef IDBVersionChangeEvent_h
 #define IDBVersionChangeEvent_h
 
+#include "bindings/v8/Nullable.h"
+#include "bindings/v8/SerializedScriptValue.h"
 #include "core/events/Event.h"
 #include "modules/indexeddb/IDBAny.h"
 #include "modules/indexeddb/IDBRequest.h"
@@ -36,23 +38,45 @@
 
 namespace WebCore {
 
+struct IDBVersionChangeEventInit : public EventInit {
+    IDBVersionChangeEventInit();
+
+    unsigned long long oldVersion;
+    Nullable<unsigned long long> newVersion;
+};
+
 class IDBVersionChangeEvent FINAL : public Event {
 public:
-    static PassRefPtr<IDBVersionChangeEvent> create(PassRefPtr<IDBAny> oldVersion = IDBAny::createNull(), PassRefPtr<IDBAny> newVersion = IDBAny::createNull(), const AtomicString& eventType = AtomicString(), blink::WebIDBDataLoss = blink::WebIDBDataLossNone, const String& dataLossMessage = String());
-    virtual ~IDBVersionChangeEvent();
+    static PassRefPtr<IDBVersionChangeEvent> create()
+    {
+        return adoptRef(new IDBVersionChangeEvent());
+    }
+    static PassRefPtr<IDBVersionChangeEvent> create(const AtomicString& eventType, unsigned long long oldVersion, const Nullable<unsigned long long>& newVersion, blink::WebIDBDataLoss dataLoss = blink::WebIDBDataLossNone, const String& dataLossMessage = String())
+    {
+        return adoptRef(new IDBVersionChangeEvent(eventType, oldVersion, newVersion, dataLoss, dataLossMessage));
+    }
+    static PassRefPtr<IDBVersionChangeEvent> create(const AtomicString& eventType, const IDBVersionChangeEventInit& initializer)
+    {
+        return adoptRef(new IDBVersionChangeEvent(eventType, initializer));
+    }
 
-    ScriptValue oldVersion(ExecutionContext*) const;
-    ScriptValue newVersion(ExecutionContext*) const;
+    unsigned long long oldVersion() const { return m_oldVersion; }
+    unsigned long long newVersion(bool& isNull) const;
+
     const AtomicString& dataLoss() const;
     const String& dataLossMessage() const { return m_dataLossMessage; }
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
 
-private:
-    IDBVersionChangeEvent(PassRefPtr<IDBAny> oldVersion, PassRefPtr<IDBAny> newVersion, const AtomicString& eventType, blink::WebIDBDataLoss, const String& dataLoss);
+    virtual void trace(Visitor*) OVERRIDE;
 
-    RefPtr<IDBAny> m_oldVersion;
-    RefPtr<IDBAny> m_newVersion;
+private:
+    IDBVersionChangeEvent();
+    IDBVersionChangeEvent(const AtomicString& eventType, unsigned long long oldVersion, const Nullable<unsigned long long>& newVersion, blink::WebIDBDataLoss, const String& dataLoss);
+    IDBVersionChangeEvent(const AtomicString& eventType, const IDBVersionChangeEventInit&);
+
+    unsigned long long m_oldVersion;
+    Nullable<unsigned long long> m_newVersion;
     bool m_dataLoss;
     String m_dataLossMessage;
 };

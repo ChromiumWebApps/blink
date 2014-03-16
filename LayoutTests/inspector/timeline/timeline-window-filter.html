@@ -7,11 +7,12 @@
 
 function test()
 {
+    WebInspector.experimentsSettings.timelineFlameChart.enableForTest();
     var timelineData = InspectorTest.timelineData();
 
-    WebInspector.showPanel("timeline");
+    WebInspector.inspectorView.showPanel("timeline");
     var timeline = WebInspector.panels.timeline;
-
+    var overviewPane = timeline._overviewPane;
     var model = timeline._model;
 
     function createFileReader(file, delegate)
@@ -22,50 +23,87 @@ function test()
     InspectorTest.override(model, "_createFileReader", createFileReader);
 
     model.loadFromFile({}, new WebInspector.Progress());
+    timeline._currentViews[0]._refresh();
+
+    overviewPane._update();
+    InspectorTest.addResult("OverviewPane:");
+    dumpDividers(overviewPane._overviewCalculator);
+    InspectorTest.addResult("");
+
     function dumpRecordsCountForRange(windowLeft, windowRight)
     {
         var view = timeline._currentViews[0];
-        timeline._overviewPane._overviewGrid.setWindow(windowLeft, windowRight);
+        overviewPane._overviewGrid.setWindow(windowLeft, windowRight);
         view._refresh();
-        InspectorTest.addResult("mode = " + view._currentMode);
+        InspectorTest.addResult("mode = " + timeline._presentationModeSetting.get());
         InspectorTest.addResult("range = " + windowLeft + " - " + windowRight);
-        InspectorTest.addResult("time range = " + view._windowFilter._windowStartTime + " - " + view._windowFilter._windowEndTime);
+        InspectorTest.addResult("time range = " + view._windowStartTime + " - " + view._windowEndTime);
         InspectorTest.addResult("records count: " + view._presentationModel.filteredRecords().length);
+        dumpDividers(view._calculator);
         InspectorTest.addResult("");
     }
 
-    timeline._selectPresentationMode(WebInspector.TimelinePanel.Mode.Events);
+    function dumpFlameChartRecordsCountForRange(windowLeft, windowRight)
+    {
+        var mainView = timeline._currentViews[0]._mainView;
+        overviewPane._overviewGrid.setWindow(windowLeft, windowRight);
+        mainView.update();
+        InspectorTest.addResult("mode = " + timeline._presentationModeSetting.get());
+        InspectorTest.addResult("range = " + windowLeft + " - " + windowRight);
+        InspectorTest.addResult("time range = " + mainView._timeWindowLeft + " - " + mainView._timeWindowRight);
+        dumpDividers(mainView._calculator);
+        InspectorTest.addResult("");
+    }
+
+    function dumpDividers(calculator)
+    {
+        var dividers = WebInspector.TimelineGrid.calculateDividerOffsets(calculator, 450).offsets;
+        for (var i = 0; i < dividers.length; ++i)
+            dividers[i] -= calculator.zeroTime();
+        InspectorTest.addResult("divider offsets: [" + dividers.join(", ") + "]. We are expecting round numbers.");
+    }
+
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.Events);
     dumpRecordsCountForRange(0, 1);
     dumpRecordsCountForRange(0.25, 0.75);
     dumpRecordsCountForRange(0.33, 0.66);
 
-    timeline._selectPresentationMode(WebInspector.TimelinePanel.Mode.Memory);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.Memory);
     dumpRecordsCountForRange(0, 1);
     dumpRecordsCountForRange(0.25, 0.75);
     dumpRecordsCountForRange(0.33, 0.66);
 
-    timeline._selectPresentationMode(WebInspector.TimelinePanel.Mode.Frames);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.Frames);
     dumpRecordsCountForRange(0, 1);
     dumpRecordsCountForRange(0.25, 0.75);
     dumpRecordsCountForRange(0.33, 0.66);
 
-    timeline._overviewPane._overviewGrid.setWindow(0.1, 0.9);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.FlameChart);
+    dumpFlameChartRecordsCountForRange(0, 1);
+    dumpFlameChartRecordsCountForRange(0.25, 0.5);
+    dumpFlameChartRecordsCountForRange(0.33, 0.4);
+
+    overviewPane._overviewGrid.setWindow(0.1, 0.9);
 
     InspectorTest.addResult("--------------------------------------------------------");
-    InspectorTest.addResult("mode = " + timeline._currentViews[0]._currentMode);
-    InspectorTest.addResult("time range = " + timeline._currentViews[0]._windowFilter._windowStartTime + " - " + timeline._currentViews[0]._windowFilter._windowEndTime);
-    timeline._selectPresentationMode(WebInspector.TimelinePanel.Mode.Events);
+    InspectorTest.addResult("mode = " + timeline._presentationModeSetting.get());
+    InspectorTest.addResult("time range = " + timeline._windowStartTime + " - " + timeline._windowEndTime);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.Events);
     InspectorTest.addResult("");
 
-    InspectorTest.addResult("mode = " + timeline._currentViews[0]._currentMode);
-    InspectorTest.addResult("time range = " + timeline._currentViews[0]._windowFilter._windowStartTime + " - " + timeline._currentViews[0]._windowFilter._windowEndTime);
-    timeline._selectPresentationMode(WebInspector.TimelinePanel.Mode.Memory);
-    
+    InspectorTest.addResult("mode = " + timeline._presentationModeSetting.get());
+    InspectorTest.addResult("time range = " + timeline._windowStartTime + " - " + timeline._windowEndTime);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.Memory);
     InspectorTest.addResult("");
 
-    InspectorTest.addResult("mode = " + timeline._currentViews[0]._currentMode);
-    InspectorTest.addResult("time range = " + timeline._currentViews[0]._windowFilter._windowStartTime + " - " + timeline._currentViews[0]._windowFilter._windowEndTime);
-    timeline._selectPresentationMode(WebInspector.TimelinePanel.Mode.Frames);
+    InspectorTest.addResult("mode = " + timeline._presentationModeSetting.get());
+    InspectorTest.addResult("time range = " + timeline._windowStartTime + " - " + timeline._windowEndTime);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.Frames);
+    InspectorTest.addResult("");
+
+    InspectorTest.addResult("mode = " + timeline._presentationModeSetting.get());
+    InspectorTest.addResult("time range = " + timeline._windowStartTime + " - " + timeline._windowEndTime);
+    timeline._onModeChanged(WebInspector.TimelinePanel.Mode.FlameChart);
 
     InspectorTest.completeTest();
 }

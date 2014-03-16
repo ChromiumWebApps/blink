@@ -36,6 +36,12 @@ InspectorTest.Output = {   // override in window.initialize_yourName
     }
 };
 
+InspectorTest.toViewMessage = function(message)
+{
+    WebInspector.inspectorView.panel("console");
+    return WebInspector.ConsolePanel._view()._messageToViewMessage.get(message);
+}
+
 InspectorTest.completeTest = function()
 {
     InspectorTest.Output.testComplete();
@@ -45,14 +51,16 @@ InspectorTest.evaluateInConsole = function(code, callback)
 {
     callback = InspectorTest.safeWrap(callback);
 
-    WebInspector.consoleView.visible = true;
-    WebInspector.consoleView.prompt.text = code;
+    WebInspector.inspectorView.panel("console");
+    var consoleView = WebInspector.ConsolePanel._view();
+    consoleView.visible = true;
+    consoleView.prompt.text = code;
     var event = document.createEvent("KeyboardEvent");
     event.initKeyboardEvent("keydown", true, true, null, "Enter", "");
-    WebInspector.consoleView.prompt.proxyElement.dispatchEvent(event);
+    consoleView.prompt.proxyElement.dispatchEvent(event);
     InspectorTest.addConsoleSniffer(
         function(commandResult) {
-            callback(commandResult.toMessageElement().textContent);
+            callback(InspectorTest.toViewMessage(commandResult).toMessageElement().textContent);
         });
 }
 
@@ -210,13 +218,13 @@ InspectorTest.navigate = function(url, callback)
 {
     InspectorTest._pageLoadedCallback = InspectorTest.safeWrap(callback);
 
-    WebInspector.panel("network")._reset();
+    WebInspector.inspectorView.panel("network")._reset();
     InspectorTest.evaluateInConsole("window.location = '" + url + "'");
 }
 
 InspectorTest.recordNetwork = function()
 {
-    WebInspector.panel("network")._networkLogView._recordButton.toggled = true;
+    WebInspector.inspectorView.panel("network")._networkLogView._recordButton.toggled = true;
 }
 
 InspectorTest.hardReloadPage = function(callback, scriptToEvaluateOnLoad, scriptPreprocessor)
@@ -358,11 +366,12 @@ InspectorTest.addSniffer = function(receiver, methodName, override, opt_sticky)
 
 InspectorTest.addConsoleSniffer = function(override, opt_sticky)
 {
-    var sniffer = function (messageIndex) {
-        var message = WebInspector.console.messages[messageIndex];
+    var sniffer = function (viewMessage) {
+        var message = viewMessage.consoleMessage();
         override(message);
     };
 
+    WebInspector.inspectorView.panel("console");
     InspectorTest.addSniffer(WebInspector.ConsoleView.prototype, "_showConsoleMessage", sniffer, opt_sticky);
 }
 
@@ -587,7 +596,6 @@ function runTest(enableWatchDogWhileDebugging)
 
     testRunner.dumpAsText();
     testRunner.waitUntilDone();
-    testRunner.display();
 
     function initializeFrontend(initializationFunctions)
     {
@@ -644,6 +652,15 @@ function runTest(enableWatchDogWhileDebugging)
         }
         window._watchDogTimer = setTimeout(watchDog, 20000);
     }
+}
+
+function runTestAfterDisplay(enableWatchDogWhileDebugging)
+{
+    if (!window.testRunner)
+        return;
+
+    testRunner.waitUntilDone();
+    requestAnimationFrame(runTest.bind(this, enableWatchDogWhileDebugging));
 }
 
 function didEvaluateForTestInFrontend(callId)

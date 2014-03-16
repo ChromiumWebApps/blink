@@ -206,7 +206,6 @@ public:
     {
         if (atomicIncrement(&m_unparkedThreadCount) > 0)
             checkAndPark(state);
-        state->performPendingSweep();
     }
 
 private:
@@ -229,6 +228,7 @@ private:
 
 ThreadState::ThreadState()
     : m_thread(currentThread())
+    , m_persistents(adoptPtr(new PersistentAnchor()))
     , m_startOfStack(reinterpret_cast<intptr_t*>(getStackStart()))
     , m_endOfStack(reinterpret_cast<intptr_t*>(getStackStart()))
     , m_safePointScopeMarker(0)
@@ -239,13 +239,12 @@ ThreadState::ThreadState()
     , m_sweepInProgress(false)
     , m_noAllocationCount(0)
     , m_inGC(false)
-    , m_heapContainsCache(new HeapContainsCache())
+    , m_heapContainsCache(adoptPtr(new HeapContainsCache()))
     , m_isCleaningUp(false)
 {
     ASSERT(!**s_threadSpecific);
     **s_threadSpecific = this;
 
-    m_persistents = new PersistentAnchor();
     m_stats.clear();
     m_statsAfterLastGC.clear();
     // First allocate the general heap, second iterate through to
@@ -253,15 +252,16 @@ ThreadState::ThreadState()
     m_heaps[GeneralHeap] = new ThreadHeap<FinalizedHeapObjectHeader>(this);
     for (int i = GeneralHeap + 1; i < NumberOfHeaps; i++)
         m_heaps[i] = new ThreadHeap<HeapObjectHeader>(this);
+
+    CallbackStack::init(&m_weakCallbackStack);
 }
 
 ThreadState::~ThreadState()
 {
     checkThread();
+    CallbackStack::shutdown(&m_weakCallbackStack);
     for (int i = GeneralHeap; i < NumberOfHeaps; i++)
         delete m_heaps[i];
-    delete m_persistents;
-    m_persistents = 0;
     deleteAllValues(m_interruptors);
     **s_threadSpecific = 0;
 }
@@ -298,7 +298,7 @@ void ThreadState::cleanup()
     // After this GC we expect heap to be empty because
     // preCleanup tasks should have cleared all persistent
     // handles that were externally owned.
-    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
+    Heap::collectAllGarbage(ThreadState::NoHeapPointersOnStack);
 
     // Verify that all heaps are empty now.
     for (int i = 0; i < NumberOfHeaps; i++)
@@ -313,6 +313,8 @@ void ThreadState::cleanup()
 void ThreadState::detach()
 {
     ThreadState* state = current();
+    state->cleanup();
+
     // Enter safe point before trying to acquire threadAttachMutex
     // to avoid dead lock if another thread is preparing for GC, has acquired
     // threadAttachMutex and waiting for other threads to pause or reach a
@@ -393,6 +395,17 @@ bool ThreadState::checkAndMarkPointer(Visitor* visitor, Address address)
     return false;
 }
 
+void ThreadState::pushWeakObjectPointerCallback(void* object, WeakPointerCallback callback)
+{
+    CallbackStack::Item* slot = m_weakCallbackStack->allocateEntry(&m_weakCallbackStack);
+    *slot = CallbackStack::Item(object, callback);
+}
+
+bool ThreadState::popAndInvokeWeakPointerCallback(Visitor* visitor)
+{
+    return m_weakCallbackStack->popAndInvokeCallback(&m_weakCallbackStack, visitor);
+}
+
 PersistentNode* ThreadState::globalRoots()
 {
     AtomicallyInitializedStatic(PersistentNode*, anchor = new PersistentAnchor);
@@ -419,7 +432,10 @@ static bool increasedEnoughToGC(size_t newSize, size_t oldSize)
 // into account.
 bool ThreadState::shouldGC()
 {
-    return increasedEnoughToGC(m_stats.totalObjectSpace(), m_statsAfterLastGC.totalObjectSpace());
+    // Do not GC during sweeping. We allow allocation during
+    // finalization, but those allocations are not allowed
+    // to lead to nested garbage collections.
+    return !m_sweepInProgress && increasedEnoughToGC(m_stats.totalObjectSpace(), m_statsAfterLastGC.totalObjectSpace());
 }
 
 // Trigger conservative garbage collection on a 100% increase in size,
@@ -436,7 +452,10 @@ static bool increasedEnoughToForceConservativeGC(size_t newSize, size_t oldSize)
 // into account.
 bool ThreadState::shouldForceConservativeGC()
 {
-    return increasedEnoughToForceConservativeGC(m_stats.totalObjectSpace(), m_statsAfterLastGC.totalObjectSpace());
+    // Do not GC during sweeping. We allow allocation during
+    // finalization, but those allocations are not allowed
+    // to lead to nested garbage collections.
+    return !m_sweepInProgress && increasedEnoughToForceConservativeGC(m_stats.totalObjectSpace(), m_statsAfterLastGC.totalObjectSpace());
 }
 
 bool ThreadState::sweepRequested()
@@ -528,18 +547,19 @@ BaseHeapPage* ThreadState::heapPageFromAddress(Address address)
     return page; // 0 if not found.
 }
 
-bool ThreadState::contains(Address address)
+BaseHeapPage* ThreadState::contains(Address address)
 {
     // Check heap contains cache first.
     BaseHeapPage* page = heapPageFromAddress(address);
     if (page)
-        return true;
+        return page;
     // If no heap page was found check large objects.
     for (int i = 0; i < NumberOfHeaps; i++) {
-        if (m_heaps[i]->largeHeapObjectFromAddress(address))
-            return true;
+        page = m_heaps[i]->largeHeapObjectFromAddress(address);
+        if (page)
+            return page;
     }
-    return false;
+    return 0;
 }
 
 void ThreadState::getStats(HeapStats& stats)
@@ -626,6 +646,7 @@ void ThreadState::leaveSafePoint()
     m_atSafePoint = false;
     m_stackState = HeapPointersOnStack;
     clearSafePointScopeMarker();
+    performPendingSweep();
 }
 
 void ThreadState::copyStackUntilSafePointScope()
@@ -651,14 +672,15 @@ void ThreadState::performPendingSweep()
 {
     if (sweepRequested()) {
         m_sweepInProgress = true;
-        {
-            // Diallow allocation during sweeping and finalization.
-            enterNoAllocationScope();
-            m_stats.clear(); // Sweeping will recalculate the stats
-            for (int i = 0; i < NumberOfHeaps; i++)
-                m_heaps[i]->sweep();
-            leaveNoAllocationScope();
-        }
+        // Disallow allocation during weak processing.
+        enterNoAllocationScope();
+        // Perform thread-specific weak processing.
+        while (popAndInvokeWeakPointerCallback(Heap::s_markingVisitor)) { }
+        leaveNoAllocationScope();
+        // Perform sweeping and finalization.
+        m_stats.clear(); // Sweeping will recalculate the stats
+        for (int i = 0; i < NumberOfHeaps; i++)
+            m_heaps[i]->sweep();
         getStats(m_statsAfterLastGC);
         m_sweepInProgress = false;
         clearGCRequested();

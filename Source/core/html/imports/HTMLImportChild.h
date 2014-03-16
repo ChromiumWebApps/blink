@@ -56,7 +56,7 @@ class HTMLLinkElement;
 //
 class HTMLImportChild FINAL : public HTMLImport, public HTMLImportLoaderClient, public ResourceOwner<RawResource> {
 public:
-    HTMLImportChild(const KURL&, bool createdByParser);
+    HTMLImportChild(Document&, const KURL&, bool sync);
     virtual ~HTMLImportChild();
 
     HTMLLinkElement* link() const;
@@ -73,6 +73,7 @@ public:
     virtual Document* document() const OVERRIDE;
     virtual void wasDetachedFromDocument() OVERRIDE;
     virtual void didFinishParsing() OVERRIDE;
+    virtual void didRemoveAllPendingStylesheet() OVERRIDE;
     virtual bool isDone() const OVERRIDE;
     virtual bool hasLoader() const OVERRIDE;
     virtual bool ownsLoader() const OVERRIDE;
@@ -102,6 +103,7 @@ private:
     void shareLoader(HTMLImportChild*);
     void ensureLoader();
 
+    Document& m_master;
     KURL m_url;
     CustomElementMicrotaskImportStep* m_customElementMicrotaskStep;
     RefPtr<HTMLImportLoader> m_loader;

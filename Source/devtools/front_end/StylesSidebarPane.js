@@ -73,7 +73,7 @@ WebInspector.StylesSidebarPane = function(computedStylePane, setPseudoClassCallb
     WebInspector.settings.showUserAgentStyles.addChangeListener(this._showUserAgentStylesSettingChanged.bind(this));
     WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameResized, this._frameResized, this);
     this.element.classList.add("styles-pane");
-    this.element.enableStyleClass("show-user-styles", WebInspector.settings.showUserAgentStyles.get());
+    this.element.classList.toggle("show-user-styles", WebInspector.settings.showUserAgentStyles.get());
     this.element.addEventListener("mousemove", this._mouseMovedOverElement.bind(this), false);
     document.body.addEventListener("keydown", this._keyDown.bind(this), false);
     document.body.addEventListener("keyup", this._keyUp.bind(this), false);
@@ -191,8 +191,8 @@ WebInspector.StylesSidebarPane.prototype = {
             return;
 
         var hasPseudoType = !!this.node.pseudoType();
-        this._elementStateButton.enableStyleClass("hidden", hasPseudoType);
-        this._elementStatePane.enableStyleClass("expanded", !hasPseudoType && this._elementStateButton.classList.contains("toggled"));
+        this._elementStateButton.classList.toggle("hidden", hasPseudoType);
+        this._elementStatePane.classList.toggle("expanded", !hasPseudoType && this._elementStateButton.classList.contains("toggled"));
 
         var nodePseudoState = this._forcedPseudoClasses;
         if (!nodePseudoState)
@@ -600,15 +600,14 @@ WebInspector.StylesSidebarPane.prototype = {
                 if (foundImportantProperties.hasOwnProperty(canonicalName))
                     continue;
 
-                var isImportant = property.priority.length;
-                if (!isImportant && usedProperties.hasOwnProperty(canonicalName))
+                if (!property.important && usedProperties.hasOwnProperty(canonicalName))
                     continue;
 
                 var isKnownProperty = propertyToEffectiveRule.hasOwnProperty(canonicalName);
                 if (!isKnownProperty && styleRule.isInherited && !inheritedPropertyToNode[canonicalName])
                     inheritedPropertyToNode[canonicalName] = styleRule.parentNode;
 
-                if (isImportant) {
+                if (property.important) {
                     if (styleRule.isInherited && isKnownProperty && styleRule.parentNode !== inheritedPropertyToNode[canonicalName])
                         continue;
 
@@ -733,7 +732,7 @@ WebInspector.StylesSidebarPane.prototype = {
      */
     addBlankSection: function()
     {
-        var blankSection = new WebInspector.BlankStylePropertiesSection(this, this.node ? WebInspector.DOMPresentationUtils.fullQualifiedSelector(this.node, true) : "");
+        var blankSection = new WebInspector.BlankStylePropertiesSection(this, this.node ? WebInspector.DOMPresentationUtils.simpleSelector(this.node) : "");
 
         var elementStyleSection = this.sections[0][1];
         this._sectionsContainer.insertBefore(blankSection.element, elementStyleSection.element.nextSibling);
@@ -762,8 +761,8 @@ WebInspector.StylesSidebarPane.prototype = {
         var buttonToggled = !this._elementStateButton.classList.contains("toggled");
         if (buttonToggled)
             this.expand();
-        this._elementStateButton.enableStyleClass("toggled", buttonToggled);
-        this._elementStatePane.enableStyleClass("expanded", buttonToggled);
+        this._elementStateButton.classList.toggle("toggled", buttonToggled);
+        this._elementStatePane.classList.toggle("expanded", buttonToggled);
     },
 
     _createElementStatePane: function()
@@ -826,7 +825,7 @@ WebInspector.StylesSidebarPane.prototype = {
     _showUserAgentStylesSettingChanged: function(event)
     {
         var showStyles = /** @type {boolean} */ (event.data);
-        this.element.enableStyleClass("show-user-styles", showStyles);
+        this.element.classList.toggle("show-user-styles", showStyles);
     },
 
     willHide: function()
@@ -1205,7 +1204,7 @@ WebInspector.StylePropertiesSection.prototype = {
                 }
 
                 // Generate synthetic shorthand we have a value for.
-                var shorthandProperty = new WebInspector.CSSProperty(style, style.allProperties.length, shorthand, style.shorthandValue(shorthand), "", "style", true, true);
+                var shorthandProperty = new WebInspector.CSSProperty(style, style.allProperties.length, shorthand, style.shorthandValue(shorthand), false, false, true, true);
                 var overloaded = property.inactive || this.isPropertyOverloaded(property.name, true);
                 var item = new WebInspector.StylePropertyTreeElement(this._parentPane, this.styleRule, style, shorthandProperty,  /* isShorthand */ true, /* inherited */ false, overloaded);
                 this.propertiesTreeOutline.appendChild(item);
@@ -1698,7 +1697,21 @@ WebInspector.BlankStylePropertiesSection.prototype = {
         if (newContent)
             newContent = newContent.trim();
         this._parentPane._userOperation = true;
-        WebInspector.cssModel.addRule(this.pane.node.id, newContent, successCallback.bind(this), this.editingSelectorCancelled.bind(this));
+
+        WebInspector.cssModel.requestViaInspectorStylesheet(this.pane.node, viaInspectorCallback.bind(this));
+
+        /**
+         * @this {WebInspector.BlankStylePropertiesSection}
+         * @param {?WebInspector.CSSStyleSheetHeader} styleSheetHeader
+         */
+        function viaInspectorCallback(styleSheetHeader)
+        {
+            if (!styleSheetHeader) {
+                this.editingSelectorCancelled();
+                return;
+            }
+            WebInspector.cssModel.addRule(styleSheetHeader.id, this.pane.node, newContent, successCallback.bind(this), this.editingSelectorCancelled.bind(this));
+        }
     },
 
     editingSelectorCancelled: function()
@@ -1820,13 +1833,6 @@ WebInspector.StylePropertyTreeElementBase.prototype = {
         if (text.startsWith("/*"))
             text = text.substring(2).trim();
         return text;
-    },
-
-    get priority()
-    {
-        if (this.disabled)
-            return ""; // rely upon raw text to render it in the value field
-        return this.property.priority;
     },
 
     get value()

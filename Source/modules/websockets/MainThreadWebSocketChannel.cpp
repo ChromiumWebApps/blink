@@ -36,7 +36,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileReaderLoader.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/CookieJar.h"
 #include "core/loader/FrameLoader.h"
@@ -177,7 +177,7 @@ void MainThreadWebSocketChannel::close(int code, const String& reason)
         return;
     startClosingHandshake(code, reason);
     if (!m_closingTimer.isActive())
-        m_closingTimer.startOneShot(2 * TCPMaximumSegmentLifetime);
+        m_closingTimer.startOneShot(2 * TCPMaximumSegmentLifetime, FROM_HERE);
 }
 
 void MainThreadWebSocketChannel::clearDocument()
@@ -193,6 +193,14 @@ void MainThreadWebSocketChannel::disconnectHandle()
         return;
     m_hasCalledDisconnectOnHandle = true;
     m_handle->disconnect();
+}
+
+void MainThreadWebSocketChannel::callDidReceiveMessageError()
+{
+    if (!m_client || m_didFailOfClientAlreadyRun)
+        return;
+    m_didFailOfClientAlreadyRun = true;
+    m_client->didReceiveMessageError();
 }
 
 void MainThreadWebSocketChannel::fail(const String& reason, MessageLevel level, const String& sourceURL, unsigned lineNumber)
@@ -213,11 +221,9 @@ void MainThreadWebSocketChannel::fail(const String& reason, MessageLevel level, 
     m_perMessageDeflate.didFail();
     m_hasContinuousFrame = false;
     m_continuousFrameData.clear();
-    if (!m_didFailOfClientAlreadyRun) {
-        m_didFailOfClientAlreadyRun = true;
-        if (m_client)
-            m_client->didReceiveMessageError();
-    }
+
+    callDidReceiveMessageError();
+
     if (m_state != ChannelClosed)
         disconnectHandle(); // Will call didCloseSocketStream().
 }
@@ -243,7 +249,7 @@ void MainThreadWebSocketChannel::resume()
 {
     m_suspended = false;
     if ((!m_buffer.isEmpty() || (m_state == ChannelClosed)) && m_client && !m_resumeTimer.isActive())
-        m_resumeTimer.startOneShot(0);
+        m_resumeTimer.startOneShot(0, FROM_HERE);
 }
 
 void MainThreadWebSocketChannel::willOpenSocketStream(SocketStreamHandle* handle)
@@ -347,11 +353,12 @@ void MainThreadWebSocketChannel::didFailSocketStream(SocketStreamHandle* handle,
     if (failingURL.isNull())
         failingURL = m_handshake->url().string();
     WTF_LOG(Network, "Error Message: '%s', FailURL: '%s'", message.utf8().data(), failingURL.utf8().data());
+
     RefPtr<WebSocketChannel> protect(this);
-    if (m_client && (m_state != ChannelClosing && m_state != ChannelClosed) && !m_didFailOfClientAlreadyRun) {
-        m_didFailOfClientAlreadyRun = true;
-        m_client->didReceiveMessageError();
-    }
+
+    if (m_state != ChannelClosing && m_state != ChannelClosed)
+        callDidReceiveMessageError();
+
     if (m_state != ChannelClosed)
         disconnectHandle();
 }

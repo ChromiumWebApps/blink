@@ -35,8 +35,6 @@
 #include "WebNode.h"
 #include "WebURLLoaderOptions.h"
 #include "public/platform/WebCanvas.h"
-#include "public/platform/WebFileSystem.h"
-#include "public/platform/WebFileSystemType.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebReferrerPolicy.h"
 #include "public/platform/WebURL.h"
@@ -101,19 +99,6 @@ public:
     // It is valid to pass a null client pointer.
     BLINK_EXPORT static WebFrame* create(WebFrameClient*);
 
-    // Same as create(WebFrameClient*) except the embedder may explicitly pass
-    // in the identifier for the WebFrame. This can be used with
-    // generateEmbedderIdentifier() if constructing the WebFrameClient for this
-    // frame requires the identifier.
-    //
-    // FIXME: Move the embedderIdentifier concept fully to the embedder and
-    // remove this factory method.
-    BLINK_EXPORT static WebFrame* create(WebFrameClient*, long long embedderIdentifier);
-
-    // Generates an identifier suitable for use with create() above.
-    // Never returns -1.
-    BLINK_EXPORT static long long generateEmbedderIdentifier();
-
     // Returns the number of live WebFrame objects, used for leak checking.
     BLINK_EXPORT static int instanceCount();
 
@@ -147,11 +132,6 @@ public:
     // top-most frame) the actual name may have a suffix appended to make the
     // frame name unique within the hierarchy.
     virtual void setName(const WebString&) = 0;
-
-    // A globally unique identifier for this frame.
-    // FIXME: Convert users to embedderIdentifier() and remove identifier().
-    long long identifier() const { return embedderIdentifier(); }
-    virtual long long embedderIdentifier() const = 0;
 
     // The urls of the given combination types of favicon (if any) specified by
     // the document loaded in this frame. The iconTypesMask is a bit-mask of
@@ -211,7 +191,7 @@ public:
     virtual WebFrame* opener() const = 0;
 
     // Sets the frame that opened this one or 0 if there is none.
-    virtual void setOpener(const WebFrame*) = 0;
+    virtual void setOpener(WebFrame*) = 0;
 
     // Reset the frame that opened this frame to 0.
     // This is executed between layout tests runs
@@ -324,7 +304,7 @@ public:
     // canExecute().
     virtual v8::Handle<v8::Value> callFunctionEvenIfScriptDisabled(
         v8::Handle<v8::Function>,
-        v8::Handle<v8::Object>,
+        v8::Handle<v8::Value>,
         int argc,
         v8::Handle<v8::Value> argv[]) = 0;
 
@@ -334,23 +314,6 @@ public:
     // the "main world" or an "isolated world" is, then you probably shouldn't
     // be calling this API.
     virtual v8::Local<v8::Context> mainWorldScriptContext() const = 0;
-
-    // Creates an instance of file system object.
-    virtual v8::Handle<v8::Value> createFileSystem(WebFileSystemType,
-        const WebString& name,
-        const WebString& rootURL) = 0;
-    // Creates an instance of serializable file system object.
-    // FIXME: Remove this API after we have a better way of creating serialized
-    // file system object.
-    virtual v8::Handle<v8::Value> createSerializableFileSystem(WebFileSystemType,
-        const WebString& name,
-        const WebString& rootURL) = 0;
-    // Creates an instance of file or directory entry object.
-    virtual v8::Handle<v8::Value> createFileEntry(WebFileSystemType,
-        const WebString& fileSystemName,
-        const WebString& fileSystemRootURL,
-        const WebString& filePath,
-        bool isDirectory) = 0;
 
     // Navigation ----------------------------------------------------------
 

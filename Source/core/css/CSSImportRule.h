@@ -23,6 +23,7 @@
 #define CSSImportRule_h
 
 #include "core/css/CSSRule.h"
+#include "heap/Handle.h"
 
 namespace WebCore {
 
@@ -33,7 +34,10 @@ class StyleRuleImport;
 
 class CSSImportRule FINAL : public CSSRule {
 public:
-    static PassRefPtr<CSSImportRule> create(StyleRuleImport* rule, CSSStyleSheet* sheet) { return adoptRef(new CSSImportRule(rule, sheet)); }
+    static PassRefPtrWillBeRawPtr<CSSImportRule> create(StyleRuleImport* rule, CSSStyleSheet* sheet)
+    {
+        return adoptRefWillBeNoop(new CSSImportRule(rule, sheet));
+    }
 
     virtual ~CSSImportRule();
 
@@ -45,12 +49,14 @@ public:
     MediaList* media() const;
     CSSStyleSheet* styleSheet() const;
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     CSSImportRule(StyleRuleImport*, CSSStyleSheet*);
 
-    RefPtr<StyleRuleImport> m_importRule;
-    mutable RefPtr<MediaList> m_mediaCSSOMWrapper;
-    mutable RefPtr<CSSStyleSheet> m_styleSheetCSSOMWrapper;
+    RefPtrWillBeMember<StyleRuleImport> m_importRule;
+    mutable RefPtrWillBeMember<MediaList> m_mediaCSSOMWrapper;
+    mutable RefPtrWillBeMember<CSSStyleSheet> m_styleSheetCSSOMWrapper;
 };
 
 DEFINE_CSS_RULE_TYPE_CASTS(CSSImportRule, IMPORT_RULE);

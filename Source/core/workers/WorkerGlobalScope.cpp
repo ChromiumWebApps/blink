@@ -51,6 +51,7 @@
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
@@ -92,21 +93,15 @@ WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, W
 
 WorkerGlobalScope::~WorkerGlobalScope()
 {
-    ASSERT(thread()->isCurrentThread());
-
-    // Make sure we have no observers.
-    notifyObserversOfStop();
-
-    // Notify proxy that we are going away. This can free the WorkerThread object, so do not access it after this.
-    thread()->workerReportingProxy().workerGlobalScopeDestroyed();
-
-    setClient(0);
+#if !ENABLE(OILPAN)
+    dispose();
+#endif
 }
 
-void WorkerGlobalScope::applyContentSecurityPolicyFromString(const String& policy, ContentSecurityPolicy::HeaderType contentSecurityPolicyType)
+void WorkerGlobalScope::applyContentSecurityPolicyFromString(const String& policy, ContentSecurityPolicyHeaderType contentSecurityPolicyType)
 {
     setContentSecurityPolicy(ContentSecurityPolicy::create(this));
-    contentSecurityPolicy()->didReceiveHeader(policy, contentSecurityPolicyType, ContentSecurityPolicy::HeaderSourceHTTP);
+    contentSecurityPolicy()->didReceiveHeader(policy, contentSecurityPolicyType, ContentSecurityPolicyHeaderSourceHTTP);
 }
 
 ExecutionContext* WorkerGlobalScope::executionContext() const
@@ -192,6 +187,29 @@ void WorkerGlobalScope::clearInspector()
     m_workerInspectorController.clear();
 }
 
+void WorkerGlobalScope::willStopActiveDOMObjects()
+{
+    lifecycleNotifier().notifyWillStopActiveDOMObjects();
+}
+
+void WorkerGlobalScope::dispose()
+{
+    ASSERT(thread()->isCurrentThread());
+
+    // Notify proxy that we are going away. This can free the WorkerThread object, so do not access it after this.
+    thread()->workerReportingProxy().workerGlobalScopeDestroyed();
+
+    clearScript();
+    clearInspector();
+    setClient(0);
+
+    // The thread reference isn't currently cleared, as the execution
+    // context's thread is accessed by GCed lifetime objects when
+    // they're finalized.
+    // FIXME: oilpan: avoid by explicitly removing the WorkerGlobalScope
+    // as an observable context right here.
+}
+
 void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState& exceptionState)
 {
     ASSERT(contentSecurityPolicy());
@@ -273,53 +291,6 @@ bool WorkerGlobalScope::isJSExecutionForbidden() const
     return m_script->isExecutionForbidden();
 }
 
-WorkerGlobalScope::Observer::Observer(WorkerGlobalScope* context)
-    : m_context(context)
-{
-    ASSERT(m_context && m_context->isContextThread());
-    m_context->registerObserver(this);
-}
-
-WorkerGlobalScope::Observer::~Observer()
-{
-    if (!m_context)
-        return;
-    ASSERT(m_context->isContextThread());
-    m_context->unregisterObserver(this);
-}
-
-void WorkerGlobalScope::Observer::stopObserving()
-{
-    if (!m_context)
-        return;
-    ASSERT(m_context->isContextThread());
-    m_context->unregisterObserver(this);
-    m_context = 0;
-}
-
-void WorkerGlobalScope::registerObserver(Observer* observer)
-{
-    ASSERT(observer);
-    m_workerObservers.add(observer);
-}
-
-void WorkerGlobalScope::unregisterObserver(Observer* observer)
-{
-    ASSERT(observer);
-    m_workerObservers.remove(observer);
-}
-
-void WorkerGlobalScope::notifyObserversOfStop()
-{
-    HashSet<Observer*>::iterator iter = m_workerObservers.begin();
-    while (iter != m_workerObservers.end()) {
-        WorkerGlobalScope::Observer* observer = *iter;
-        observer->stopObserving();
-        observer->notifyStop();
-        iter = m_workerObservers.begin();
-    }
-}
-
 bool WorkerGlobalScope::idleNotification()
 {
     return script()->idleNotification();
@@ -328,6 +299,16 @@ bool WorkerGlobalScope::idleNotification()
 WorkerEventQueue* WorkerGlobalScope::eventQueue() const
 {
     return m_eventQueue.get();
+}
+
+void WorkerGlobalScope::trace(Visitor* visitor)
+{
+    visitor->trace(m_console);
+    visitor->trace(m_location);
+    visitor->trace(m_navigator);
+#if ENABLE(OILPAN)
+    HeapSupplementable<WorkerGlobalScope>::trace(visitor);
+#endif
 }
 
 } // namespace WebCore

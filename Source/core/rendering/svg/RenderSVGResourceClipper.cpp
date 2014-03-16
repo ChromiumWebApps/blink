@@ -26,8 +26,8 @@
 
 #include "RuntimeEnabledFeatures.h"
 #include "SVGNames.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/rendering/svg/SVGResources.h"
@@ -271,9 +271,9 @@ PassRefPtr<DisplayList> RenderSVGResourceClipper::asDisplayList(GraphicsContext*
     PaintBehavior oldBehavior = frame()->view()->paintBehavior();
     frame()->view()->setPaintBehavior(oldBehavior | PaintBehaviorRenderingSVGMask);
 
-    for (Element* childElement = ElementTraversal::firstWithin(*element()); childElement; childElement = ElementTraversal::nextSibling(*childElement)) {
+    for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element()); childElement; childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
         RenderObject* renderer = childElement->renderer();
-        if (!childElement->isSVGElement() || !renderer)
+        if (!renderer)
             continue;
 
         RenderStyle* style = renderer->style();
@@ -281,13 +281,13 @@ PassRefPtr<DisplayList> RenderSVGResourceClipper::asDisplayList(GraphicsContext*
             continue;
 
         WindRule newClipRule = style->svgStyle()->clipRule();
-        bool isUseElement = childElement->hasTagName(SVGNames::useTag);
+        bool isUseElement = isSVGUseElement(*childElement);
         if (isUseElement) {
-            SVGUseElement* useElement = toSVGUseElement(childElement);
-            renderer = useElement->rendererClipChild();
+            SVGUseElement& useElement = toSVGUseElement(*childElement);
+            renderer = useElement.rendererClipChild();
             if (!renderer)
                 continue;
-            if (!useElement->hasAttribute(SVGNames::clip_ruleAttr))
+            if (!useElement.hasAttribute(SVGNames::clip_ruleAttr))
                 newClipRule = renderer->style()->svgStyle()->clipRule();
         }
 
@@ -311,11 +311,11 @@ PassRefPtr<DisplayList> RenderSVGResourceClipper::asDisplayList(GraphicsContext*
 void RenderSVGResourceClipper::calculateClipContentRepaintRect()
 {
     // This is a rough heuristic to appraise the clip size and doesn't consider clip on clip.
-    for (Element* childElement = ElementTraversal::firstWithin(*element()); childElement; childElement = ElementTraversal::nextSibling(*childElement)) {
+    for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element()); childElement; childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
         RenderObject* renderer = childElement->renderer();
-        if (!childElement->isSVGElement() || !renderer)
+        if (!renderer)
             continue;
-        if (!renderer->isSVGShape() && !renderer->isSVGText() && !childElement->hasTagName(SVGNames::useTag))
+        if (!renderer->isSVGShape() && !renderer->isSVGText() && !isSVGUseElement(*childElement))
             continue;
         RenderStyle* style = renderer->style();
         if (!style || style->display() == NONE || style->visibility() != VISIBLE)
@@ -341,11 +341,11 @@ bool RenderSVGResourceClipper::hitTestClipContent(const FloatRect& objectBoundin
 
     point = clipPathElement->animatedLocalTransform().inverse().mapPoint(point);
 
-    for (Element* childElement = ElementTraversal::firstWithin(*element()); childElement; childElement = ElementTraversal::nextSibling(*childElement)) {
+    for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element()); childElement; childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
         RenderObject* renderer = childElement->renderer();
-        if (!childElement->isSVGElement() || !renderer)
+        if (!renderer)
             continue;
-        if (!renderer->isSVGShape() && !renderer->isSVGText() && !childElement->hasTagName(SVGNames::useTag))
+        if (!renderer->isSVGShape() && !renderer->isSVGText() && !isSVGUseElement(*childElement))
             continue;
         IntPoint hitPoint;
         HitTestResult result(hitPoint);

@@ -47,14 +47,16 @@ public:
     unsigned length() const;
     CSSRule* item(unsigned index) const;
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 protected:
     CSSGroupingRule(StyleRuleGroup* groupRule, CSSStyleSheet* parent);
 
     void appendCSSTextForItems(StringBuilder&) const;
 
-    RefPtr<StyleRuleGroup> m_groupRule;
-    mutable Vector<RefPtr<CSSRule> > m_childRuleCSSOMWrappers;
-    mutable OwnPtr<CSSRuleList> m_ruleListCSSOMWrapper;
+    RefPtrWillBeMember<StyleRuleGroup> m_groupRule;
+    mutable WillBeHeapVector<RefPtrWillBeMember<CSSRule> > m_childRuleCSSOMWrappers;
+    mutable OwnPtrWillBeMember<CSSRuleList> m_ruleListCSSOMWrapper;
 };
 
 } // namespace WebCore

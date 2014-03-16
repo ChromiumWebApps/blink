@@ -33,8 +33,8 @@ frontend_domain_class = (
 """    class $domainClassName {
     public:
         $domainClassName(InspectorFrontendChannel* inspectorFrontendChannel) : m_inspectorFrontendChannel(inspectorFrontendChannel) { }
-${frontendDomainMethodDeclarations}        void setInspectorFrontendChannel(InspectorFrontendChannel* inspectorFrontendChannel) { m_inspectorFrontendChannel = inspectorFrontendChannel; }
-        InspectorFrontendChannel* getInspectorFrontendChannel() { return m_inspectorFrontendChannel; }
+${frontendDomainMethodDeclarations}
+        void flush() { m_inspectorFrontendChannel->flush(); }
     private:
         InspectorFrontendChannel* m_inspectorFrontendChannel;
     };
@@ -69,7 +69,7 @@ frontend_method = ("""void InspectorFrontend::$domainName::$eventName($parameter
     RefPtr<JSONObject> jsonMessage = JSONObject::create();
     jsonMessage->setString("method", "$domainName.$eventName");
 $code    if (m_inspectorFrontendChannel)
-        m_inspectorFrontendChannel->sendMessageToFrontend(jsonMessage->toJSONString());
+        m_inspectorFrontendChannel->sendMessageToFrontend(jsonMessage.release());
 }
 """)
 
@@ -101,23 +101,23 @@ frontend_h = (
 #define InspectorFrontend_h
 
 #include "InspectorTypeBuilder.h"
+#include "core/inspector/InspectorFrontendChannel.h"
 #include "platform/JSONValues.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 
-class InspectorFrontendChannel;
-
 typedef String ErrorString;
 
 class InspectorFrontend {
 public:
     InspectorFrontend(InspectorFrontendChannel*);
-
+    InspectorFrontendChannel* channel() { return m_inspectorFrontendChannel; }
 
 $domainClassList
 private:
+    InspectorFrontendChannel* m_inspectorFrontendChannel;
 ${fieldDeclarations}};
 
 } // namespace WebCore
@@ -360,7 +360,7 @@ void InspectorBackendDispatcherImpl::sendResponse(long callId, PassRefPtr<JSONOb
     responseMessage->setObject("result", result);
     responseMessage->setNumber("id", callId);
     if (m_inspectorFrontendChannel)
-        m_inspectorFrontendChannel->sendMessageToFrontend(responseMessage->toJSONString());
+        m_inspectorFrontendChannel->sendMessageToFrontend(responseMessage.release());
 }
 
 void InspectorBackendDispatcher::reportProtocolError(const long* const callId, CommonErrorCode code, const String& errorMessage) const
@@ -395,7 +395,7 @@ void InspectorBackendDispatcherImpl::reportProtocolError(const long* const callI
     else
         message->setValue("id", JSONValue::null());
     if (m_inspectorFrontendChannel)
-        m_inspectorFrontendChannel->sendMessageToFrontend(message->toJSONString());
+        m_inspectorFrontendChannel->sendMessageToFrontend(message.release());
 }
 
 template<typename R, typename V, typename V0>
@@ -530,7 +530,9 @@ frontend_cpp = (
 namespace WebCore {
 
 InspectorFrontend::InspectorFrontend(InspectorFrontendChannel* inspectorFrontendChannel)
-    : $constructorInit{
+    : m_inspectorFrontendChannel(inspectorFrontendChannel)
+    , $constructorInit
+{
 }
 
 $methods
@@ -661,6 +663,11 @@ public:
         return static_cast<Array<T>*>(static_cast<JSONArrayBase*>(array.get()));
     }
 
+    void concat(PassRefPtr<Array<T> > array)
+    {
+        return ArrayItemHelper<T>::Traits::concat(this->openAccessors(), array->openAccessors());
+    }
+
 #if $validatorIfdefName
     static void assertCorrectValue(JSONValue* value)
     {
@@ -678,6 +685,12 @@ struct StructItemTraits {
     static void pushRefPtr(JSONArray* array, PassRefPtr<JSONValue> value)
     {
         array->pushValue(value);
+    }
+
+    static void concat(JSONArray* array, JSONArray* anotherArray)
+    {
+        for (JSONArray::iterator it = anotherArray->begin(); it != anotherArray->end(); ++it)
+            array->pushValue(*it);
     }
 
 #if $validatorIfdefName

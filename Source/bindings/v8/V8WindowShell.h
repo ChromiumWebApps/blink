@@ -35,7 +35,6 @@
 #include "bindings/v8/ScopedPersistent.h"
 #include "bindings/v8/V8PerContextData.h"
 #include "bindings/v8/WrapperTypeInfo.h"
-#include "gin/public/context_holder.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
@@ -48,17 +47,17 @@
 namespace WebCore {
 
 class DOMWindow;
-class Frame;
+class LocalFrame;
 class HTMLDocument;
 class SecurityOrigin;
 
-// V8WindowShell represents all the per-global object state for a Frame that
+// V8WindowShell represents all the per-global object state for a LocalFrame that
 // persist between navigations.
 class V8WindowShell {
 public:
-    static PassOwnPtr<V8WindowShell> create(Frame*, PassRefPtr<DOMWrapperWorld>, v8::Isolate*);
+    static PassOwnPtr<V8WindowShell> create(LocalFrame*, PassRefPtr<DOMWrapperWorld>, v8::Isolate*);
 
-    v8::Local<v8::Context> context() const { return m_contextHolder ? m_contextHolder->context() : v8::Local<v8::Context>(); }
+    v8::Local<v8::Context> context() const { return m_perContextData ? m_perContextData->context() : v8::Local<v8::Context>(); }
 
     // Update document object of the frame.
     void updateDocument();
@@ -70,20 +69,19 @@ public:
     // (e.g., after setting docoument.domain).
     void updateSecurityOrigin(SecurityOrigin*);
 
-    bool isContextInitialized() { return m_contextHolder; }
+    bool isContextInitialized() { return m_perContextData; }
     bool isGlobalInitialized() { return !m_global.isEmpty(); }
 
     bool initializeIfNeeded();
     void updateDocumentWrapper(v8::Handle<v8::Object> wrapper);
 
     void clearForNavigation();
-    void clearForClose(bool destroyGlobal);
+    void clearForClose();
 
     DOMWrapperWorld* world() { return m_world.get(); }
-    static bool contextHasCorrectPrototype(v8::Handle<v8::Context>);
 
 private:
-    V8WindowShell(Frame*, PassRefPtr<DOMWrapperWorld>, v8::Isolate*);
+    V8WindowShell(LocalFrame*, PassRefPtr<DOMWrapperWorld>, v8::Isolate*);
     bool initialize();
 
     enum GlobalDetachmentBehavior {
@@ -106,13 +104,10 @@ private:
 
     static V8WindowShell* enteredIsolatedWorldContext();
 
-    Frame* m_frame;
+    LocalFrame* m_frame;
     RefPtr<DOMWrapperWorld> m_world;
     v8::Isolate* m_isolate;
-
     OwnPtr<V8PerContextData> m_perContextData;
-
-    OwnPtr<gin::ContextHolder> m_contextHolder;
     ScopedPersistent<v8::Object> m_global;
     ScopedPersistent<v8::Object> m_document;
 };

@@ -37,14 +37,14 @@
 #include "WebViewImpl.h"
 #include "WebWidgetClient.h"
 #include "core/dom/ContextFeatures.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/loader/EmptyClients.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/Chrome.h"
 #include "core/page/DOMWindowPagePopup.h"
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "core/page/PagePopupClient.h"
 #include "core/frame/Settings.h"
@@ -213,7 +213,7 @@ bool WebPagePopupImpl::initializePage()
     static ContextFeaturesClient* pagePopupFeaturesClient =  new PagePopupFeaturesClient();
     provideContextFeaturesTo(*m_page, pagePopupFeaturesClient);
     static FrameLoaderClient* emptyFrameLoaderClient =  new EmptyFrameLoaderClient();
-    RefPtr<Frame> frame = Frame::create(FrameInit::create(0, &m_page->frameHost(), emptyFrameLoaderClient));
+    RefPtr<LocalFrame> frame = LocalFrame::create(emptyFrameLoaderClient, &m_page->frameHost(), 0);
     frame->setView(FrameView::create(frame.get()));
     frame->init();
     frame->view()->resize(m_popupClient->contentSize());
@@ -294,15 +294,15 @@ void WebPagePopupImpl::animate(double)
 
 void WebPagePopupImpl::enterForceCompositingMode(bool enter)
 {
+    if (!m_page)
+        return;
     if (m_page->settings().forceCompositingMode() == enter)
         return;
 
     TRACE_EVENT1("webkit", "WebPagePopupImpl::enterForceCompositingMode", "enter", enter);
     m_page->settings().setForceCompositingMode(enter);
     if (enter) {
-        if (!m_page)
-            return;
-        Frame* mainFrame = m_page->mainFrame();
+        LocalFrame* mainFrame = m_page->mainFrame();
         if (!mainFrame)
             return;
         mainFrame->view()->updateCompositingLayersAfterStyleChange();
@@ -313,7 +313,8 @@ void WebPagePopupImpl::didExitCompositingMode()
 {
     setIsAcceleratedCompositingActive(false);
     m_widgetClient->didInvalidateRect(IntRect(0, 0, size().width, size().height));
-    m_page->mainFrame()->document()->setNeedsStyleRecalc(SubtreeStyleChange);
+    if (m_page)
+        m_page->mainFrame()->document()->setNeedsStyleRecalc(SubtreeStyleChange);
 }
 
 void WebPagePopupImpl::willCloseLayerTreeView()
@@ -361,7 +362,7 @@ bool WebPagePopupImpl::handleGestureEvent(const WebGestureEvent& event)
 {
     if (m_closing || !m_page || !m_page->mainFrame() || !m_page->mainFrame()->view())
         return false;
-    Frame& frame = *m_page->mainFrame();
+    LocalFrame& frame = *m_page->mainFrame();
     return frame.eventHandler().handleGestureEvent(PlatformGestureEventBuilder(frame.view(), event));
 }
 
@@ -399,7 +400,6 @@ void WebPagePopupImpl::close()
 void WebPagePopupImpl::closePopup()
 {
     if (m_page) {
-        m_page->clearPageGroup();
         m_page->mainFrame()->loader().stopAllLoaders();
         ASSERT(m_page->mainFrame()->domWindow());
         DOMWindowPagePopup::uninstall(*m_page->mainFrame()->domWindow());

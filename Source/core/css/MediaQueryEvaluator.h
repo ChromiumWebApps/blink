@@ -28,16 +28,18 @@
 #ifndef MediaQueryEvaluator_h
 #define MediaQueryEvaluator_h
 
+#include "heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
-class Frame;
+class LocalFrame;
 class MediaQueryExp;
 class MediaQueryResult;
 class MediaQuerySet;
 class RenderStyle;
 
-typedef Vector<RefPtr<MediaQueryResult> > MediaQueryResultList;
+typedef WillBeHeapVector<RefPtrWillBeMember<MediaQueryResult> > MediaQueryResultList;
+typedef WillBePersistentHeapVector<RefPtrWillBeMember<MediaQueryResult> > WillBePersistentMediaQueryResultList;
 
 /**
  * Class that evaluates css media queries as defined in
@@ -64,15 +66,15 @@ public:
      *  Evaluator  returns true for acceptedMediaType and returns value of \mediafeatureResult
      *  for any media features
      */
-    MediaQueryEvaluator(const AtomicString& acceptedMediaType, bool mediaFeatureResult = false);
+    MediaQueryEvaluator(const String& acceptedMediaType, bool mediaFeatureResult = false);
     MediaQueryEvaluator(const char* acceptedMediaType, bool mediaFeatureResult = false);
 
     /** Creates evaluator which evaluates full media queries */
-    MediaQueryEvaluator(const AtomicString& acceptedMediaType, Frame*, RenderStyle*);
+    MediaQueryEvaluator(const String& acceptedMediaType, LocalFrame*, RenderStyle*);
 
     ~MediaQueryEvaluator();
 
-    bool mediaTypeMatch(const AtomicString& mediaTypeToMatch) const;
+    bool mediaTypeMatch(const String& mediaTypeToMatch) const;
     bool mediaTypeMatchSpecific(const char* mediaTypeToMatch) const;
 
     /** Evaluates a list of media queries */
@@ -82,8 +84,8 @@ public:
     bool eval(const MediaQueryExp*) const;
 
 private:
-    AtomicString m_mediaType;
-    Frame* m_frame; // Not owned.
+    String m_mediaType;
+    LocalFrame* m_frame; // Not owned.
     RefPtr<RenderStyle> m_style;
     bool m_expResult;
 };

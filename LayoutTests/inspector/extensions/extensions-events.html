@@ -19,7 +19,7 @@ function initialize_extensionsSidebarTest()
 
     InspectorTest._extensionSidebar = function()
     {
-        return WebInspector.panel("elements")._extensionSidebarPanes[0];
+        return WebInspector.inspectorView.panel("elements")._extensionSidebarPanes[0];
     }
 }
 
@@ -80,7 +80,7 @@ function extension_testOnNavigated(nextTest)
         if (loadCount !== urls.length)
             return;
         if (loadCount === 1)
-            evaluateOnFrontend("InspectorTest.navigate(WebInspector.inspectedPageURL.substring(0, WebInspector.inspectedPageURL.indexOf('?')), reply)", onLoad);
+            evaluateOnFrontend("InspectorTest.navigate(WebInspector.resourceTreeModel.inspectedPageURL().substring(0, WebInspector.resourceTreeModel.inspectedPageURL().indexOf('?')), reply)", onLoad);
         else {
             webInspector.network.onNavigated.removeListener(onNavigated);
             for (var i = 0; i < urls.length; ++i)
@@ -94,7 +94,7 @@ function extension_testOnNavigated(nextTest)
         processEvent();
     }
     webInspector.network.onNavigated.addListener(onNavigated);
-    evaluateOnFrontend("InspectorTest.navigate(WebInspector.inspectedPageURL + '?navigated', reply)", onLoad);
+    evaluateOnFrontend("InspectorTest.navigate(WebInspector.resourceTreeModel.inspectedPageURL() + '?navigated', reply)", onLoad);
 }
 
 function extension_testViewShowHide(nextTest)
@@ -167,7 +167,7 @@ function extension_testTimelineEvents(nextTest)
     webInspector.timeline.onEventRecorded.addListener(onTimelineEvent);
 
     // Trigger a relayout.
-    webInspector.inspectedWindow.eval("document.body.style.float = 'left'; testRunner.display();");
+    webInspector.inspectedWindow.eval("document.body.style.float = 'left'; document.body.offsetTop;");
 }
 
 </script>

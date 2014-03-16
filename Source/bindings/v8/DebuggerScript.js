@@ -71,9 +71,10 @@ DebuggerScript.getFunctionScopes = function(fun)
     var result = [];
     for (var i = 0; i < count; i++) {
         var scopeMirror = mirror.scope(i);
+        var scopeType = scopeMirror.scopeType();
         result[i] = {
-            type: scopeMirror.scopeType(),
-            object: DebuggerScript._buildScopeObject(scopeMirror)
+            type: scopeType,
+            object: DebuggerScript._buildScopeObject(scopeType, scopeMirror.details_.object())
         };
     }
     return result;
@@ -310,43 +311,83 @@ DebuggerScript.isEvalCompilation = function(eventData)
     return (script.compilationType() === Debug.ScriptCompilationType.Eval);
 }
 
+// NOTE: This function is performance critical, as it can be run on every
+// statement that generates an async event (like addEventListener) to support
+// asynchronous call stacks. Thus, when possible, initialize the data lazily.
 DebuggerScript._frameMirrorToJSCallFrame = function(frameMirror, callerFrame)
 {
-    // Get function name and display name.
-    var funcMirror;
-    var displayName;
-    try {
-        funcMirror = frameMirror.func();
-        if (funcMirror) {
-            var valueMirror = funcMirror.property("displayName").value();
-            if (valueMirror && valueMirror.isString())
-                displayName = valueMirror.value();
-        }
-    } catch(e) {
-    }
-    var functionName;
-    if (funcMirror)
-        functionName = displayName || funcMirror.name() || funcMirror.inferredName();
+    // Stuff that can not be initialized lazily (i.e. valid while paused with a valid break_id).
+    // The frameMirror and scopeMirror can be accessed only while paused on the debugger.
+    var funcMirror = frameMirror.func();
 
-    // Get script ID.
-    var script = funcMirror.script();
-    var sourceID = script && script.id();
+    var sourcePosition = frameMirror.details_.sourcePosition();
 
-    // Get location.
-    var location  = frameMirror.sourceLocation();
-
-    // Get this object.
     var thisObject = frameMirror.details_.receiver();
 
     var isAtReturn = !!frameMirror.details_.isAtReturn();
     var returnValue = isAtReturn ? frameMirror.details_.returnValue() : undefined;
 
-    var scopeChain = [];
-    var scopeType = [];
-    for (var i = 0; i < frameMirror.scopeCount(); i++) {
-        var scopeMirror = frameMirror.scope(i);
-        scopeType.push(scopeMirror.scopeType());
-        scopeChain.push(DebuggerScript._buildScopeObject(scopeMirror));
+    var scopeMirrors = frameMirror.allScopes();
+    var scopeTypes = new Array(scopeMirrors.length);
+    var scopeObjects = new Array(scopeMirrors.length);
+    for (var i = 0; i < scopeMirrors.length; ++i) {
+        var scopeMirror = scopeMirrors[i];
+        scopeTypes[i] = scopeMirror.scopeType();
+        scopeObjects[i] = scopeMirror.details_.object();
+    }
+
+    // Calculated lazily.
+    var location;
+    var scopeChain;
+
+    function lazyScopeChain()
+    {
+        if (!scopeChain) {
+            scopeChain = [];
+            for (var i = 0; i < scopeObjects.length; ++i)
+                scopeChain.push(DebuggerScript._buildScopeObject(scopeTypes[i], scopeObjects[i]));
+            scopeObjects = null; // Free for GC.
+        }
+        return scopeChain;
+    }
+
+    function ensureLocation()
+    {
+        if (!location) {
+            var script = funcMirror.script();
+            if (script)
+                location = script.locationFromPosition(sourcePosition, true);
+            if (!location)
+                location = { line: 0, column: 0 };
+        }
+        return location;
+    }
+
+    function line()
+    {
+        return ensureLocation().line;
+    }
+
+    function column()
+    {
+        return ensureLocation().column;
+    }
+
+    function sourceID()
+    {
+        var script = funcMirror.script();
+        return script && script.id();
+    }
+
+    function functionName()
+    {
+        if (!funcMirror.resolved())
+            return undefined;
+        var displayName;
+        var valueMirror = funcMirror.property("displayName").value();
+        if (valueMirror && valueMirror.isString())
+            displayName = valueMirror.value();
+        return displayName || funcMirror.name() || funcMirror.inferredName();
     }
 
     function evaluate(expression)
@@ -388,12 +429,12 @@ DebuggerScript._frameMirrorToJSCallFrame = function(frameMirror, callerFrame)
 
     return {
         "sourceID": sourceID,
-        "line": location ? location.line : 0,
-        "column": location ? location.column : 0,
+        "line": line,
+        "column": column,
         "functionName": functionName,
         "thisObject": thisObject,
-        "scopeChain": scopeChain,
-        "scopeType": scopeType,
+        "scopeChain": lazyScopeChain,
+        "scopeType": scopeTypes,
         "evaluate": evaluate,
         "caller": callerFrame,
         "restart": restart,
@@ -405,36 +446,35 @@ DebuggerScript._frameMirrorToJSCallFrame = function(frameMirror, callerFrame)
     };
 }
 
-DebuggerScript._buildScopeObject = function(scopeMirror) {
-    var scopeObject;
-    switch (scopeMirror.scopeType()) {
+DebuggerScript._buildScopeObject = function(scopeType, scopeObject)
+{
+    var result;
+    switch (scopeType) {
     case ScopeType.Local:
     case ScopeType.Closure:
     case ScopeType.Catch:
         // For transient objects we create a "persistent" copy that contains
         // the same properties.
-        scopeObject = {};
         // Reset scope object prototype to null so that the proto properties
         // don't appear in the local scope section.
-        scopeObject.__proto__ = null;
-        var scopeObjectMirror = scopeMirror.scopeObject();
-        var properties = scopeObjectMirror.properties();
+        result = { __proto__: null };
+        var properties = MakeMirror(scopeObject, true /* transient */).properties();
         for (var j = 0; j < properties.length; j++) {
             var name = properties[j].name();
             if (name.charAt(0) === ".")
                 continue; // Skip internal variables like ".arguments"
-            scopeObject[name] = properties[j].value_;
+            result[name] = properties[j].value_;
         }
         break;
     case ScopeType.Global:
     case ScopeType.With:
-        scopeObject = scopeMirror.details_.object();
+        result = scopeObject;
         break;
     case ScopeType.Block:
         // Unsupported yet. Mustn't be reachable.
         break;
     }
-    return scopeObject;
+    return result;
 }
 
 return DebuggerScript;

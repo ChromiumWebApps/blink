@@ -29,12 +29,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFEOffsetElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feOffsetTag, document)
     , m_dx(SVGAnimatedNumber::create(this, SVGNames::dxAttr, SVGNumber::create()))
@@ -46,7 +40,6 @@ inline SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
     addToPropertyMap(m_dx);
     addToPropertyMap(m_dy);
     addToPropertyMap(m_in1);
-    registerAnimatedPropertiesForSVGFEOffsetElement();
 }
 
 PassRefPtr<SVGFEOffsetElement> SVGFEOffsetElement::create(Document& document)

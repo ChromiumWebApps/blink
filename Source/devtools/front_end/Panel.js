@@ -27,12 +27,12 @@
  */
 
 /**
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @constructor
  */
 WebInspector.Panel = function(name)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
     WebInspector.panels[name] = this;
 
     this.element.classList.add("panel");
@@ -141,7 +141,7 @@ WebInspector.Panel.prototype = {
             this._shortcuts[keys[i].key] = handler;
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**
@@ -153,7 +153,7 @@ WebInspector.PanelWithSidebarTree = function(name, defaultWidth)
 {
     WebInspector.Panel.call(this, name);
 
-    this._panelSplitView = new WebInspector.SplitView(true, false, this._panelName + "SidebarWidth", defaultWidth || 200);
+    this._panelSplitView = new WebInspector.SplitView(true, false, this._panelName + "PanelSplitViewState", defaultWidth || 200);
     this._panelSplitView.setSidebarElementConstraints(Preferences.minSidebarWidth);
     this._panelSplitView.show(this.element);
 
@@ -178,6 +178,15 @@ WebInspector.PanelWithSidebarTree.prototype = {
     mainElement: function()
     {
         return this._panelSplitView.mainElement();
+    },
+
+    /**
+     * @param {number=} minWidth
+     * @param {number=} minHeight
+     */
+    setMainElementConstraints: function(minWidth, minHeight)
+    {
+        this._panelSplitView.setMainElementConstraints(minWidth, minHeight);
     },
 
     /**

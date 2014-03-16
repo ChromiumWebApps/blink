@@ -35,6 +35,7 @@
 #include "core/accessibility/AXTableRow.h"
 #include "core/html/HTMLTableCaptionElement.h"
 #include "core/html/HTMLTableCellElement.h"
+#include "core/html/HTMLTableColElement.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/rendering/RenderTableCell.h"
 
@@ -106,7 +107,7 @@ bool AXTable::isDataTable() const
 
     RenderTable* table = toRenderTable(m_renderer);
     Node* tableNode = table->node();
-    if (!tableNode || !tableNode->hasTagName(tableTag))
+    if (!isHTMLTableElement(tableNode))
         return false;
 
     // if there is a caption element, summary, THEAD, or TFOOT section, it's most certainly a data table
@@ -119,10 +120,8 @@ bool AXTable::isDataTable() const
         return true;
 
     // if there's a colgroup or col element, it's probably a data table.
-    for (Node* child = tableElement->firstChild(); child; child = child->nextSibling()) {
-        if (child->hasTagName(colTag) || child->hasTagName(colgroupTag))
-            return true;
-    }
+    if (Traversal<HTMLTableColElement>::firstChild(*tableElement))
+        return true;
 
     // go through the cell's and check for tell-tale signs of "data" table status
     // cells have borders, or use attributes like headers, abbr, scope or axis
@@ -191,10 +190,10 @@ bool AXTable::isDataTable() const
                 headersInFirstColumnCount++;
 
             // in this case, the developer explicitly assigned a "data" table attribute
-            if (cellNode->hasTagName(tdTag) || cellNode->hasTagName(thTag)) {
-                HTMLTableCellElement* cellElement = toHTMLTableCellElement(cellNode);
-                if (!cellElement->headers().isEmpty() || !cellElement->abbr().isEmpty()
-                    || !cellElement->axis().isEmpty() || !cellElement->scope().isEmpty())
+            if (isHTMLTableCellElement(*cellNode)) {
+                HTMLTableCellElement& cellElement = toHTMLTableCellElement(*cellNode);
+                if (!cellElement.headers().isEmpty() || !cellElement.abbr().isEmpty()
+                    || !cellElement.axis().isEmpty() || !cellElement.scope().isEmpty())
                     return true;
             }
 
@@ -535,7 +534,7 @@ String AXTable::title() const
 
     // see if there is a caption
     Node* tableElement = m_renderer->node();
-    if (tableElement && tableElement->hasTagName(tableTag)) {
+    if (isHTMLTableElement(tableElement)) {
         HTMLTableCaptionElement* caption = toHTMLTableElement(tableElement)->caption();
         if (caption)
             title = caption->innerText();

@@ -121,6 +121,7 @@
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorConsoleInstrumentationInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorOverridesInl.h',
+            '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorPromiseInstrumentationInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InstrumentingAgentsInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationImpl.cpp',
           ],
@@ -284,6 +285,12 @@
         # Generated from HTMLEntityNames.in
         '<(SHARED_INTERMEDIATE_DIR)/blink/HTMLEntityTable.cpp',
 
+        # Generated from MediaFeatureNames.in
+        '<(SHARED_INTERMEDIATE_DIR)/blink/MediaFeatureNames.cpp',
+
+        # Generated from MediaTypeNames.in
+        '<(SHARED_INTERMEDIATE_DIR)/blink/MediaTypeNames.cpp',
+
         # Generated from CSSTokenizer-in.cpp
         '<(SHARED_INTERMEDIATE_DIR)/blink/CSSTokenizer.cpp',
 
@@ -305,9 +312,9 @@
         # Additional .cpp files from the inspector_instrumentation_sources list.
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorCanvasInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorConsoleInstrumentationInl.h',
-        '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorDatabaseInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorOverridesInl.h',
+        '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorPromiseInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InstrumentingAgentsInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationImpl.cpp',
 
@@ -550,6 +557,11 @@
         '<@(webcore_html_files)',
       ],
       'conditions': [
+        # Shard this taret into parts to work around linker limitations.
+        # on link time code generation builds.
+        ['OS=="win" and buildtype=="Official"', {
+          'msvs_shard': 5,
+        }],
         ['OS!="android"', {
           'sources/': [
             ['exclude', 'Android\\.cpp$'],

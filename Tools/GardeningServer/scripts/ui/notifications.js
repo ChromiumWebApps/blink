@@ -96,7 +96,7 @@ ui.notifications.Info = base.extends(ui.notifications.Notification, {
 ui.notifications.FailingTestGroup = base.extends('li', {
     init: function(groupName, testNameList)
     {
-        this.appendChild(base.createLinkNode(ui.urlForFlakinessDashboard(testNameList), groupName));
+        this.appendChild(ui.createLinkNode(ui.urlForFlakinessDashboard(testNameList), groupName));
     }
 });
 
@@ -112,13 +112,17 @@ ui.notifications.SuspiciousCommit = base.extends(Cause, {
     init: function(commitData)
     {
         this._revision = commitData.revision;
-        this._description.appendChild(base.createLinkNode(trac.changesetURL(commitData.revision), commitData.revision));
+        this._description.appendChild(ui.createLinkNode(trac.changesetURL(commitData.revision), commitData.revision));
         this._details = this._description.appendChild(document.createElement('span'));
-        this._addDetail('summary', commitData);
+        this._addDetail('title', commitData);
         this._addDetail('author', commitData);
         this._addDetail('reviewer', commitData);
-        // FIXME: Add bugID detail.
-        // this._addDetail('bugID', commitData, bugzilla.bugURL);
+        this._addDetail('bugID', commitData,
+            ui.urlForCrbug,
+            function(value) {
+                return value.split(/\s*,\s*/);
+            }
+        );
     },
     hasRevision: function(revision)
     {
@@ -134,10 +138,17 @@ ui.notifications.SuspiciousCommit = base.extends(Cause, {
         span.className = part;
         
         if (linkFunction) {
-            var link = base.createLinkNode(linkFunction(content), content);
-            span.appendChild(link);
-        } else
+            var parts = $.isArray(content) ? content : [content];
+            parts.forEach(function(item, index) {
+                if (index > 0)
+                    span.appendChild(document.createTextNode(', '));
+                var link = ui.createLinkNode(linkFunction(item), item);
+                link.className = part + '-item';
+                span.appendChild(link);
+            });
+        } else {
             span.textContent = content;
+        }
     }
 });
 

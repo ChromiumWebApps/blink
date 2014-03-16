@@ -35,30 +35,84 @@
 #include "core/dom/ExceptionCode.h"
 #include "modules/filesystem/DirectoryEntry.h"
 #include "modules/filesystem/DirectoryEntrySync.h"
+#include "modules/filesystem/EntriesCallback.h"
 #include "modules/filesystem/EntrySync.h"
+#include "modules/filesystem/ErrorCallback.h"
 #include "modules/filesystem/FileEntrySync.h"
-#include "modules/filesystem/SyncCallbackHelper.h"
 
 namespace WebCore {
 
-DirectoryReaderSync::DirectoryReaderSync(PassRefPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
+class DirectoryReaderSync::EntriesCallbackHelper : public EntriesCallback {
+public:
+    EntriesCallbackHelper(PassRefPtrWillBeRawPtr<DirectoryReaderSync> reader)
+        : m_reader(reader)
+    {
+    }
+
+    virtual void handleEvent(const EntryHeapVector& entries) OVERRIDE
+    {
+        EntrySyncHeapVector syncEntries;
+        syncEntries.reserveInitialCapacity(entries.size());
+        for (size_t i = 0; i < entries.size(); ++i)
+            syncEntries.uncheckedAppend(EntrySync::create(entries[i].get()));
+        m_reader->addEntries(syncEntries);
+    }
+
+private:
+    RefPtrWillBePersistent<DirectoryReaderSync> m_reader;
+};
+
+class DirectoryReaderSync::ErrorCallbackHelper : public ErrorCallback {
+public:
+    ErrorCallbackHelper(PassRefPtrWillBeRawPtr<DirectoryReaderSync> reader)
+        : m_reader(reader)
+    {
+    }
+
+    virtual void handleEvent(FileError* error) OVERRIDE
+    {
+        m_reader->setError(error->code());
+    }
+
+private:
+    RefPtrWillBePersistent<DirectoryReaderSync> m_reader;
+};
+
+DirectoryReaderSync::DirectoryReaderSync(PassRefPtrWillBeRawPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
     : DirectoryReaderBase(fileSystem, fullPath)
+    , m_callbacksId(0)
+    , m_errorCode(FileError::OK)
 {
     ScriptWrappable::init(this);
 }
 
-EntrySyncVector DirectoryReaderSync::readEntries(ExceptionState& exceptionState)
+DirectoryReaderSync::~DirectoryReaderSync()
 {
-    if (!m_hasMoreEntries)
-        return EntrySyncVector();
+}
 
-    EntriesSyncCallbackHelper helper;
-    if (!m_fileSystem->readDirectory(this, m_fullPath, helper.successCallback(), helper.errorCallback(), DOMFileSystemBase::Synchronous)) {
-        exceptionState.throwDOMException(InvalidModificationError, "Failed to read the directory.");
-        setHasMoreEntries(false);
-        return EntrySyncVector();
+EntrySyncHeapVector DirectoryReaderSync::readEntries(ExceptionState& exceptionState)
+{
+    if (!m_callbacksId) {
+        m_callbacksId = filesystem()->readDirectory(this, m_fullPath, adoptPtr(new EntriesCallbackHelper(this)), adoptPtr(new ErrorCallbackHelper(this)), DOMFileSystemBase::Synchronous);
     }
-    return helper.getResult(exceptionState);
+
+    if (m_errorCode == FileError::OK && m_hasMoreEntries && m_entries.isEmpty())
+        m_fileSystem->waitForAdditionalResult(m_callbacksId);
+
+    if (m_errorCode != FileError::OK) {
+        FileError::throwDOMException(exceptionState, m_errorCode);
+        return EntrySyncHeapVector();
+    }
+
+    EntrySyncHeapVector result;
+    result.swap(m_entries);
+    return result;
+}
+
+void DirectoryReaderSync::trace(Visitor* visitor)
+{
+    visitor->trace(m_entries);
+    DirectoryReaderBase::trace(visitor);
 }
 
 } // namespace

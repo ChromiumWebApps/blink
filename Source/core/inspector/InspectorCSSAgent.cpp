@@ -52,6 +52,7 @@
 #include "core/fetch/ResourceClient.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/StyleSheetResourceClient.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/inspector/InspectorHistory.h"
 #include "core/inspector/InspectorPageAgent.h"
@@ -59,7 +60,6 @@
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/frame/Frame.h"
 #include "core/page/Page.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderObject.h"
@@ -505,7 +505,7 @@ void InspectorCSSAgent::disable(ErrorString*)
     m_state->setBoolean(CSSAgentState::cssAgentEnabled, false);
 }
 
-void InspectorCSSAgent::didCommitLoad(Frame* frame, DocumentLoader* loader)
+void InspectorCSSAgent::didCommitLoad(LocalFrame* frame, DocumentLoader* loader)
 {
     if (loader->frame() == frame->page()->mainFrame()) {
         reset();
@@ -564,7 +564,7 @@ void InspectorCSSAgent::activeStyleSheetsUpdated(Document* document)
 
 void InspectorCSSAgent::updateActiveStyleSheetsForDocument(Document* document, StyleSheetsUpdateType styleSheetsUpdateType)
 {
-    Frame* frame = document->frame();
+    LocalFrame* frame = document->frame();
     if (!frame)
         return;
     Vector<CSSStyleSheet*> newSheetsVector;
@@ -572,7 +572,7 @@ void InspectorCSSAgent::updateActiveStyleSheetsForDocument(Document* document, S
     updateActiveStyleSheets(frame, newSheetsVector, styleSheetsUpdateType);
 }
 
-void InspectorCSSAgent::updateActiveStyleSheets(Frame* frame, const Vector<CSSStyleSheet*>& allSheetsVector, StyleSheetsUpdateType styleSheetsUpdateType)
+void InspectorCSSAgent::updateActiveStyleSheets(LocalFrame* frame, const Vector<CSSStyleSheet*>& allSheetsVector, StyleSheetsUpdateType styleSheetsUpdateType)
 {
     bool isInitialFrontendLoad = styleSheetsUpdateType == InitialFrontendLoad;
 
@@ -627,7 +627,7 @@ void InspectorCSSAgent::updateActiveStyleSheets(Frame* frame, const Vector<CSSSt
         m_frameToCSSStyleSheets.remove(frame);
 }
 
-void InspectorCSSAgent::frameDetachedFromParent(Frame* frame)
+void InspectorCSSAgent::frameDetachedFromParent(LocalFrame* frame)
 {
     updateActiveStyleSheets(frame, Vector<CSSStyleSheet*>(), ExistingFrontendRefresh);
 }
@@ -683,14 +683,14 @@ void InspectorCSSAgent::getMatchedStylesForNode(ErrorString* errorString, int no
     // Matched rules.
     StyleResolver& styleResolver = ownerDocument->ensureStyleResolver();
 
-    RefPtr<CSSRuleList> matchedRules = styleResolver.pseudoCSSRulesForElement(element, elementPseudoId, StyleResolver::AllCSSRules);
+    RefPtrWillBeRawPtr<CSSRuleList> matchedRules = styleResolver.pseudoCSSRulesForElement(element, elementPseudoId, StyleResolver::AllCSSRules);
     matchedCSSRules = buildArrayForMatchedRuleList(matchedRules.get(), originalElement);
 
     // Pseudo elements.
     if (!elementPseudoId && (!includePseudo || *includePseudo)) {
         RefPtr<TypeBuilder::Array<TypeBuilder::CSS::PseudoIdMatches> > pseudoElements = TypeBuilder::Array<TypeBuilder::CSS::PseudoIdMatches>::create();
         for (PseudoId pseudoId = FIRST_PUBLIC_PSEUDOID; pseudoId < AFTER_LAST_INTERNAL_PSEUDOID; pseudoId = static_cast<PseudoId>(pseudoId + 1)) {
-            RefPtr<CSSRuleList> matchedRules = styleResolver.pseudoCSSRulesForElement(element, pseudoId, StyleResolver::AllCSSRules);
+            RefPtrWillBeRawPtr<CSSRuleList> matchedRules = styleResolver.pseudoCSSRulesForElement(element, pseudoId, StyleResolver::AllCSSRules);
             if (matchedRules && matchedRules->length()) {
                 RefPtr<TypeBuilder::CSS::PseudoIdMatches> matches = TypeBuilder::CSS::PseudoIdMatches::create()
                     .setPseudoId(static_cast<int>(pseudoId))
@@ -708,7 +708,7 @@ void InspectorCSSAgent::getMatchedStylesForNode(ErrorString* errorString, int no
         Element* parentElement = element->parentElement();
         while (parentElement) {
             StyleResolver& parentStyleResolver = parentElement->ownerDocument()->ensureStyleResolver();
-            RefPtr<CSSRuleList> parentMatchedRules = parentStyleResolver.cssRulesForElement(parentElement, StyleResolver::AllCSSRules);
+            RefPtrWillBeRawPtr<CSSRuleList> parentMatchedRules = parentStyleResolver.cssRulesForElement(parentElement, StyleResolver::AllCSSRules);
             RefPtr<TypeBuilder::CSS::InheritedStyleEntry> entry = TypeBuilder::CSS::InheritedStyleEntry::create()
                 .setMatchedCSSRules(buildArrayForMatchedRuleList(parentMatchedRules.get(), parentElement));
             if (parentElement->style() && parentElement->style()->length()) {
@@ -872,17 +872,34 @@ void InspectorCSSAgent::setRuleSelector(ErrorString* errorString, const RefPtr<J
     *errorString = InspectorDOMAgent::toErrorString(exceptionState);
 }
 
-void InspectorCSSAgent::addRule(ErrorString* errorString, const int contextNodeId, const String& selector, RefPtr<TypeBuilder::CSS::CSSRule>& result)
+void InspectorCSSAgent::createStyleSheet(ErrorString* errorString, const String& frameId, TypeBuilder::CSS::StyleSheetId* outStyleSheetId)
 {
-    Node* node = m_domAgent->assertNode(errorString, contextNodeId);
-    if (!node)
+    LocalFrame* frame = m_pageAgent->frameForId(frameId);
+    if (!frame) {
+        *errorString = "Frame not found";
         return;
+    }
 
-    InspectorStyleSheet* inspectorStyleSheet = viaInspectorStyleSheet(&node->document(), true);
+    Document* document = frame->document();
+    if (!document) {
+        *errorString = "Frame does not have a document";
+        return;
+    }
+
+    InspectorStyleSheet* inspectorStyleSheet = viaInspectorStyleSheet(document, true);
     if (!inspectorStyleSheet) {
         *errorString = "No target stylesheet found";
         return;
     }
+
+    *outStyleSheetId = inspectorStyleSheet->id();
+}
+
+void InspectorCSSAgent::addRule(ErrorString* errorString, const String& styleSheetId, const String& selector, RefPtr<TypeBuilder::CSS::CSSRule>& result)
+{
+    InspectorStyleSheet* inspectorStyleSheet = assertStyleSheetForId(errorString, styleSheetId);
+    if (!inspectorStyleSheet)
+        return;
 
     TrackExceptionState exceptionState;
     OwnPtr<AddRuleAction> action = adoptPtr(new AddRuleAction(inspectorStyleSheet, selector));
@@ -1067,8 +1084,8 @@ void InspectorCSSAgent::collectAllStyleSheets(Vector<InspectorStyleSheet*>& resu
 
 void InspectorCSSAgent::collectAllDocumentStyleSheets(Document* document, Vector<CSSStyleSheet*>& result)
 {
-    const Vector<RefPtr<StyleSheet> > activeStyleSheets = document->styleEngine()->activeStyleSheetsForInspector();
-    for (Vector<RefPtr<StyleSheet> >::const_iterator it = activeStyleSheets.begin(); it != activeStyleSheets.end(); ++it) {
+    const WillBeHeapVector<RefPtrWillBeMember<StyleSheet> > activeStyleSheets = document->styleEngine()->activeStyleSheetsForInspector();
+    for (WillBeHeapVector<RefPtrWillBeMember<StyleSheet> >::const_iterator it = activeStyleSheets.begin(); it != activeStyleSheets.end(); ++it) {
         StyleSheet* styleSheet = (*it).get();
         if (styleSheet->isCSSStyleSheet())
             collectStyleSheets(toCSSStyleSheet(styleSheet), result);

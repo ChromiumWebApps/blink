@@ -67,7 +67,7 @@ bool RenderSVGResourceMasker::applyResource(RenderObject* object, RenderStyle*,
     clearInvalidationMask();
 
     FloatRect repaintRect = object->repaintRectInLocalCoordinates();
-    if (repaintRect.isEmpty() || !element()->hasChildNodes())
+    if (repaintRect.isEmpty() || !element()->hasChildren())
         return false;
 
     // Content layer start.
@@ -153,9 +153,9 @@ PassRefPtr<DisplayList> RenderSVGResourceMasker::asDisplayList(GraphicsContext* 
 
 void RenderSVGResourceMasker::calculateMaskContentRepaintRect()
 {
-    for (Element* childElement = ElementTraversal::firstWithin(*element()); childElement; childElement = ElementTraversal::nextSibling(*childElement)) {
+    for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element()); childElement; childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
         RenderObject* renderer = childElement->renderer();
-        if (!childElement->isSVGElement() || !renderer)
+        if (!renderer)
             continue;
         RenderStyle* style = renderer->style();
         if (!style || style->display() == NONE || style->visibility() != VISIBLE)

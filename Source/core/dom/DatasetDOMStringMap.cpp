@@ -26,7 +26,6 @@
 #include "config.h"
 #include "core/dom/DatasetDOMStringMap.h"
 
-#include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Element.h"
@@ -71,14 +70,9 @@ static String convertAttributeNameToPropertyName(const String& name)
     return stringBuilder.toString();
 }
 
-static bool propertyNameMatchesAttributeName(const String& propertyName, const String& attributeName)
+template<typename CharType1, typename CharType2>
+static bool propertyNameMatchesAttributeName(const CharType1* propertyName, const CharType2* attributeName, unsigned propertyLength, unsigned attributeLength)
 {
-    if (!attributeName.startsWith("data-"))
-        return false;
-
-    unsigned propertyLength = propertyName.length();
-    unsigned attributeLength = attributeName.length();
-
     unsigned a = 5;
     unsigned p = 0;
     bool wordBoundary = false;
@@ -95,6 +89,25 @@ static bool propertyNameMatchesAttributeName(const String& propertyName, const S
     }
 
     return (a == attributeLength && p == propertyLength);
+}
+
+static bool propertyNameMatchesAttributeName(const String& propertyName, const String& attributeName)
+{
+    if (!attributeName.startsWith("data-"))
+        return false;
+
+    unsigned propertyLength = propertyName.length();
+    unsigned attributeLength = attributeName.length();
+
+    if (propertyName.is8Bit()) {
+        if (attributeName.is8Bit())
+            return propertyNameMatchesAttributeName(propertyName.characters8(), attributeName.characters8(), propertyLength, attributeLength);
+        return propertyNameMatchesAttributeName(propertyName.characters8(), attributeName.characters16(), propertyLength, attributeLength);
+    }
+
+    if (attributeName.is8Bit())
+        return propertyNameMatchesAttributeName(propertyName.characters16(), attributeName.characters8(), propertyLength, attributeLength);
+    return propertyNameMatchesAttributeName(propertyName.characters16(), attributeName.characters16(), propertyLength, attributeLength);
 }
 
 static bool isValidPropertyName(const String& name)
@@ -144,9 +157,9 @@ void DatasetDOMStringMap::getNames(Vector<String>& names)
 
     unsigned length = m_element->attributeCount();
     for (unsigned i = 0; i < length; i++) {
-        const Attribute* attribute = m_element->attributeItem(i);
-        if (isValidAttributeName(attribute->localName()))
-            names.append(convertAttributeNameToPropertyName(attribute->localName()));
+        const Attribute& attribute = m_element->attributeItem(i);
+        if (isValidAttributeName(attribute.localName()))
+            names.append(convertAttributeNameToPropertyName(attribute.localName()));
     }
 }
 
@@ -157,9 +170,9 @@ String DatasetDOMStringMap::item(const String& name)
 
     unsigned length = m_element->attributeCount();
     for (unsigned i = 0; i < length; i++) {
-        const Attribute* attribute = m_element->attributeItem(i);
-        if (propertyNameMatchesAttributeName(name, attribute->localName()))
-            return attribute->value();
+        const Attribute& attribute = m_element->attributeItem(i);
+        if (propertyNameMatchesAttributeName(name, attribute.localName()))
+            return attribute.value();
     }
 
     return String();
@@ -172,8 +185,8 @@ bool DatasetDOMStringMap::contains(const String& name)
 
     unsigned length = m_element->attributeCount();
     for (unsigned i = 0; i < length; i++) {
-        const Attribute* attribute = m_element->attributeItem(i);
-        if (propertyNameMatchesAttributeName(name, attribute->localName()))
+        const Attribute& attribute = m_element->attributeItem(i);
+        if (propertyNameMatchesAttributeName(name, attribute.localName()))
             return true;
     }
 
@@ -183,7 +196,7 @@ bool DatasetDOMStringMap::contains(const String& name)
 void DatasetDOMStringMap::setItem(const String& name, const String& value, ExceptionState& exceptionState)
 {
     if (!isValidPropertyName(name)) {
-        exceptionState.throwDOMException(SyntaxError, ExceptionMessages::failedToSet(name, "DOMStringMap", "'" + name + "' is not a valid property name."));
+        exceptionState.throwDOMException(SyntaxError, "'" + name + "' is not a valid property name.");
         return;
     }
 

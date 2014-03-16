@@ -2,6 +2,7 @@
  * Copyright (C) 2004, 2005, 2006 Nikolas Zimmermann <zimmermann@kde.org>
  * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2010 Rob Buis <buis@kde.org>
  * Copyright (C) 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2014 Google, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -34,7 +35,7 @@
 #include "core/editing/FrameSelection.h"
 #include "core/events/EventListener.h"
 #include "core/events/ThreadLocalEventNames.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/page/FrameTree.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/UseCounter.h"
@@ -63,12 +64,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGSVGElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGSVGElement::SVGSVGElement(Document& doc)
     : SVGGraphicsElement(SVGNames::svgTag, doc)
     , SVGFitToViewBox(this)
@@ -77,7 +72,7 @@ inline SVGSVGElement::SVGSVGElement(Document& doc)
     , m_width(SVGAnimatedLength::create(this, SVGNames::widthAttr, SVGLength::create(LengthModeWidth)))
     , m_height(SVGAnimatedLength::create(this, SVGNames::heightAttr, SVGLength::create(LengthModeHeight)))
     , m_useCurrentView(false)
-    , m_timeContainer(SMILTimeContainer::create(this))
+    , m_timeContainer(SMILTimeContainer::create(*this))
     , m_translation(SVGPoint::create())
 {
     ScriptWrappable::init(this);
@@ -89,7 +84,6 @@ inline SVGSVGElement::SVGSVGElement(Document& doc)
     addToPropertyMap(m_y);
     addToPropertyMap(m_width);
     addToPropertyMap(m_height);
-    registerAnimatedPropertiesForSVGSVGElement();
 
     UseCounter::count(doc, UseCounter::SVGSVGElement);
 }
@@ -106,9 +100,9 @@ SVGSVGElement::~SVGSVGElement()
 
     // There are cases where removedFromDocument() is not called.
     // see ContainerNode::removeAllChildren, called by its destructor.
-    document().accessSVGExtensions()->removeTimeContainer(this);
+    document().accessSVGExtensions().removeTimeContainer(this);
 
-    ASSERT(inDocument() || !accessDocumentSVGExtensions()->isSVGRootWithRelativeLengthDescendents(this));
+    ASSERT(inDocument() || !accessDocumentSVGExtensions().isSVGRootWithRelativeLengthDescendents(this));
 }
 
 const AtomicString& SVGSVGElement::contentScriptType() const
@@ -174,7 +168,7 @@ float SVGSVGElement::currentScale() const
     if (!inDocument() || !isOutermostSVGSVGElement())
         return 1;
 
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     if (!frame)
         return 1;
 
@@ -191,7 +185,7 @@ void SVGSVGElement::setCurrentScale(float scale)
     if (!inDocument() || !isOutermostSVGSVGElement())
         return;
 
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     if (!frame)
         return;
 
@@ -329,54 +323,114 @@ void SVGSVGElement::svgAttributeChanged(const QualifiedName& attrName)
     SVGGraphicsElement::svgAttributeChanged(attrName);
 }
 
-PassRefPtr<NodeList> SVGSVGElement::collectIntersectionOrEnclosureList(const FloatRect& rect, SVGElement* referenceElement, CollectIntersectionOrEnclosure collect) const
+// FloatRect::intersects does not consider horizontal or vertical lines (because of isEmpty()).
+static bool intersectsAllowingEmpty(const FloatRect& r1, const FloatRect& r2)
+{
+    if (r1.width() < 0 || r1.height() < 0 || r2.width() < 0 || r2.height() < 0)
+        return false;
+
+    return r1.x() < r2.maxX() && r2.x() < r1.maxX()
+        && r1.y() < r2.maxY() && r2.y() < r1.maxY();
+}
+
+// One of the element types that can cause graphics to be drawn onto the target canvas.
+// Specifically: circle, ellipse, image, line, path, polygon, polyline, rect, text and use.
+static bool isIntersectionOrEnclosureTarget(RenderObject* renderer)
+{
+    return renderer->isSVGShape()
+        || renderer->isSVGText()
+        || renderer->isSVGImage()
+        || isSVGUseElement(*renderer->node());
+}
+
+bool SVGSVGElement::checkIntersectionOrEnclosure(const SVGElement& element, const FloatRect& rect,
+    CheckIntersectionOrEnclosure mode) const
+{
+    RenderObject* renderer = element.renderer();
+    ASSERT(!renderer || renderer->style());
+    if (!renderer || renderer->style()->pointerEvents() == PE_NONE)
+        return false;
+
+    if (!isIntersectionOrEnclosureTarget(renderer))
+        return false;
+
+    AffineTransform ctm = toSVGGraphicsElement(element).computeCTM(AncestorScope, DisallowStyleUpdate, this);
+    FloatRect mappedRepaintRect = ctm.mapRect(renderer->repaintRectInLocalCoordinates());
+
+    bool result = false;
+    switch (mode) {
+    case CheckIntersection:
+        result = intersectsAllowingEmpty(rect, mappedRepaintRect);
+        break;
+    case CheckEnclosure:
+        result = rect.contains(mappedRepaintRect);
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+        break;
+    }
+
+    return result;
+}
+
+PassRefPtr<NodeList> SVGSVGElement::collectIntersectionOrEnclosureList(const FloatRect& rect,
+    SVGElement* referenceElement, CheckIntersectionOrEnclosure mode) const
 {
     Vector<RefPtr<Node> > nodes;
-    Element* element = ElementTraversal::next(*(referenceElement ? referenceElement : this));
-    while (element) {
-        if (element->isSVGElement()) {
-            SVGElement* svgElement = toSVGElement(element);
-            if (collect == CollectIntersectionList) {
-                if (RenderSVGModelObject::checkIntersection(svgElement->renderer(), rect))
-                    nodes.append(element);
-            } else {
-                if (RenderSVGModelObject::checkEnclosure(svgElement->renderer(), rect))
-                    nodes.append(element);
-            }
-        }
 
-        element = ElementTraversal::next(*element, referenceElement ? referenceElement : this);
+    const SVGElement* root = this;
+    if (referenceElement) {
+        // Only the common subtree needs to be traversed.
+        if (contains(referenceElement)) {
+            root = referenceElement;
+        } else if (!isDescendantOf(referenceElement)) {
+            // No common subtree.
+            return StaticNodeList::adopt(nodes);
+        }
     }
+
+    for (SVGGraphicsElement* element = Traversal<SVGGraphicsElement>::firstWithin(*root); element;
+        element = Traversal<SVGGraphicsElement>::next(*element, root)) {
+        if (checkIntersectionOrEnclosure(*element, rect, mode))
+            nodes.append(element);
+    }
+
     return StaticNodeList::adopt(nodes);
 }
 
-PassRefPtr<NodeList> SVGSVGElement::getIntersectionList(PassRefPtr<SVGRectTearOff> passRect, SVGElement* referenceElement) const
+PassRefPtr<NodeList> SVGSVGElement::getIntersectionList(PassRefPtr<SVGRectTearOff> rect, SVGElement* referenceElement) const
 {
-    RefPtr<SVGRectTearOff> rect = passRect;
-    return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CollectIntersectionList);
+    document().updateLayoutIgnorePendingStylesheets();
+
+    return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CheckIntersection);
 }
 
-PassRefPtr<NodeList> SVGSVGElement::getEnclosureList(PassRefPtr<SVGRectTearOff> passRect, SVGElement* referenceElement) const
+PassRefPtr<NodeList> SVGSVGElement::getEnclosureList(PassRefPtr<SVGRectTearOff> rect, SVGElement* referenceElement) const
 {
-    RefPtr<SVGRectTearOff> rect = passRect;
-    return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CollectEnclosureList);
+    document().updateLayoutIgnorePendingStylesheets();
+
+    return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CheckEnclosure);
 }
 
-bool SVGSVGElement::checkIntersection(SVGElement* element, PassRefPtr<SVGRectTearOff> passRect) const
+bool SVGSVGElement::checkIntersection(SVGElement* element, PassRefPtr<SVGRectTearOff> rect) const
 {
-    RefPtr<SVGRectTearOff> rect = passRect;
-    return RenderSVGModelObject::checkIntersection(element->renderer(), rect->target()->value());
+    ASSERT(element);
+    document().updateLayoutIgnorePendingStylesheets();
+
+    return checkIntersectionOrEnclosure(*element, rect->target()->value(), CheckIntersection);
 }
 
-bool SVGSVGElement::checkEnclosure(SVGElement* element, PassRefPtr<SVGRectTearOff> passRect) const
+bool SVGSVGElement::checkEnclosure(SVGElement* element, PassRefPtr<SVGRectTearOff> rect) const
 {
-    RefPtr<SVGRectTearOff> rect = passRect;
-    return RenderSVGModelObject::checkEnclosure(element->renderer(), rect->target()->value());
+    ASSERT(element);
+    document().updateLayoutIgnorePendingStylesheets();
+
+    return checkIntersectionOrEnclosure(*element, rect->target()->value(), CheckEnclosure);
 }
 
 void SVGSVGElement::deselectAll()
 {
-    if (Frame* frame = document().frame())
+    if (LocalFrame* frame = document().frame())
         frame->selection().clear();
 }
 
@@ -491,7 +545,7 @@ Node::InsertionNotificationRequest SVGSVGElement::insertedInto(ContainerNode* ro
     if (rootParent->inDocument()) {
         UseCounter::count(document(), UseCounter::SVGSVGElementInDocument);
 
-        document().accessSVGExtensions()->addTimeContainer(this);
+        document().accessSVGExtensions().addTimeContainer(this);
 
         // Animations are started at the end of document parsing and after firing the load event,
         // but if we miss that train (deferred programmatic element insertion for example) we need
@@ -505,9 +559,9 @@ Node::InsertionNotificationRequest SVGSVGElement::insertedInto(ContainerNode* ro
 void SVGSVGElement::removedFrom(ContainerNode* rootParent)
 {
     if (rootParent->inDocument()) {
-        SVGDocumentExtensions* svgExtensions = document().accessSVGExtensions();
-        svgExtensions->removeTimeContainer(this);
-        svgExtensions->removeSVGRootWithRelativeLengthDescendents(this);
+        SVGDocumentExtensions& svgExtensions = document().accessSVGExtensions();
+        svgExtensions.removeTimeContainer(this);
+        svgExtensions.removeSVGRootWithRelativeLengthDescendents(this);
     }
 
     SVGGraphicsElement::removedFrom(rootParent);
@@ -722,13 +776,11 @@ void SVGSVGElement::setupInitialView(const String& fragmentIdentifier, Element* 
     // or MyDrawing.svg#xpointer(id('MyView'))) then the closest ancestor ‘svg’ element is displayed in the viewport.
     // Any view specification attributes included on the given ‘view’ element override the corresponding view specification
     // attributes on the closest ancestor ‘svg’ element.
-    if (anchorNode && anchorNode->hasTagName(SVGNames::viewTag)) {
-        SVGViewElement* viewElement = toSVGViewElement(anchorNode);
-        if (!viewElement)
-            return;
+    if (isSVGViewElement(anchorNode)) {
+        SVGViewElement& viewElement = toSVGViewElement(*anchorNode);
 
-        if (SVGSVGElement* svg = viewElement->ownerSVGElement()) {
-            svg->inheritViewAttributes(viewElement);
+        if (SVGSVGElement* svg = viewElement.ownerSVGElement()) {
+            svg->inheritViewAttributes(&viewElement);
 
             if (RenderObject* renderer = svg->renderer())
                 RenderSVGResource::markForLayoutAndParentResourceInvalidation(renderer);

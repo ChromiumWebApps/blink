@@ -7,7 +7,10 @@
        '%sV8Internal::%sAttributeGetterCallback' %
             (cpp_class, attribute.name)
        if not attribute.constructor_type else
-       '{0}V8Internal::{0}ConstructorGetter'.format(cpp_class) %}
+       ('%sV8Internal::%sConstructorGetterCallback' %
+            (cpp_class, attribute.name)
+        if attribute.needs_constructor_getter_callback else
+       '{0}V8Internal::{0}ConstructorGetter'.format(cpp_class)) %}
 {% set getter_callback_for_main_world =
        '%sV8Internal::%sAttributeGetterCallbackForMainWorld' %
             (cpp_class, attribute.name)
@@ -130,7 +133,7 @@ static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo
 {
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     {% if getter.is_raises_exception %}
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    ExceptionState exceptionState(ExceptionState::IndexedGetterContext, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
     {% set getter_name = getter.name or 'anonymousIndexedGetter' %}
     {% set getter_arguments = ['index', 'exceptionState']
@@ -177,7 +180,7 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> jsValue, 
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     {{setter.v8_value_to_local_cpp_value}};
     {% if setter.has_exception_state %}
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    ExceptionState exceptionState(ExceptionState::IndexedSetterContext, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
     {% if setter.has_strict_type_checking %}
     {# Type checking for interface types (if interface not implemented, throw
@@ -232,7 +235,7 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
 {
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     {% if deleter.is_raises_exception %}
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    ExceptionState exceptionState(ExceptionState::IndexedDeletionContext, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
     {% set deleter_name = deleter.name or 'anonymousIndexedDeleter' %}
     {% set deleter_arguments = ['index', 'exceptionState']
@@ -286,7 +289,8 @@ static void namedPropertyGetter(v8::Local<v8::String> name, const v8::PropertyCa
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name);
     {% if getter.is_raises_exception %}
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    v8::String::Utf8Value namedProperty(name);
+    ExceptionState exceptionState(ExceptionState::GetterContext, *namedProperty, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
     {% if getter.union_arguments %}
     {{union_type_method_call(getter) | indent}}
@@ -343,7 +347,8 @@ static void namedPropertySetter(v8::Local<v8::String> name, v8::Local<v8::Value>
     V8TRYCATCH_FOR_V8STRINGRESOURCE_VOID(V8StringResource<>, propertyName, name);
     {{setter.v8_value_to_local_cpp_value}};
     {% if setter.has_exception_state %}
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    v8::String::Utf8Value namedProperty(name);
+    ExceptionState exceptionState(ExceptionState::SetterContext, *namedProperty, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
     {% set setter_name = setter.name or 'anonymousNamedSetter' %}
     {% set setter_arguments =
@@ -393,7 +398,8 @@ static void namedPropertyQuery(v8::Local<v8::String> name, const v8::PropertyCal
 {
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name);
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    v8::String::Utf8Value namedProperty(name);
+    ExceptionState exceptionState(ExceptionState::GetterContext, *namedProperty, "{{interface_name}}", info.Holder(), info.GetIsolate());
     bool result = imp->namedPropertyQuery(propertyName, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
@@ -434,7 +440,8 @@ static void namedPropertyDeleter(v8::Local<v8::String> name, const v8::PropertyC
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name);
     {% if deleter.is_raises_exception %}
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    v8::String::Utf8Value namedProperty(name);
+    ExceptionState exceptionState(ExceptionState::DeletionContext, *namedProperty, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
     {% set deleter_name = deleter.name or 'anonymousNamedDeleter' %}
     {% set deleter_arguments = ['propertyName', 'exceptionState']
@@ -479,7 +486,7 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
 {
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     Vector<String> names;
-    ExceptionState exceptionState(info.Holder(), info.GetIsolate());
+    ExceptionState exceptionState(ExceptionState::EnumerationContext, "{{interface_name}}", info.Holder(), info.GetIsolate());
     imp->namedPropertyEnumerator(names, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
@@ -518,7 +525,7 @@ static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::A
 static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::String> name, v8::Local<v8::Value> jsValue, const v8::PropertyCallbackInfo<void>& info)
 {
     {# FIXME: don't call GetIsolate 3 times #}
-    v8::Handle<v8::Object> holder = info.This()->FindInstanceInPrototypeChain({{v8_class}}::domTemplate(info.GetIsolate(), worldType(info.GetIsolate())));
+    v8::Handle<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
     if (holder.IsEmpty())
         return;
     {{cpp_class}}* imp = {{v8_class}}::toNative(holder);
@@ -529,7 +536,7 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::String> name, v8::
         return;
     }
 
-    setHiddenValue(info.GetIsolate(), info.This(), name, jsValue);
+    V8HiddenValue::setHiddenValue(info.GetIsolate(), info.This(), name, jsValue);
 }
 
 static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::String> name, v8::Local<v8::Value> jsValue, const v8::PropertyCallbackInfo<void>& info)
@@ -554,26 +561,22 @@ static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::String> na
 const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::derefObject, {{to_active_dom_object}}, {{to_event_target}}, 0, {{v8_class}}::installPerContextEnabledMethods, 0, WrapperTypeObjectPrototype, false };
 
 {{named_constructor_callback(named_constructor)}}
-v8::Handle<v8::FunctionTemplate> {{v8_class}}Constructor::domTemplate(v8::Isolate* isolate, WrapperWorldType currentWorldType)
+v8::Handle<v8::FunctionTemplate> {{v8_class}}Constructor::domTemplate(v8::Isolate* isolate)
 {
-    // This is only for getting a unique pointer which we can pass to privateTemplate.
-    static int privateTemplateUniqueKey;
+    static int domTemplateKey; // This address is used for a key to look up the dom template.
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    v8::Local<v8::FunctionTemplate> result = data->privateTemplateIfExists(currentWorldType, &privateTemplateUniqueKey);
+    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(&domTemplateKey);
     if (!result.IsEmpty())
         return result;
 
     TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BuildDOMTemplate");
-    v8::EscapableHandleScope scope(isolate);
     result = v8::FunctionTemplate::New(isolate, {{v8_class}}ConstructorCallback);
-
     v8::Local<v8::ObjectTemplate> instanceTemplate = result->InstanceTemplate();
     instanceTemplate->SetInternalFieldCount({{v8_class}}::internalFieldCount);
     result->SetClassName(v8AtomicString(isolate, "{{cpp_class}}"));
-    result->Inherit({{v8_class}}::domTemplate(isolate, currentWorldType));
-    data->setPrivateTemplate(currentWorldType, &privateTemplateUniqueKey, result);
-
-    return scope.Escape(result);
+    result->Inherit({{v8_class}}::domTemplate(isolate));
+    data->setDOMTemplate(&domTemplateKey, result);
+    return result;
 }
 
 {% endif %}
@@ -636,7 +639,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
         {% for attribute in any_type_attributes %}
         options.get("{{attribute.name}}", {{attribute.name}});
         if (!{{attribute.name}}.IsEmpty())
-            setHiddenValue(info.GetIsolate(), info.Holder(), "{{attribute.name}}", {{attribute.name}});
+            V8HiddenValue::setHiddenValue(info.GetIsolate(), info.Holder(), v8AtomicString(info.GetIsolate(), "{{attribute.name}}"), {{attribute.name}});
         {% endfor %}
     }
     {% if is_constructor_raises_exception %}
@@ -683,7 +686,7 @@ void {{v8_class}}::visitDOMWrapper(void* object, const v8::Persistent<v8::Object
     v8::Local<v8::Object> creationContext = v8::Local<v8::Object>::New(isolate, wrapper);
     V8WrapperInstantiationScope scope(creationContext, isolate);
     {% for set_wrapper_reference_to in set_wrapper_reference_to_list %}
-    {{set_wrapper_reference_to.idl_type}}* {{set_wrapper_reference_to.name}} = impl->{{set_wrapper_reference_to.name}}();
+    {{set_wrapper_reference_to.cpp_type}} {{set_wrapper_reference_to.name}} = impl->{{set_wrapper_reference_to.name}}();
     if ({{set_wrapper_reference_to.name}}) {
         if (!DOMDataStore::containsWrapper<{{set_wrapper_reference_to.v8_type}}>({{set_wrapper_reference_to.name}}, isolate))
             wrap({{set_wrapper_reference_to.name}}, creationContext, isolate);
@@ -692,7 +695,8 @@ void {{v8_class}}::visitDOMWrapper(void* object, const v8::Persistent<v8::Object
     {% endfor %}
     {% endif %}
     {% if reachable_node_function %}
-    if (Node* owner = impl->{{reachable_node_function}}()) {
+    // The {{reachable_node_function}}() method may return a reference or a pointer.
+    if (Node* owner = WTF::getPtr(impl->{{reachable_node_function}}())) {
         Node* root = V8GCController::opaqueRootForGC(owner, isolate);
         isolate->SetReferenceFromGroup(v8::UniqueId(reinterpret_cast<intptr_t>(root)), wrapper);
         return;
@@ -836,9 +840,9 @@ void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>
 {##############################################################################}
 {% block configure_shadow_object_template %}
 {% if interface_name == 'Window' %}
-static void configureShadowObjectTemplate(v8::Handle<v8::ObjectTemplate> templ, v8::Isolate* isolate, WrapperWorldType currentWorldType)
+static void configureShadowObjectTemplate(v8::Handle<v8::ObjectTemplate> templ, v8::Isolate* isolate)
 {
-    V8DOMConfiguration::installAttributes(templ, v8::Handle<v8::ObjectTemplate>(), shadowAttributes, WTF_ARRAY_LENGTH(shadowAttributes), isolate, currentWorldType);
+    V8DOMConfiguration::installAttributes(templ, v8::Handle<v8::ObjectTemplate>(), shadowAttributes, WTF_ARRAY_LENGTH(shadowAttributes), isolate);
 
     // Install a security handler with V8.
     templ->SetAccessCheckCallbacks(V8Window::namedSecurityCheckCustom, V8Window::indexedSecurityCheckCustom, v8::External::New(isolate, const_cast<WrapperTypeInfo*>(&V8Window::wrapperTypeInfo)));
@@ -852,17 +856,17 @@ static void configureShadowObjectTemplate(v8::Handle<v8::ObjectTemplate> templ, 
 {##############################################################################}
 {% block configure_class_template %}
 {# FIXME: rename to install_dom_template and Install{{v8_class}}DOMTemplate #}
-static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate, WrapperWorldType currentWorldType)
+static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
 {
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
     {% set parent_template =
-           'V8%s::domTemplate(isolate, currentWorldType)' % parent_interface
+           'V8%s::domTemplate(isolate)' % parent_interface
            if parent_interface else 'v8::Local<v8::FunctionTemplate>()' %}
     {% if runtime_enabled_function %}
     if (!{{runtime_enabled_function}}())
-        defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "", {{parent_template}}, {{v8_class}}::internalFieldCount, 0, 0, 0, 0, 0, 0, isolate, currentWorldType);
+        defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "", {{parent_template}}, {{v8_class}}::internalFieldCount, 0, 0, 0, 0, 0, 0, isolate);
     else
     {% endif %}
     {% set runtime_enabled_indent = 4 if runtime_enabled_function else 0 %}
@@ -884,7 +888,7 @@ static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> funct
         {{attributes_name}}, {{attributes_length}},
         {{accessors_name}}, {{accessors_length}},
         {{methods_name}}, {{methods_length}},
-        isolate, currentWorldType);
+        isolate);
     {% endfilter %}
 
     {% if constructors or has_custom_constructor or has_event_constructor %}
@@ -904,7 +908,7 @@ static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> funct
     if ({{attribute.runtime_enabled_function}}()) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {{attribute_configuration(attribute)}};
-        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate, currentWorldType);
+        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate);
     }
     {% endfilter %}
     {% endfor %}
@@ -968,7 +972,7 @@ static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> funct
     {% filter conditional(method.conditional_string) %}
     {% if method.is_do_not_check_security %}
     {% if method.is_per_world_bindings %}
-    if (currentWorldType == MainWorld) {
+    if (DOMWrapperWorld::current(isolate)->isMainWorld()) {
         {{install_do_not_check_security_signature(method, 'ForMainWorld')}}
     } else {
         {{install_do_not_check_security_signature(method)}}
@@ -978,7 +982,7 @@ static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> funct
     {% endif %}
     {% else %}{# is_do_not_check_security #}
     {% if method.is_per_world_bindings %}
-    if (currentWorldType == MainWorld) {
+    if (DOMWrapperWorld::current(isolate)->isMainWorld()) {
         {% filter runtime_enabled(method.runtime_enabled_function) %}
         {{install_custom_signature(method, 'ForMainWorld')}}
         {% endfilter %}
@@ -1087,19 +1091,18 @@ COMPILE_ASSERT({{constant.value}} == {{constant_cpp_class}}::{{constant.reflecte
 {##############################################################################}
 {% block get_template %}
 {# FIXME: rename to get_dom_template and GetDOMTemplate #}
-v8::Handle<v8::FunctionTemplate> {{v8_class}}::domTemplate(v8::Isolate* isolate, WrapperWorldType currentWorldType)
+v8::Handle<v8::FunctionTemplate> {{v8_class}}::domTemplate(v8::Isolate* isolate)
 {
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    V8PerIsolateData::TemplateMap::iterator result = data->templateMap(currentWorldType).find(&wrapperTypeInfo);
-    if (result != data->templateMap(currentWorldType).end())
-        return result->value.newLocal(isolate);
+    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(const_cast<WrapperTypeInfo*>(&wrapperTypeInfo));
+    if (!result.IsEmpty())
+        return result;
 
     TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BuildDOMTemplate");
-    v8::EscapableHandleScope handleScope(isolate);
-    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
-    configure{{v8_class}}Template(templ, isolate, currentWorldType);
-    data->templateMap(currentWorldType).add(&wrapperTypeInfo, UnsafePersistent<v8::FunctionTemplate>(isolate, templ));
-    return handleScope.Escape(templ);
+    result = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
+    configure{{v8_class}}Template(result, isolate);
+    data->setDOMTemplate(const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), result);
+    return result;
 }
 
 {% endblock %}
@@ -1109,8 +1112,22 @@ v8::Handle<v8::FunctionTemplate> {{v8_class}}::domTemplate(v8::Isolate* isolate,
 {% block has_instance %}
 bool {{v8_class}}::hasInstance(v8::Handle<v8::Value> jsValue, v8::Isolate* isolate)
 {
-    return V8PerIsolateData::from(isolate)->hasInstanceInMainWorld(&wrapperTypeInfo, jsValue)
-        || V8PerIsolateData::from(isolate)->hasInstanceInNonMainWorld(&wrapperTypeInfo, jsValue);
+    return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, jsValue);
+}
+
+v8::Handle<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Handle<v8::Value> jsValue, v8::Isolate* isolate)
+{
+    return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, jsValue);
+}
+
+{% endblock %}
+
+
+{##############################################################################}
+{% block to_native_with_type_check %}
+{{cpp_class}}* {{v8_class}}::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
+{
+    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
 }
 
 {% endblock %}
@@ -1141,7 +1158,7 @@ void {{v8_class}}::installPerContextEnabledProperties(v8::Handle<v8::Object> ins
 void {{v8_class}}::installPerContextEnabledMethods(v8::Handle<v8::Object> prototypeTemplate, v8::Isolate* isolate)
 {
     {# Define per-context enabled operations #}
-    v8::Local<v8::Signature> defaultSignature = v8::Signature::New(isolate, domTemplate(isolate, worldType(isolate)));
+    v8::Local<v8::Signature> defaultSignature = v8::Signature::New(isolate, domTemplate(isolate));
 
     ExecutionContext* context = toExecutionContext(prototypeTemplate->CreationContext());
     {% for method in methods if method.per_context_enabled_function %}
@@ -1181,14 +1198,14 @@ EventTarget* {{v8_class}}::toEventTarget(v8::Handle<v8::Object> object)
 {##############################################################################}
 {% block get_shadow_object_template %}
 {% if interface_name == 'Window' %}
-v8::Handle<v8::ObjectTemplate> V8Window::getShadowObjectTemplate(v8::Isolate* isolate, WrapperWorldType currentWorldType)
+v8::Handle<v8::ObjectTemplate> V8Window::getShadowObjectTemplate(v8::Isolate* isolate)
 {
-    if (currentWorldType == MainWorld) {
+    if (DOMWrapperWorld::current(isolate)->isMainWorld()) {
         DEFINE_STATIC_LOCAL(v8::Persistent<v8::ObjectTemplate>, V8WindowShadowObjectCacheForMainWorld, ());
         if (V8WindowShadowObjectCacheForMainWorld.IsEmpty()) {
             TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BuildDOMTemplate");
             v8::Handle<v8::ObjectTemplate> templ = v8::ObjectTemplate::New(isolate);
-            configureShadowObjectTemplate(templ, isolate, currentWorldType);
+            configureShadowObjectTemplate(templ, isolate);
             V8WindowShadowObjectCacheForMainWorld.Reset(isolate, templ);
             return templ;
         }
@@ -1198,7 +1215,7 @@ v8::Handle<v8::ObjectTemplate> V8Window::getShadowObjectTemplate(v8::Isolate* is
         if (V8WindowShadowObjectCacheForNonMainWorld.IsEmpty()) {
             TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BuildDOMTemplate");
             v8::Handle<v8::ObjectTemplate> templ = v8::ObjectTemplate::New(isolate);
-            configureShadowObjectTemplate(templ, isolate, currentWorldType);
+            configureShadowObjectTemplate(templ, isolate);
             V8WindowShadowObjectCacheForNonMainWorld.Reset(isolate, templ);
             return templ;
         }
@@ -1226,7 +1243,7 @@ v8::Handle<v8::Object> wrap({{cpp_class}}* impl, v8::Handle<v8::Object> creation
         return wrapper;
     DOMWrapperWorld* world = DOMWrapperWorld::current(isolate);
     if (world->isMainWorld()) {
-        if (Frame* frame = impl->frame())
+        if (LocalFrame* frame = impl->frame())
             frame->script().windowShell(world)->updateDocumentWrapper(wrapper);
     }
     {% endif %}
@@ -1252,7 +1269,7 @@ v8::Handle<v8::Object> {{v8_class}}::createWrapper({{pass_ref_ptr}}<{{cpp_class}
     }
 
     {% if is_document %}
-    if (Frame* frame = impl->frame()) {
+    if (LocalFrame* frame = impl->frame()) {
         if (frame->script().initializeMainWorld()) {
             // initializeMainWorld may have created a wrapper for the object, retry from the start.
             v8::Handle<v8::Object> wrapper = DOMDataStore::getWrapper<{{v8_class}}>(impl.get(), isolate);

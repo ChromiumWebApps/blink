@@ -31,12 +31,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGTextPositioningElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGTextContentElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 SVGTextPositioningElement::SVGTextPositioningElement(const QualifiedName& tagName, Document& document)
     : SVGTextContentElement(tagName, document)
     , m_x(SVGAnimatedLengthList::create(this, SVGNames::xAttr, SVGLengthList::create(LengthModeWidth)))
@@ -52,7 +46,6 @@ SVGTextPositioningElement::SVGTextPositioningElement(const QualifiedName& tagNam
     addToPropertyMap(m_dx);
     addToPropertyMap(m_dy);
     addToPropertyMap(m_rotate);
-    registerAnimatedPropertiesForSVGTextPositioningElement();
 }
 
 bool SVGTextPositioningElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -136,14 +129,7 @@ SVGTextPositioningElement* SVGTextPositioningElement::elementFromRenderer(Render
     ASSERT(node);
     ASSERT(node->isSVGElement());
 
-    if (!node->hasTagName(SVGNames::textTag)
-#if ENABLE(SVG_FONTS)
-        && !node->hasTagName(SVGNames::altGlyphTag)
-#endif
-        && !node->hasTagName(SVGNames::tspanTag))
-        return 0;
-
-    return toSVGTextPositioningElement(node);
+    return isSVGTextPositioningElement(*node) ? toSVGTextPositioningElement(node) : 0;
 }
 
 }

@@ -19,7 +19,7 @@ keyUsages = ['encrypt', 'decrypt'];
 aesCbc = { name: 'aes-cbc', length: 1024 };
 shouldThrow("crypto.subtle.generateKey(aesCbc, extractable, -1)");
 shouldThrow("crypto.subtle.generateKey(aesCbc, extractable, null)");
-shouldThrow("crypto.subtle.generateKey(aesCbc, extractable, ['boo'])");
+shouldRejectPromiseWithNull("crypto.subtle.generateKey(aesCbc, extractable, ['boo'])");
 
 // ---------------------------------------------------
 // AES-CBC normalization failures (AesKeyGenParams)
@@ -65,7 +65,7 @@ shouldRejectPromiseWithNull("crypto.subtle.generateKey({name: 'hmac', hash: {nam
 // It just has to be convertable with ToNumber().
 shouldAcceptPromise("crypto.subtle.generateKey({name: 'hmac', hash: {name: 'sha-256'}, length: '48'}, extractable , keyUsages)");
 shouldRejectPromiseWithNull("crypto.subtle.generateKey({name: 'hmac', hash: {name: 'sha-256'}, length: null}, extractable , keyUsages)");
-shouldAcceptPromise("crypto.subtle.generateKey({name: 'hmac', hash: {name: 'sha-256'}, length: true}, extractable , keyUsages)");
+shouldRejectPromiseWithNull("crypto.subtle.generateKey({name: 'hmac', hash: {name: 'sha-256'}, length: true}, extractable , keyUsages)");
 
 // ---------------------------------------------------
 // RSASSA-PKCS1-v1_5 normalization failures (RsaKeyGenParams)

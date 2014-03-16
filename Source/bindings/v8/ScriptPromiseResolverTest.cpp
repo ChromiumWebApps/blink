@@ -47,27 +47,21 @@ class ScriptPromiseResolverTest : public testing::Test {
 public:
     ScriptPromiseResolverTest()
         : m_isolate(v8::Isolate::GetCurrent())
-        , m_handleScope(m_isolate)
-        , m_context(m_isolate, v8::Context::New(m_isolate))
-        , m_contextScope(m_context.newLocal(m_isolate))
     {
     }
 
     void SetUp()
     {
-        v8::Handle<v8::Context> context(m_context.newLocal(m_isolate));
-        V8PerContextDataHolder::install(context, DOMWrapperWorld::current(m_isolate));
-        m_perContextData = V8PerContextData::create(context);
-        m_perContextData->init();
-        m_promise = ScriptPromise::createPending();
-        m_resolver = ScriptPromiseResolver::create(m_promise);
+        m_scope = V8ExecutionScope::create(m_isolate);
+        m_resolver = ScriptPromiseResolver::create(m_isolate);
+        m_promise = m_resolver->promise();
     }
 
     void TearDown()
     {
         m_resolver = nullptr;
         m_promise.clear();
-        m_perContextData.clear();
+        m_scope.clear();
     }
 
     V8PromiseCustom::PromiseState state()
@@ -88,12 +82,10 @@ public:
 
 protected:
     v8::Isolate* m_isolate;
-    v8::HandleScope m_handleScope;
-    ScopedPersistent<v8::Context> m_context;
-    v8::Context::Scope m_contextScope;
     RefPtr<ScriptPromiseResolver> m_resolver;
     ScriptPromise m_promise;
-    OwnPtr<V8PerContextData> m_perContextData;
+private:
+    OwnPtr<V8ExecutionScope> m_scope;
 };
 
 TEST_F(ScriptPromiseResolverTest, initialState)

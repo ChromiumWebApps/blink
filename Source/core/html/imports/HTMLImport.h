@@ -39,7 +39,7 @@ namespace WebCore {
 
 class CustomElementMicrotaskImportStep;
 class Document;
-class Frame;
+class LocalFrame;
 class HTMLImportChild;
 class HTMLImportRoot;
 class HTMLImportsController;
@@ -105,11 +105,11 @@ public:
 
     virtual ~HTMLImport() { }
 
-    Frame* frame();
+    LocalFrame* frame();
     Document* master();
     HTMLImportsController* controller();
     bool isRoot() const { return !isChild(); }
-    bool isCreatedByParser() const { return m_createdByParser; }
+    bool isSync() const { return m_sync; }
     const HTMLImportState& state() const { return m_state; }
 
     void appendChild(HTMLImport*);
@@ -119,6 +119,7 @@ public:
     virtual Document* document() const = 0;
     virtual void wasDetachedFromDocument() = 0;
     virtual void didFinishParsing() { };
+    virtual void didRemoveAllPendingStylesheet() { }
     virtual bool isDone() const = 0; // FIXME: Should be renamed to haveFinishedLoading()
     virtual bool hasLoader() const = 0;
     virtual bool ownsLoader() const { return false; }
@@ -128,8 +129,8 @@ public:
 protected:
     // Stating from most conservative state.
     // It will be corrected through state update flow.
-    explicit HTMLImport(bool createdByParser = false)
-        : m_createdByParser(createdByParser)
+    explicit HTMLImport(bool sync = false)
+        : m_sync(sync)
     { }
 
     void stateWillChange();
@@ -143,7 +144,7 @@ protected:
 
 private:
     HTMLImportState m_state;
-    bool m_createdByParser : 1;
+    bool m_sync : 1;
 };
 
 // An abstract class to decouple its sublcass HTMLImportsController.

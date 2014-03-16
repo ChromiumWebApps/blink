@@ -85,7 +85,7 @@ String CSSPageRule::cssText() const
     StringBuilder result;
     result.append(selectorText());
     result.appendLiteral(" { ");
-    String decls = m_pageRule->properties()->asText();
+    String decls = m_pageRule->properties().asText();
     result.append(decls);
     if (!decls.isEmpty())
         result.append(' ');
@@ -99,6 +99,12 @@ void CSSPageRule::reattach(StyleRuleBase* rule)
     m_pageRule = toStyleRulePage(rule);
     if (m_propertiesCSSOMWrapper)
         m_propertiesCSSOMWrapper->reattach(m_pageRule->mutableProperties());
+}
+
+void CSSPageRule::trace(Visitor* visitor)
+{
+    visitor->trace(m_pageRule);
+    CSSRule::trace(visitor);
 }
 
 } // namespace WebCore

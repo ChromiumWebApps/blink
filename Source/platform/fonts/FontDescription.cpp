@@ -95,49 +95,17 @@ FontWeight FontDescription::bolderWeight(void) const
     return FontWeightNormal;
 }
 
-FontTraitsMask FontDescription::traitsMask() const
+FontTraits FontDescription::traits() const
 {
-    return static_cast<FontTraitsMask>((m_italic ? FontStyleItalicMask : FontStyleNormalMask)
-            | (m_smallCaps ? FontVariantSmallCapsMask : FontVariantNormalMask)
-            | (FontWeight100Mask << (m_weight - FontWeight100)));
-
+    return FontTraits(style(), variant(), weight(), stretch());
 }
 
-void FontDescription::setTraitsMask(FontTraitsMask traitsMask)
+void FontDescription::setTraits(FontTraits traits)
 {
-    switch (traitsMask & FontWeightMask) {
-    case FontWeight100Mask:
-        setWeight(FontWeight100);
-        break;
-    case FontWeight200Mask:
-        setWeight(FontWeight200);
-        break;
-    case FontWeight300Mask:
-        setWeight(FontWeight300);
-        break;
-    case FontWeight400Mask:
-        setWeight(FontWeight400);
-        break;
-    case FontWeight500Mask:
-        setWeight(FontWeight500);
-        break;
-    case FontWeight600Mask:
-        setWeight(FontWeight600);
-        break;
-    case FontWeight700Mask:
-        setWeight(FontWeight700);
-        break;
-    case FontWeight800Mask:
-        setWeight(FontWeight800);
-        break;
-    case FontWeight900Mask:
-        setWeight(FontWeight900);
-        break;
-    default:
-        ASSERT_NOT_REACHED();
-    }
-    setItalic((traitsMask & FontStyleItalicMask) ? FontItalicOn : FontItalicOff);
-    setSmallCaps((traitsMask & FontVariantSmallCapsMask) ? FontSmallCapsOn : FontSmallCapsOff);
+    setStyle(traits.style());
+    setVariant(traits.variant());
+    setWeight(traits.weight());
+    setStretch(traits.stretch());
 }
 
 FontDescription FontDescription::makeNormalFeatureSettings() const
@@ -158,11 +126,11 @@ float FontDescription::effectiveFontSize() const
     return floorf(size * FontCacheKey::precisionMultiplier()) / FontCacheKey::precisionMultiplier();
 }
 
-FontCacheKey FontDescription::cacheKey(const AtomicString& familyName, FontTraitsMask desiredTraits) const
+FontCacheKey FontDescription::cacheKey(const AtomicString& familyName, FontTraits desiredTraits) const
 {
-    FontTraitsMask traits = desiredTraits
+    FontTraits fontTraits = desiredTraits.mask()
         ? desiredTraits
-        : traitsMask();
+        : traits();
 
     unsigned options =
         static_cast<unsigned>(m_syntheticItalic) << 8 | // bit 9
@@ -173,7 +141,7 @@ FontCacheKey FontDescription::cacheKey(const AtomicString& familyName, FontTrait
         static_cast<unsigned>(m_usePrinterFont) << 1 | // bit 2
         static_cast<unsigned>(m_subpixelTextPosition); // bit 1
 
-    return FontCacheKey(familyName, effectiveFontSize(), options | traits << 9);
+    return FontCacheKey(familyName, effectiveFontSize(), options | fontTraits.mask() << 9);
 }
 
 
@@ -191,7 +159,7 @@ void FontDescription::updateTypesettingFeatures() const
 {
     m_typesettingFeatures = s_defaultTypesettingFeatures;
 
-    switch (textRenderingMode()) {
+    switch (textRendering()) {
     case AutoTextRendering:
         break;
     case OptimizeSpeed:
@@ -223,6 +191,12 @@ void FontDescription::updateTypesettingFeatures() const
         break;
     case FontDescription::NormalLigaturesState:
         break;
+    }
+
+    if (discretionaryLigaturesState() == FontDescription::EnabledLigaturesState
+        || historicalLigaturesState() == FontDescription::EnabledLigaturesState
+        || contextualLigaturesState() == FontDescription::EnabledLigaturesState) {
+        m_typesettingFeatures |= WebCore::Ligatures;
     }
 }
 

@@ -31,6 +31,11 @@
 #include "config.h"
 #include "core/fileapi/Blob.h"
 
+#include "bindings/v8/ExceptionState.h"
+#include "core/dom/DOMURL.h"
+#include "core/dom/ExceptionCode.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/fileapi/File.h"
 #include "platform/blob/BlobRegistry.h"
 #include "platform/blob/BlobURL.h"
 
@@ -46,10 +51,11 @@ public:
     static URLRegistry& registry();
 };
 
-void BlobURLRegistry::registerURL(SecurityOrigin* origin, const KURL& publicURL, URLRegistrable* blob)
+void BlobURLRegistry::registerURL(SecurityOrigin* origin, const KURL& publicURL, URLRegistrable* registrableObject)
 {
-    ASSERT(&blob->registry() == this);
-    BlobRegistry::registerPublicBlobURL(origin, publicURL, static_cast<Blob*>(blob)->blobDataHandle());
+    ASSERT(&registrableObject->registry() == this);
+    Blob* blob = static_cast<Blob*>(registrableObject);
+    BlobRegistry::registerPublicBlobURL(origin, publicURL, blob->blobDataHandle());
 }
 
 void BlobURLRegistry::unregisterURL(const KURL& publicURL)
@@ -67,6 +73,7 @@ URLRegistry& BlobURLRegistry::registry()
 
 Blob::Blob(PassRefPtr<BlobDataHandle> dataHandle)
     : m_blobDataHandle(dataHandle)
+    , m_hasBeenClosed(false)
 {
     ScriptWrappable::init(this);
 }
@@ -99,8 +106,13 @@ void Blob::clampSliceOffsets(long long size, long long& start, long long& end)
         end = size;
 }
 
-PassRefPtr<Blob> Blob::slice(long long start, long long end, const String& contentType) const
+PassRefPtrWillBeRawPtr<Blob> Blob::slice(long long start, long long end, const String& contentType, ExceptionState& exceptionState) const
 {
+    if (hasBeenClosed()) {
+        exceptionState.throwDOMException(InvalidStateError, "Blob has been closed.");
+        return nullptr;
+    }
+
     long long size = this->size();
     clampSliceOffsets(size, start, end);
 
@@ -109,6 +121,28 @@ PassRefPtr<Blob> Blob::slice(long long start, long long end, const String& conte
     blobData->setContentType(contentType);
     blobData->appendBlob(m_blobDataHandle, start, length);
     return Blob::create(BlobDataHandle::create(blobData.release(), length));
+}
+
+void Blob::close(ExecutionContext* executionContext, ExceptionState& exceptionState)
+{
+    if (hasBeenClosed()) {
+        exceptionState.throwDOMException(InvalidStateError, "Blob has been closed.");
+        return;
+    }
+
+    // Dereferencing a Blob that has been closed should result in
+    // a network error. Revoke URLs registered against it through
+    // its UUID.
+    DOMURL::revokeObjectUUID(executionContext, uuid());
+
+    // A Blob enters a 'readability state' of closed, where it will report its
+    // size as zero. Blob and FileReader operations now throws on
+    // being passed a Blob in that state. Downstream uses of closed Blobs
+    // (e.g., XHR.send()) consider them as empty.
+    OwnPtr<BlobData> blobData = BlobData::create();
+    blobData->setContentType(type());
+    m_blobDataHandle = BlobDataHandle::create(blobData.release(), 0);
+    m_hasBeenClosed = true;
 }
 
 void Blob::appendTo(BlobData& blobData) const
@@ -120,6 +154,5 @@ URLRegistry& Blob::registry() const
 {
     return BlobURLRegistry::registry();
 }
-
 
 } // namespace WebCore

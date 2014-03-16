@@ -130,14 +130,14 @@ PassRefPtr<FilterEffect> ReferenceFilterBuilder::build(Filter* parentFilter, Ren
     if (!filter) {
         // Although we did not find the referenced filter, it might exist later
         // in the document
-        document->accessSVGExtensions()->addPendingResource(filterOperation->fragment(), toElement(renderer->node()));
+        document->accessSVGExtensions().addPendingResource(filterOperation->fragment(), toElement(renderer->node()));
         return nullptr;
     }
 
-    if (!filter->isSVGElement() || !filter->hasTagName(SVGNames::filterTag))
+    if (!isSVGFilterElement(*filter))
         return nullptr;
 
-    SVGFilterElement* filterElement = toSVGFilterElement(toSVGElement(filter));
+    SVGFilterElement& filterElement = toSVGFilterElement(*filter);
 
     // FIXME: Figure out what to do with SourceAlpha. Right now, we're
     // using the alpha of the original input layer, which is obviously
@@ -147,13 +147,9 @@ PassRefPtr<FilterEffect> ReferenceFilterBuilder::build(Filter* parentFilter, Ren
     RefPtr<SVGFilterBuilder> builder = SVGFilterBuilder::create(previousEffect, SourceAlpha::create(parentFilter));
 
     ColorSpace filterColorSpace = ColorSpaceDeviceRGB;
-    bool useFilterColorSpace = getSVGElementColorSpace(filterElement, filterColorSpace);
+    bool useFilterColorSpace = getSVGElementColorSpace(&filterElement, filterColorSpace);
 
-    for (Element* child = ElementTraversal::firstWithin(*filterElement); child; child = ElementTraversal::nextSibling(*child)) {
-        if (!child->isSVGElement())
-            continue;
-
-        SVGElement* element = toSVGElement(child);
+    for (SVGElement* element = Traversal<SVGElement>::firstChild(filterElement); element; element = Traversal<SVGElement>::nextSibling(*element)) {
         if (!element->isFilterEffect())
             continue;
 
@@ -164,7 +160,7 @@ PassRefPtr<FilterEffect> ReferenceFilterBuilder::build(Filter* parentFilter, Ren
             continue;
 
         effectElement->setStandardAttributes(effect.get());
-        effect->setEffectBoundaries(SVGLengthContext::resolveRectangle<SVGFilterPrimitiveStandardAttributes>(effectElement, filterElement->primitiveUnits()->currentValue()->enumValue(), parentFilter->sourceImageRect()));
+        effect->setEffectBoundaries(SVGLengthContext::resolveRectangle<SVGFilterPrimitiveStandardAttributes>(effectElement, filterElement.primitiveUnits()->currentValue()->enumValue(), parentFilter->sourceImageRect()));
         ColorSpace colorSpace = filterColorSpace;
         if (useFilterColorSpace || getSVGElementColorSpace(effectElement, colorSpace))
             effect->setOperatingColorSpace(colorSpace);

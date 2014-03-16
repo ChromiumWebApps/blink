@@ -384,24 +384,36 @@ WebInspector.handleElementValueModifications = function(event, element, finishHa
 }
 
 /**
- * @param {number} seconds
+ * @param {number} ms
+ * @param {number=} precision
+ * @return {string}
+ */
+Number.preciseMillisToString = function(ms, precision)
+{
+  precision = precision || 0;
+  var format = "%." + precision + "f\u2009ms";
+  return WebInspector.UIString(format, ms);
+}
+
+/**
+ * @param {number} ms
  * @param {boolean=} higherResolution
  * @return {string}
  */
-Number.secondsToString = function(seconds, higherResolution)
+Number.millisToString = function(ms, higherResolution)
 {
-    if (!isFinite(seconds))
+    if (!isFinite(ms))
         return "-";
 
-    if (seconds === 0)
+    if (ms === 0)
         return "0";
 
-    var ms = seconds * 1000;
     if (higherResolution && ms < 1000)
         return WebInspector.UIString("%.3f\u2009ms", ms);
     else if (ms < 1000)
         return WebInspector.UIString("%.0f\u2009ms", ms);
 
+    var seconds = ms / 1000;
     if (seconds < 60)
         return WebInspector.UIString("%.2f\u2009s", seconds);
 
@@ -415,6 +427,18 @@ Number.secondsToString = function(seconds, higherResolution)
 
     var days = hours / 24;
     return WebInspector.UIString("%.1f\u2009days", days);
+}
+
+/**
+ * @param {number} seconds
+ * @param {boolean=} higherResolution
+ * @return {string}
+ */
+Number.secondsToString = function(seconds, higherResolution)
+{
+    if (!isFinite(seconds))
+        return "-";
+    return Number.millisToString(seconds * 1000, higherResolution);
 }
 
 /**
@@ -504,6 +528,15 @@ WebInspector.currentFocusElement = function()
 WebInspector._focusChanged = function(event)
 {
     WebInspector.setCurrentFocusElement(event.target);
+}
+
+WebInspector._documentBlurred = function(event)
+{
+    // We want to know when currentFocusElement loses focus to nowhere.
+    // This is the case when event.relatedTarget is null (no element is being focused)
+    // and document.activeElement is reset to default (this is not a window blur).
+    if (!event.relatedTarget && document.activeElement === document.body)
+      WebInspector.setCurrentFocusElement(null);
 }
 
 WebInspector._textInputTypes = ["text", "search", "tel", "url", "email", "password"].keySet(); 
@@ -795,6 +828,7 @@ function windowLoaded()
     window.addEventListener("focus", WebInspector._windowFocused, false);
     window.addEventListener("blur", WebInspector._windowBlurred, false);
     document.addEventListener("focus", WebInspector._focusChanged.bind(this), true);
+    document.addEventListener("blur", WebInspector._documentBlurred.bind(this), true);
     window.removeEventListener("DOMContentLoaded", windowLoaded, false);
 }
 

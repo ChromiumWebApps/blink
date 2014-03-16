@@ -50,7 +50,6 @@ class ExecutionContext;
 struct MIDIOptions;
 
 class MIDIAccessPromise FINAL : public RefCountedWillBeRefCountedGarbageCollected<MIDIAccessPromise>, public ScriptWrappable, public ActiveDOMObject {
-    DECLARE_GC_INFO;
 public:
     static PassRefPtrWillBeRawPtr<MIDIAccessPromise> create(ExecutionContext*, const Dictionary&);
     virtual ~MIDIAccessPromise();
@@ -62,7 +61,7 @@ public:
     MIDIOptions* options() { return m_options.get(); }
 
     void fulfill();
-    void reject(PassRefPtr<DOMError>);
+    void reject(PassRefPtrWillBeRawPtr<DOMError>);
 
     void then(PassOwnPtr<MIDISuccessCallback>, PassOwnPtr<MIDIErrorCallback>);
 
@@ -84,7 +83,7 @@ private:
     OwnPtr<MIDISuccessCallback> m_successCallback;
     OwnPtr<MIDIErrorCallback> m_errorCallback;
     OwnPtr<MIDIOptions> m_options;
-    RefPtr<DOMError> m_error;
+    RefPtrWillBeMember<DOMError> m_error;
     RefPtrWillBeMember<MIDIAccess> m_access;
 };
 

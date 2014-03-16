@@ -56,7 +56,6 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings, InspectorController* inspec
     , m_viewportMetaLayoutSizeQuirk(false)
     , m_viewportMetaNonUserScalableQuirk(false)
     , m_clobberUserAgentInitialScaleQuirk(false)
-    , m_pinchOverlayScrollbarThickness(0)
     , m_mainFrameResizesAreOrientationChanges(false)
 {
     ASSERT(settings);
@@ -483,6 +482,11 @@ void WebSettingsImpl::setAcceleratedCompositingForFixedRootBackgroundEnabled(boo
     m_settings->setAcceleratedCompositingForFixedRootBackgroundEnabled(enabled);
 }
 
+void WebSettingsImpl::setAcceleratedCompositingForGpuRasterizationHintEnabled(bool enabled)
+{
+    m_settings->setAcceleratedCompositingForGpuRasterizationHintEnabled(enabled);
+}
+
 void WebSettingsImpl::setAcceleratedCompositingForPluginsEnabled(bool enabled)
 {
     m_settings->setAcceleratedCompositingForPluginsEnabled(enabled);
@@ -746,7 +750,7 @@ void WebSettingsImpl::setSmartInsertDeleteEnabled(bool enabled)
 
 void WebSettingsImpl::setPinchOverlayScrollbarThickness(int thickness)
 {
-    m_pinchOverlayScrollbarThickness = thickness;
+    m_settings->setPinchOverlayScrollbarThickness(thickness);
 }
 
 void WebSettingsImpl::setPinchVirtualViewportEnabled(bool enabled)

@@ -151,13 +151,13 @@ WebInspector.SettingsScreen.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  * @param {string} name
  * @param {string=} id
  */
 WebInspector.SettingsTab = function(name, id)
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
     this.element.classList.add("settings-tab-container");
     if (id)
         this.element.id = id;
@@ -259,7 +259,7 @@ WebInspector.SettingsTab.prototype = {
         return p;
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**
@@ -276,6 +276,11 @@ WebInspector.GenericSettingsTab = function()
     p.appendChild(disableJSElement);
     WebInspector.settings.javaScriptDisabled.addChangeListener(this._javaScriptDisabledChanged, this);
     this._disableJSCheckbox = disableJSElement.getElementsByTagName("input")[0];
+    var disableJSInfoParent = this._disableJSCheckbox.parentElement.createChild("span", "monospace");
+    this._disableJSInfo = disableJSInfoParent.createChild("span", "object-info-state-note hidden");
+    this._disableJSInfo.title = WebInspector.UIString("JavaScript is blocked on the inspected page (may be disabled in browser settings).");
+
+    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._updateScriptDisabledCheckbox, this);
     this._updateScriptDisabledCheckbox();
 
     p = this._appendSection(WebInspector.UIString("Appearance"));
@@ -297,8 +302,8 @@ WebInspector.GenericSettingsTab = function()
         ], WebInspector.settings.colorFormat);
     p.appendChild(colorFormatElement);
     p.appendChild(WebInspector.SettingsUI.createSettingCheckbox(WebInspector.UIString("Show user agent styles"), WebInspector.settings.showUserAgentStyles));
+    p.appendChild(WebInspector.SettingsUI.createSettingCheckbox(WebInspector.UIString("Show user agent shadow DOM"), WebInspector.settings.showShadowDOM));
     p.appendChild(WebInspector.SettingsUI.createSettingCheckbox(WebInspector.UIString("Word wrap"), WebInspector.settings.domWordWrap));
-    p.appendChild(WebInspector.SettingsUI.createSettingCheckbox(WebInspector.UIString("Show Shadow DOM"), WebInspector.settings.showShadowDOM));
     p.appendChild(WebInspector.SettingsUI.createSettingCheckbox(WebInspector.UIString("Show rulers"), WebInspector.settings.showMetricsRulers));
 
     p = this._appendSection(WebInspector.UIString("Sources"));
@@ -375,18 +380,12 @@ WebInspector.GenericSettingsTab.prototype = {
             if (error || !status)
                 return;
 
-            switch (status) {
-            case "forbidden":
-                this._disableJSCheckbox.checked = true;
-                this._disableJSCheckbox.disabled = true;
-                break;
-            case "disabled":
-                this._disableJSCheckbox.checked = true;
-                break;
-            default:
-                this._disableJSCheckbox.checked = false;
-                break;
-            }
+            var forbidden = (status === "forbidden");
+            var disabled = forbidden || (status === "disabled");
+
+            this._disableJSInfo.classList.toggle("hidden", !forbidden);
+            this._disableJSCheckbox.checked = disabled;
+            this._disableJSCheckbox.disabled = forbidden;
         }
 
         PageAgent.getScriptExecutionStatus(executionStatusCallback.bind(this));
@@ -400,7 +399,7 @@ WebInspector.GenericSettingsTab.prototype = {
 
     _skipStackFramesSwitchOrPatternChanged: function()
     {
-        WebInspector.DebuggerModel.applySkipStackFrameSettings();
+        WebInspector.debuggerModel.applySkipStackFrameSettings();
     },
 
     /**
@@ -521,7 +520,7 @@ WebInspector.WorkspaceSettingsTab.prototype = {
      */
     _editFileSystem: function(id)
     {
-        WebInspector.EditFileSystemDialog.show(WebInspector.inspectorView.devtoolsElement(), id);
+        WebInspector.EditFileSystemDialog.show(WebInspector.inspectorView.element, id);
     },
 
     /**
@@ -716,12 +715,6 @@ WebInspector.SettingsController.prototype =
 
         this._settingsScreen.showModal();
         this._settingsScreenVisible = true;
-    },
-
-    _hideSettingsScreen: function()
-    {
-        if (this._settingsScreen)
-            this._settingsScreen.hide();
     },
 
     resize: function()

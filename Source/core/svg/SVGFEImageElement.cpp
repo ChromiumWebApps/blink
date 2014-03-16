@@ -34,12 +34,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFEImageElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFEImageElement::SVGFEImageElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feImageTag, document)
     , SVGURIReference(this)
@@ -47,7 +41,6 @@ inline SVGFEImageElement::SVGFEImageElement(Document& document)
 {
     ScriptWrappable::init(this);
     addToPropertyMap(m_preserveAspectRatio);
-    registerAnimatedPropertiesForSVGFEImageElement();
 }
 
 PassRefPtr<SVGFEImageElement> SVGFEImageElement::create(Document& document)
@@ -75,7 +68,7 @@ void SVGFEImageElement::clearResourceReferences()
         m_cachedImage = 0;
     }
 
-    document().accessSVGExtensions()->removeAllTargetReferencesForElement(this);
+    document().accessSVGExtensions().removeAllTargetReferencesForElement(this);
 }
 
 void SVGFEImageElement::fetchImageResource()
@@ -99,13 +92,13 @@ void SVGFEImageElement::buildPendingResource()
         if (id.isEmpty())
             fetchImageResource();
         else {
-            document().accessSVGExtensions()->addPendingResource(id, this);
+            document().accessSVGExtensions().addPendingResource(id, this);
             ASSERT(hasPendingResources());
         }
     } else if (target->isSVGElement()) {
         // Register us with the target in the dependencies map. Any change of hrefElement
         // that leads to relayout/repainting now informs us, so we can react to it.
-        document().accessSVGExtensions()->addElementReferencingTarget(this, toSVGElement(target));
+        document().accessSVGExtensions().addElementReferencingTarget(this, toSVGElement(target));
     }
 
     invalidate();
@@ -184,7 +177,7 @@ void SVGFEImageElement::notifyFinished(Resource*)
     Element* parent = parentElement();
     ASSERT(parent);
 
-    if (!parent->hasTagName(SVGNames::filterTag) || !parent->renderer())
+    if (!isSVGFilterElement(*parent) || !parent->renderer())
         return;
 
     if (RenderObject* renderer = this->renderer())

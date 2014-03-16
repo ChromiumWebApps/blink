@@ -29,13 +29,14 @@
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/XMLDocument.h"
 #include "core/editing/markup.h"
 #include "core/events/Event.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/Stream.h"
-#include "core/frame/ContentSecurityPolicy.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/DOMFormData.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/parser/TextResourceDecoder.h"
@@ -59,8 +60,6 @@
 #include "wtf/text/CString.h"
 
 namespace WebCore {
-
-DEFINE_GC_INFO(XMLHttpRequest);
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, xmlHttpRequestCounter, ("XMLHttpRequest"));
 
@@ -157,7 +156,7 @@ static void logConsoleError(ExecutionContext* context, const String& message)
 
 PassRefPtrWillBeRawPtr<XMLHttpRequest> XMLHttpRequest::create(ExecutionContext* context, PassRefPtr<SecurityOrigin> securityOrigin)
 {
-    RefPtrWillBeRawPtr<XMLHttpRequest> xmlHttpRequest = adoptRefCountedWillBeRefCountedGarbageCollected(new XMLHttpRequest(context, securityOrigin));
+    RefPtrWillBeRawPtr<XMLHttpRequest> xmlHttpRequest = adoptRefWillBeRefCountedGarbageCollected(new XMLHttpRequest(context, securityOrigin));
     xmlHttpRequest->suspendIfNeeded();
 
     return xmlHttpRequest.release();
@@ -170,7 +169,6 @@ XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOri
     , m_timeoutMilliseconds(0)
     , m_state(UNSENT)
     , m_createdDocument(false)
-    , m_downloadedBlobLength(0)
     , m_error(false)
     , m_uploadEventsAllowed(true)
     , m_uploadComplete(false)
@@ -257,7 +255,7 @@ Document* XMLHttpRequest::responseXML(ExceptionState& exceptionState)
             if (isHTML)
                 m_responseDocument = HTMLDocument::create(init);
             else
-                m_responseDocument = Document::create(init);
+                m_responseDocument = XMLDocument::create(init);
             // FIXME: Set Last-Modified.
             m_responseDocument->setContent(m_responseText.flattenToString());
             m_responseDocument->setSecurityOrigin(securityOrigin());
@@ -274,26 +272,26 @@ Document* XMLHttpRequest::responseXML(ExceptionState& exceptionState)
 Blob* XMLHttpRequest::responseBlob()
 {
     ASSERT(m_responseTypeCode == ResponseTypeBlob);
-    ASSERT(!m_binaryResponseBuilder.get());
 
     // We always return null before DONE.
     if (m_error || m_state != DONE)
         return 0;
 
     if (!m_responseBlob) {
-        // When "blob" is specified for the responseType attribute,
-        // we redirect the downloaded data to a file-handle directly
-        // in the browser process.
-        // We get the file-path from the ResourceResponse directly
-        // instead of copying the bytes between the browser and the renderer.
+        // FIXME: Once RedirectToFileResourceHandler is fixed in Chromium,
+        // re-enable download-to-file optimization introduced by Blink revision
+        // 163141.
         OwnPtr<BlobData> blobData = BlobData::create();
-        String filePath = m_response.downloadedFilePath();
-        // If we errored out or got no data, we still return a blob, just an empty one.
-        if (!filePath.isEmpty() && m_downloadedBlobLength) {
-            blobData->appendFile(filePath);
+        size_t size = 0;
+        if (m_binaryResponseBuilder.get() && m_binaryResponseBuilder->size() > 0) {
+            RefPtr<RawData> rawData = RawData::create();
+            size = m_binaryResponseBuilder->size();
+            rawData->mutableData()->append(m_binaryResponseBuilder->data(), size);
+            blobData->appendData(rawData, 0, BlobDataItem::toEndOfFile);
             blobData->setContentType(responseMIMEType()); // responseMIMEType defaults to text/xml which may be incorrect.
+            m_binaryResponseBuilder.clear();
         }
-        m_responseBlob = Blob::create(BlobDataHandle::create(blobData.release(), m_downloadedBlobLength));
+        m_responseBlob = Blob::create(BlobDataHandle::create(blobData.release(), size));
     }
 
     return m_responseBlob.get();
@@ -802,12 +800,6 @@ void XMLHttpRequest::createRequest(ExceptionState& exceptionState)
     request.setHTTPMethod(m_method);
     request.setTargetType(ResourceRequest::TargetIsXHR);
 
-    // When "blob" is specified for the responseType attribute,
-    // we redirect the downloaded data to a file-handle directly
-    // and get the file-path as the result.
-    if (responseTypeCode() == ResponseTypeBlob)
-        request.setDownloadToFile(true);
-
     InspectorInstrumentation::willLoadXHR(executionContext(), this, this, m_method, m_url, m_async, m_requestEntityBody ? m_requestEntityBody->deepCopy() : nullptr, m_requestHeaders, m_includeCredentials);
 
     if (m_requestEntityBody) {
@@ -831,12 +823,6 @@ void XMLHttpRequest::createRequest(ExceptionState& exceptionState)
     // TODO(tsepez): Specify TreatAsActiveContent per http://crbug.com/305303.
     options.mixedContentBlockingTreatment = TreatAsPassiveContent;
     options.timeoutMilliseconds = m_timeoutMilliseconds;
-
-    // Since we redirect the downloaded data to a file-handle directly
-    // when "blob" is specified for the responseType attribute,
-    // buffering is not needed.
-    if (responseTypeCode() == ResponseTypeBlob)
-        options.dataBufferingPolicy = DoNotBufferData;
 
     m_exceptionCode = 0;
     m_error = false;
@@ -1309,8 +1295,6 @@ void XMLHttpRequest::didReceiveResponse(unsigned long identifier, const Resource
 
 void XMLHttpRequest::didReceiveData(const char* data, int len)
 {
-    ASSERT(m_responseTypeCode != ResponseTypeBlob);
-
     if (m_error)
         return;
 
@@ -1343,7 +1327,7 @@ void XMLHttpRequest::didReceiveData(const char* data, int len)
 
     if (useDecoder) {
         m_responseText = m_responseText.concatenateWith(m_decoder->decode(data, len));
-    } else if (m_responseTypeCode == ResponseTypeArrayBuffer) {
+    } else if (m_responseTypeCode == ResponseTypeArrayBuffer || m_responseTypeCode == ResponseTypeBlob) {
         // Buffer binary data.
         if (!m_binaryResponseBuilder)
             m_binaryResponseBuilder = SharedBuffer::create();
@@ -1358,26 +1342,6 @@ void XMLHttpRequest::didReceiveData(const char* data, int len)
         return;
 
     trackProgress(len);
-}
-
-void XMLHttpRequest::didDownloadData(int dataLength)
-{
-    ASSERT(m_responseTypeCode == ResponseTypeBlob);
-
-    if (m_error)
-        return;
-
-    if (m_state < HEADERS_RECEIVED)
-        changeState(HEADERS_RECEIVED);
-
-    if (!dataLength)
-        return;
-
-    if (m_error)
-        return;
-
-    m_downloadedBlobLength += dataLength;
-    trackProgress(dataLength);
 }
 
 void XMLHttpRequest::handleDidTimeout()
@@ -1427,6 +1391,12 @@ const AtomicString& XMLHttpRequest::interfaceName() const
 ExecutionContext* XMLHttpRequest::executionContext() const
 {
     return ActiveDOMObject::executionContext();
+}
+
+void XMLHttpRequest::trace(Visitor* visitor)
+{
+    visitor->trace(m_responseBlob);
+    visitor->trace(m_responseStream);
 }
 
 } // namespace WebCore

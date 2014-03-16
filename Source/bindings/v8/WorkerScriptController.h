@@ -34,16 +34,10 @@
 #include "bindings/v8/ScriptValue.h"
 #include "bindings/v8/V8Binding.h"
 #include "core/events/ErrorEvent.h"
-#include "gin/public/context_holder.h"
-#include "gin/public/isolate_holder.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/text/TextPosition.h"
 #include <v8.h>
-
-namespace gin {
-class IsolateHolder;
-}
 
 namespace WebCore {
 
@@ -93,29 +87,24 @@ namespace WebCore {
 
         void disableEval(const String&);
 
-        // Returns WorkerScriptController for the currently executing context. 0 will be returned if the current executing context is not the worker context.
-        static WorkerScriptController* controllerForContext(v8::Isolate*);
-
         // Evaluate a script file in the current execution environment.
         ScriptValue evaluate(const String& script, const String& fileName, const TextPosition& scriptStartPosition, WorkerGlobalScopeExecutionState*);
 
-        // Returns a local handle of the context.
-        v8::Local<v8::Context> context() { return m_contextHolder ? m_contextHolder->context() : v8::Local<v8::Context>(); }
+        v8::Isolate* isolate() const { return m_isolate; }
+        DOMWrapperWorld* world() const { return m_world.get(); }
+        v8::Local<v8::Context> context() { return m_perContextData ? m_perContextData->context() : v8::Local<v8::Context>(); }
 
         // Send a notification about current thread is going to be idle.
         // Returns true if the embedder should stop calling idleNotification
         // until real work has been done.
         bool idleNotification() { return v8::V8::IdleNotification(); }
 
-        v8::Isolate* isolate() const { return m_isolateHolder->isolate(); }
-
     private:
         bool initializeContextIfNeeded();
         void disposeContext();
 
+        v8::Isolate* m_isolate;
         WorkerGlobalScope& m_workerGlobalScope;
-        OwnPtr<gin::IsolateHolder> m_isolateHolder;
-        OwnPtr<gin::ContextHolder> m_contextHolder;
         OwnPtr<V8PerContextData> m_perContextData;
         String m_disableEvalPending;
         RefPtr<DOMWrapperWorld> m_world;

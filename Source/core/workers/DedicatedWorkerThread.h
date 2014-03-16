@@ -30,26 +30,26 @@
 #ifndef DedicatedWorkerThread_h
 #define DedicatedWorkerThread_h
 
-#include "core/frame/ContentSecurityPolicy.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerThread.h"
 
 namespace WebCore {
 
 class WorkerObjectProxy;
-struct WorkerThreadStartupData;
+class WorkerThreadStartupData;
 
 class DedicatedWorkerThread FINAL : public WorkerThread {
 public:
-    static PassRefPtr<DedicatedWorkerThread> create(WorkerLoaderProxy&, WorkerObjectProxy&, double timeOrigin, PassOwnPtr<WorkerThreadStartupData>);
+    static PassRefPtr<DedicatedWorkerThread> create(WorkerLoaderProxy&, WorkerObjectProxy&, double timeOrigin, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>);
     WorkerObjectProxy& workerObjectProxy() const { return m_workerObjectProxy; }
     virtual ~DedicatedWorkerThread();
 
 protected:
-    virtual PassRefPtr<WorkerGlobalScope> createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData>) OVERRIDE;
+    virtual PassRefPtrWillBeRawPtr<WorkerGlobalScope> createWorkerGlobalScope(PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>) OVERRIDE;
     virtual void runEventLoop() OVERRIDE;
 
 private:
-    DedicatedWorkerThread(WorkerLoaderProxy&, WorkerObjectProxy&, double timeOrigin, PassOwnPtr<WorkerThreadStartupData>);
+    DedicatedWorkerThread(WorkerLoaderProxy&, WorkerObjectProxy&, double timeOrigin, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>);
 
     WorkerObjectProxy& m_workerObjectProxy;
     double m_timeOrigin;

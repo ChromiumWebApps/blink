@@ -28,7 +28,7 @@
 namespace WebCore {
 
 class RectBase : public RefCountedWillBeGarbageCollected<RectBase> {
-    DECLARE_GC_INFO;
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(RectBase);
 public:
     CSSPrimitiveValue* top() const { return m_top.get(); }
     CSSPrimitiveValue* right() const { return m_right.get(); }
@@ -49,8 +49,6 @@ public:
     }
 
     void trace(Visitor*);
-
-    ~RectBase() { }
 
 protected:
     RectBase() { }

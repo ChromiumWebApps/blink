@@ -48,11 +48,12 @@
 #include "core/editing/MarkupAccumulator.h"
 #include "core/fetch/FontResource.h"
 #include "core/fetch/ImageResource.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/html/HTMLMetaElement.h"
 #include "core/html/HTMLStyleElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/page/Page.h"
@@ -70,18 +71,17 @@ namespace WebCore {
 
 static bool isCharsetSpecifyingNode(const Node& node)
 {
-    if (!node.isHTMLElement())
+    if (!isHTMLMetaElement(node))
         return false;
 
-    const HTMLElement& element = toHTMLElement(node);
-    if (!element.hasTagName(HTMLNames::metaTag))
-        return false;
+    const HTMLMetaElement& element = toHTMLMetaElement(node);
     HTMLAttributeList attributes;
     if (element.hasAttributes()) {
-        for (unsigned i = 0; i < element.attributeCount(); ++i) {
-            const Attribute* attribute = element.attributeItem(i);
+        unsigned attributeCount = element.attributeCount();
+        for (unsigned i = 0; i < attributeCount; ++i) {
+            const Attribute& attribute = element.attributeItem(i);
             // FIXME: We should deal appropriately with the attribute if they have a namespace.
-            attributes.append(std::make_pair(attribute->name().localName(), attribute->value().string()));
+            attributes.append(std::make_pair(attribute.name().localName(), attribute.value().string()));
         }
     }
     WTF::TextEncoding textEncoding = encodingFromMetaAttributes(attributes);
@@ -90,13 +90,13 @@ static bool isCharsetSpecifyingNode(const Node& node)
 
 static bool shouldIgnoreElement(const Element& element)
 {
-    return element.hasTagName(HTMLNames::scriptTag) || element.hasTagName(HTMLNames::noscriptTag) || isCharsetSpecifyingNode(element);
+    return isHTMLScriptElement(element) || isHTMLNoScriptElement(element) || isCharsetSpecifyingNode(element);
 }
 
 static const QualifiedName& frameOwnerURLAttributeName(const HTMLFrameOwnerElement& frameOwner)
 {
     // FIXME: We should support all frame owners including applets.
-    return frameOwner.hasTagName(HTMLNames::objectTag) ? HTMLNames::dataAttr : HTMLNames::srcAttr;
+    return isHTMLObjectElement(frameOwner) ? HTMLNames::dataAttr : HTMLNames::srcAttr;
 }
 
 class SerializerMarkupAccumulator FINAL : public MarkupAccumulator {
@@ -138,7 +138,7 @@ void SerializerMarkupAccumulator::appendElement(StringBuilder& out, Element& ele
     if (!shouldIgnoreElement(element))
         MarkupAccumulator::appendElement(out, element, namespaces);
 
-    if (element.hasTagName(HTMLNames::headTag)) {
+    if (isHTMLHeadElement(element)) {
         out.append("<meta charset=\"");
         out.append(m_document.charset());
         out.append("\">");
@@ -153,7 +153,7 @@ void SerializerMarkupAccumulator::appendCustomAttributes(StringBuilder& out, con
         return;
 
     const HTMLFrameOwnerElement& frameOwner = toHTMLFrameOwnerElement(element);
-    Frame* frame = frameOwner.contentFrame();
+    LocalFrame* frame = frameOwner.contentFrame();
     if (!frame)
         return;
 
@@ -183,7 +183,7 @@ void PageSerializer::serialize(Page* page)
     serializeFrame(page->mainFrame());
 }
 
-void PageSerializer::serializeFrame(Frame* frame)
+void PageSerializer::serializeFrame(LocalFrame* frame)
 {
     ASSERT(frame->document());
     Document& document = *frame->document();
@@ -224,33 +224,33 @@ void PageSerializer::serializeFrame(Frame* frame)
         if (element.isStyledElement())
             retrieveResourcesForProperties(element.inlineStyle(), document);
 
-        if (element.hasTagName(HTMLNames::imgTag)) {
+        if (isHTMLImageElement(element)) {
             HTMLImageElement& imageElement = toHTMLImageElement(element);
             KURL url = document.completeURL(imageElement.getAttribute(HTMLNames::srcAttr));
             ImageResource* cachedImage = imageElement.cachedImage();
             addImageToResources(cachedImage, imageElement.renderer(), url);
-        } else if (element.hasTagName(HTMLNames::inputTag)) {
+        } else if (isHTMLInputElement(element)) {
             HTMLInputElement& inputElement = toHTMLInputElement(element);
             if (inputElement.isImageButton() && inputElement.hasImageLoader()) {
                 KURL url = inputElement.src();
                 ImageResource* cachedImage = inputElement.imageLoader()->image();
                 addImageToResources(cachedImage, inputElement.renderer(), url);
             }
-        } else if (element.hasTagName(HTMLNames::linkTag)) {
+        } else if (isHTMLLinkElement(element)) {
             HTMLLinkElement& linkElement = toHTMLLinkElement(element);
             if (CSSStyleSheet* sheet = linkElement.sheet()) {
                 KURL url = document.completeURL(linkElement.getAttribute(HTMLNames::hrefAttr));
                 serializeCSSStyleSheet(sheet, url);
                 ASSERT(m_resourceURLs.contains(url));
             }
-        } else if (element.hasTagName(HTMLNames::styleTag)) {
+        } else if (isHTMLStyleElement(element)) {
             HTMLStyleElement& styleElement = toHTMLStyleElement(element);
             if (CSSStyleSheet* sheet = styleElement.sheet())
                 serializeCSSStyleSheet(sheet, KURL());
         }
     }
 
-    for (Frame* childFrame = frame->tree().firstChild(); childFrame; childFrame = childFrame->tree().nextSibling())
+    for (LocalFrame* childFrame = frame->tree().firstChild(); childFrame; childFrame = childFrame->tree().nextSibling())
         serializeFrame(childFrame);
 }
 
@@ -275,9 +275,9 @@ void PageSerializer::serializeCSSStyleSheet(CSSStyleSheet* styleSheet, const KUR
                 continue;
             serializeCSSStyleSheet(importRule->styleSheet(), importURL);
         } else if (rule->type() == CSSRule::FONT_FACE_RULE) {
-            retrieveResourcesForProperties(toCSSFontFaceRule(rule)->styleRule()->properties(), document);
+            retrieveResourcesForProperties(&toCSSFontFaceRule(rule)->styleRule()->properties(), document);
         } else if (rule->type() == CSSRule::STYLE_RULE) {
-            retrieveResourcesForProperties(toCSSStyleRule(rule)->styleRule()->properties(), document);
+            retrieveResourcesForProperties(&toCSSStyleRule(rule)->styleRule()->properties(), document);
         }
     }
 
@@ -373,9 +373,9 @@ void PageSerializer::retrieveResourcesForCSSValue(CSSValue* cssValue, Document& 
     }
 }
 
-KURL PageSerializer::urlForBlankFrame(Frame* frame)
+KURL PageSerializer::urlForBlankFrame(LocalFrame* frame)
 {
-    HashMap<Frame*, KURL>::iterator iter = m_blankFrameURLs.find(frame);
+    HashMap<LocalFrame*, KURL>::iterator iter = m_blankFrameURLs.find(frame);
     if (iter != m_blankFrameURLs.end())
         return iter->value;
     String url = "wyciwyg://frame/" + String::number(m_blankFrameCounter++);

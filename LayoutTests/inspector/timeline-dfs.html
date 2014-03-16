@@ -1,52 +1,54 @@
 <html>
 <head>
 <script src="../http/tests/inspector/inspector-test.js"></script>
+<script src="../http/tests/inspector/timeline-test.js"></script>
 <script type="text/javascript">
 
 var test = function()
 {
-    WebInspector.showPanel("timeline");
+    WebInspector.inspectorView.showPanel("timeline");
 
     function dumper(record)
     {
-        InspectorTest.addResult(record.name);
+        InspectorTest.addResult(record.type);
     }
 
     var records = [
-        {"name" : "a", "children" : [
-            {"name" : "aa", "children": [
-                {"name" : "aaa"},
-                {"name" : "aab"},
+        {"type" : "a", "children" : [
+            {"type" : "aa", "children": [
+                {"type" : "aaa"},
+                {"type" : "aab"},
             ]},
-            {"name" : "ab", "children":[
-                {"name" : "aba"},
-                {"name" : "abb"},
+            {"type" : "ab", "children":[
+                {"type" : "aba"},
+                {"type" : "abb"},
             ]}
         ]},
-        {"name" : "b", "children" : [
-            {"name" : "ba", "children" : [
-                {"name" : "baa"},
-                {"name" : "bab"},
+        {"type" : "b", "children" : [
+            {"type" : "ba", "children" : [
+                {"type" : "baa"},
+                {"type" : "bab"},
             ]},
-            {"name" : "bb", "children":[
-                {"name" : "bba"},
-                {"name" : "bbb"},
+            {"type" : "bb", "children":[
+                {"type" : "bba"},
+                {"type" : "bbb"},
             ]}
         ]},
     ];
 
+    InspectorTest.loadTimelineRecords(records);
     InspectorTest.addResult("DFS preorder:");
-    WebInspector.TimelinePresentationModel.forAllRecords(records, dumper);
+    InspectorTest.timelineModel().forAllRecords(dumper);
     InspectorTest.addResult("");
 
     InspectorTest.addResult("DFS postorder:");
-    WebInspector.TimelinePresentationModel.forAllRecords(records, null, dumper);
+    InspectorTest.timelineModel().forAllRecords(null, dumper);
     InspectorTest.completeTest();
 }
 
 </script>
 </head>
 <body onload="runTest()">
-<p>Tests TimelinePresentationModel.forAllRecords function.</p>
+<p>Tests TimelineModel.forAllRecords function.</p>
 </body>
 </html>

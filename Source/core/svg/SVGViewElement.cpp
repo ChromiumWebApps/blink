@@ -24,12 +24,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGViewElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGViewElement::SVGViewElement(Document& document)
     : SVGElement(SVGNames::viewTag, document)
     , SVGFitToViewBox(this)
@@ -38,7 +32,6 @@ inline SVGViewElement::SVGViewElement(Document& document)
     ScriptWrappable::init(this);
 
     addToPropertyMap(m_viewTarget);
-    registerAnimatedPropertiesForSVGViewElement();
 }
 
 PassRefPtr<SVGViewElement> SVGViewElement::create(Document& document)

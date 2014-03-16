@@ -103,8 +103,6 @@ private:
     RefPtr<SVGAnimatedLength> m_y;
     RefPtr<SVGAnimatedLength> m_width;
     RefPtr<SVGAnimatedLength> m_height;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGUseElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
     bool resourceIsStillLoading();
     Document* externalDocument() const;
@@ -122,8 +120,6 @@ private:
     ResourcePtr<DocumentResource> m_resource;
     Timer<SVGElement> m_svgLoadEventTimer;
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGUseElement, hasTagName(SVGNames::useTag));
 
 }
 

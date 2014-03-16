@@ -95,8 +95,7 @@ String serializeForNumberType(double number)
 
 Decimal parseToDecimalForNumberType(const String& string, const Decimal& fallbackValue)
 {
-    // See HTML5 2.5.4.3 `Real numbers.' and parseToDoubleForNumberType
-
+    // http://www.whatwg.org/specs/web-apps/current-work/#floating-point-numbers and parseToDoubleForNumberType
     // String::toDouble() accepts leading + and whitespace characters, which are not valid here.
     const UChar firstCharacter = string[0];
     if (firstCharacter != '-' && firstCharacter != '.' && !isASCIIDigit(firstCharacter))
@@ -106,11 +105,9 @@ Decimal parseToDecimalForNumberType(const String& string, const Decimal& fallbac
     if (!value.isFinite())
         return fallbackValue;
 
-    // Numbers are considered finite IEEE 754 single-precision floating point values.
-    // See HTML5 2.5.4.3 `Real numbers.'
-    // FIXME: We should use numeric_limits<double>::max for number input type.
-    const Decimal floatMax = Decimal::fromDouble(std::numeric_limits<float>::max());
-    if (value < -floatMax || value > floatMax)
+    // Numbers are considered finite IEEE 754 Double-precision floating point values.
+    const Decimal doubleMax = Decimal::fromDouble(std::numeric_limits<double>::max());
+    if (value < -doubleMax || value > doubleMax)
         return fallbackValue;
 
     // We return +0 for -0 case.
@@ -119,8 +116,7 @@ Decimal parseToDecimalForNumberType(const String& string, const Decimal& fallbac
 
 double parseToDoubleForNumberType(const String& string, double fallbackValue)
 {
-    // See HTML5 2.5.4.3 `Real numbers.'
-
+    // http://www.whatwg.org/specs/web-apps/current-work/#floating-point-numbers
     // String::toDouble() accepts leading + and whitespace characters, which are not valid here.
     UChar firstCharacter = string[0];
     if (firstCharacter != '-' && firstCharacter != '.' && !isASCIIDigit(firstCharacter))
@@ -135,9 +131,8 @@ double parseToDoubleForNumberType(const String& string, double fallbackValue)
     if (!std::isfinite(value))
         return fallbackValue;
 
-    // Numbers are considered finite IEEE 754 single-precision floating point values.
-    // See HTML5 2.5.4.3 `Real numbers.'
-    if (-std::numeric_limits<float>::max() > value || value > std::numeric_limits<float>::max())
+    // Numbers are considered finite IEEE 754 Double-precision floating point values.
+    if (-std::numeric_limits<double>::max() > value || value > std::numeric_limits<double>::max())
         return fallbackValue;
 
     // The following expression converts -0 to +0.
@@ -374,7 +369,8 @@ bool threadSafeMatch(const String& localName, const QualifiedName& qName)
     return threadSafeEqual(localName.impl(), qName.localName().impl());
 }
 
-StringImpl* findStringIfStatic(const UChar* characters, unsigned length)
+template<typename CharType>
+inline StringImpl* findStringIfStatic(const CharType* characters, unsigned length)
 {
     // We don't need to try hashing if we know the string is too long.
     if (length > StringImpl::highestStaticStringLength())
@@ -394,6 +390,29 @@ StringImpl* findStringIfStatic(const UChar* characters, unsigned length)
     if (!equal(it->value, characters, length))
         return 0;
     return it->value;
+}
+
+String attemptStaticStringCreation(const LChar* characters, size_t size)
+{
+    String string(findStringIfStatic(characters, size));
+    if (string.impl())
+        return string;
+    return String(characters, size);
+}
+
+String attemptStaticStringCreation(const UChar* characters, size_t size, CharacterWidth width)
+{
+    String string(findStringIfStatic(characters, size));
+    if (string.impl())
+        return string;
+    if (width == Likely8Bit)
+        string = StringImpl::create8BitIfPossible(characters, size);
+    else if (width == Force8Bit)
+        string = String::make8BitFrom16BitSource(characters, size);
+    else
+        string = String(characters, size);
+
+    return string;
 }
 
 }

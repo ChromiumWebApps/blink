@@ -281,13 +281,17 @@ WebInspector.CSSStyleModel.prototype = {
     },
 
     /**
-     * @param {!DOMAgent.NodeId} nodeId
+     * @param {!CSSAgent.StyleSheetId} styleSheetId
+     * @param {!WebInspector.DOMNode} node
      * @param {string} selector
      * @param {function(!WebInspector.CSSRule)} successCallback
      * @param {function()} failureCallback
      */
-    addRule: function(nodeId, selector, successCallback, failureCallback)
+    addRule: function(styleSheetId, node, selector, successCallback, failureCallback)
     {
+        this._pendingCommandsMajorState.push(true);
+        CSSAgent.addRule(styleSheetId, selector, callback.bind(this));
+
         /**
          * @param {?Protocol.Error} error
          * @param {!CSSAgent.CSSRule} rulePayload
@@ -301,12 +305,42 @@ WebInspector.CSSStyleModel.prototype = {
                 failureCallback();
             } else {
                 WebInspector.domAgent.markUndoableState();
-                this._computeMatchingSelectors(rulePayload, nodeId, successCallback, failureCallback);
+                this._computeMatchingSelectors(rulePayload, node.id, successCallback, failureCallback);
+            }
+        }
+    },
+
+    /**
+     * @param {!WebInspector.DOMNode} node
+     * @param {function(?WebInspector.CSSStyleSheetHeader)} callback
+     */
+    requestViaInspectorStylesheet: function(node, callback)
+    {
+        var frameId = node.frameId() || WebInspector.resourceTreeModel.mainFrame.id;
+        for (var styleSheetId in this._styleSheetIdToHeader) {
+            var styleSheetHeader = this._styleSheetIdToHeader[styleSheetId];
+            if (styleSheetHeader.frameId === frameId && styleSheetHeader.isViaInspector()) {
+                callback(styleSheetHeader);
+                return;
             }
         }
 
-        this._pendingCommandsMajorState.push(true);
-        CSSAgent.addRule(nodeId, selector, callback.bind(this));
+        /**
+         * @this {WebInspector.CSSStyleModel}
+         * @param {?Protocol.Error} error
+         * @param {!CSSAgent.StyleSheetId} styleSheetId
+         */
+        function innerCallback(error, styleSheetId)
+        {
+            if (error) {
+                console.error(error);
+                callback(null);
+            }
+
+            callback(this._styleSheetIdToHeader[styleSheetId]);
+        }
+
+        CSSAgent.createStyleSheet(frameId, innerCallback.bind(this));
     },
 
     mediaQueryResultChanged: function()
@@ -642,10 +676,17 @@ WebInspector.CSSStyleDeclaration = function(payload)
     this.__disabledProperties = {}; // DISABLED properties: { index -> CSSProperty }
     var payloadPropertyCount = payload.cssProperties.length;
 
-    var propertyIndex = 0;
+
     for (var i = 0; i < payloadPropertyCount; ++i) {
         var property = WebInspector.CSSProperty.parsePayload(this, i, payload.cssProperties[i]);
         this._allProperties.push(property);
+    }
+
+    this._computeActiveProperties();
+
+    var propertyIndex = 0;
+    for (var i = 0; i < this._allProperties.length; ++i) {
+        var property = this._allProperties[i];
         if (property.disabled)
             this.__disabledProperties[i] = property;
         if (!property.active && !property.styleBased)
@@ -695,6 +736,27 @@ WebInspector.CSSStyleDeclaration.parseComputedStylePayload = function(payload)
 }
 
 WebInspector.CSSStyleDeclaration.prototype = {
+    _computeActiveProperties: function()
+    {
+        var activeProperties = {};
+        for (var i = this._allProperties.length - 1; i >= 0; --i) {
+            var property = this._allProperties[i];
+            if (property.styleBased || property.disabled)
+                continue;
+            property._setActive(false);
+            if (!property.parsedOk)
+                continue;
+            var canonicalName = WebInspector.CSSMetadata.canonicalPropertyName(property.name);
+            var activeProperty = activeProperties[canonicalName];
+            if (!activeProperty || (!activeProperty.important && property.important))
+                activeProperties[canonicalName] = property;
+        }
+        for (var propertyName in activeProperties) {
+            var property = activeProperties[propertyName];
+            property._setActive(true);
+        }
+    },
+
     get allProperties()
     {
         return this._allProperties;
@@ -717,16 +779,6 @@ WebInspector.CSSStyleDeclaration.prototype = {
     {
         var property = this._livePropertyMap[name];
         return property ? property.value : "";
-    },
-
-    /**
-     * @param {string} name
-     * @return {string}
-     */
-    getPropertyPriority: function(name)
-    {
-        var property = this._livePropertyMap[name];
-        return property ? property.priority : "";
     },
 
     /**
@@ -779,8 +831,7 @@ WebInspector.CSSStyleDeclaration.prototype = {
     pastLastSourcePropertyIndex: function()
     {
         for (var i = this.allProperties.length - 1; i >= 0; --i) {
-            var property = this.allProperties[i];
-            if (property.active || property.disabled)
+            if (this.allProperties[i].range)
                 return i + 1;
         }
         return 0;
@@ -793,7 +844,9 @@ WebInspector.CSSStyleDeclaration.prototype = {
     newBlankProperty: function(index)
     {
         index = (typeof index === "undefined") ? this.pastLastSourcePropertyIndex() : index;
-        return new WebInspector.CSSProperty(this, index, "", "", "", "active", true, false, "");
+        var property = new WebInspector.CSSProperty(this, index, "", "", false, false, true, false, "");
+        property._setActive(true);
+        return property;
     },
 
     /**
@@ -954,21 +1007,21 @@ WebInspector.CSSRule.prototype = {
  * @param {number} index
  * @param {string} name
  * @param {string} value
- * @param {?string} priority
- * @param {string} status
+ * @param {boolean} important
+ * @param {boolean} disabled
  * @param {boolean} parsedOk
  * @param {boolean} implicit
  * @param {?string=} text
  * @param {!CSSAgent.SourceRange=} range
  */
-WebInspector.CSSProperty = function(ownerStyle, index, name, value, priority, status, parsedOk, implicit, text, range)
+WebInspector.CSSProperty = function(ownerStyle, index, name, value, important, disabled, parsedOk, implicit, text, range)
 {
     this.ownerStyle = ownerStyle;
     this.index = index;
     this.name = name;
     this.value = value;
-    this.priority = priority;
-    this.status = status;
+    this.important = important;
+    this.disabled = disabled;
     this.parsedOk = parsedOk;
     this.implicit = implicit;
     this.text = text;
@@ -984,16 +1037,24 @@ WebInspector.CSSProperty = function(ownerStyle, index, name, value, priority, st
 WebInspector.CSSProperty.parsePayload = function(ownerStyle, index, payload)
 {
     // The following default field values are used in the payload:
-    // priority: ""
+    // important: false
     // parsedOk: true
     // implicit: false
-    // status: "style"
+    // disabled: false
     var result = new WebInspector.CSSProperty(
-        ownerStyle, index, payload.name, payload.value, payload.priority || "", payload.status || "style", ("parsedOk" in payload) ? !!payload.parsedOk : true, !!payload.implicit, payload.text, payload.range);
+        ownerStyle, index, payload.name, payload.value, payload.important || false, payload.disabled || false, ("parsedOk" in payload) ? !!payload.parsedOk : true, !!payload.implicit, payload.text, payload.range);
     return result;
 }
 
 WebInspector.CSSProperty.prototype = {
+    /**
+     * @param {boolean} active
+     */
+    _setActive: function(active)
+    {
+        this._active = active;
+    },
+
     get propertyText()
     {
         if (this.text !== undefined)
@@ -1001,7 +1062,7 @@ WebInspector.CSSProperty.prototype = {
 
         if (this.name === "")
             return "";
-        return this.name + ": " + this.value + (this.priority ? " !" + this.priority : "") + ";";
+        return this.name + ": " + this.value + (this.important ? " !important" : "") + ";";
     },
 
     get isLive()
@@ -1011,22 +1072,17 @@ WebInspector.CSSProperty.prototype = {
 
     get active()
     {
-        return this.status === "active";
+        return typeof this._active === "boolean" && this._active;
     },
 
     get styleBased()
     {
-        return this.status === "style";
+        return !this.range;
     },
 
     get inactive()
     {
-        return this.status === "inactive";
-    },
-
-    get disabled()
-    {
-        return this.status === "disabled";
+        return typeof this._active === "boolean" && !this._active;
     },
 
     /**
@@ -1091,7 +1147,7 @@ WebInspector.CSSProperty.prototype = {
      */
     setValue: function(newValue, majorChange, overwrite, userCallback)
     {
-        var text = this.name + ": " + newValue + (this.priority ? " !" + this.priority : "") + ";"
+        var text = this.name + ": " + newValue + (this.important ? " !important" : "") + ";"
         this.setText(text, majorChange, overwrite, userCallback);
     },
 
@@ -1243,7 +1299,7 @@ WebInspector.CSSStyleSheetHeader.prototype = {
      */
     resourceURL: function()
     {
-        return this.origin === "inspector" ? this._viaInspectorResourceURL() : this.sourceURL;
+        return this.isViaInspector() ? this._viaInspectorResourceURL() : this.sourceURL;
     },
 
     /**
@@ -1291,14 +1347,6 @@ WebInspector.CSSStyleSheetHeader.prototype = {
     {
         this._sourceMappings.push(sourceMapping);
         this.updateLocations();
-    },
-
-    /**
-     * @return {string}
-     */
-    _key: function()
-    {
-        return this.frameId + ":" + this.resourceURL();
     },
 
     /**
@@ -1377,7 +1425,7 @@ WebInspector.CSSStyleSheetHeader.prototype = {
         function textCallback(error, text)
         {
             if (error) {
-                WebInspector.log("Failed to get text for stylesheet " + this.id + ": " + error);
+                WebInspector.console.log("Failed to get text for stylesheet " + this.id + ": " + error);
                 text = "";
                 // Fall through.
             }
@@ -1411,6 +1459,15 @@ WebInspector.CSSStyleSheetHeader.prototype = {
             newText += "\n/*# sourceURL=" + this.sourceURL + " */";
         CSSAgent.setStyleSheetText(this.id, newText, callback);
     },
+
+    /**
+     * @return {boolean}
+     */
+    isViaInspector: function()
+    {
+        return this.origin === "inspector";
+    },
+
 }
 
 /**

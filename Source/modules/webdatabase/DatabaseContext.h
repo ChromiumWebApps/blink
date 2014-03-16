@@ -29,12 +29,14 @@
 #define DatabaseContext_h
 
 #include "core/dom/ActiveDOMObject.h"
+#include "heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/ThreadSafeRefCounted.h"
 
 namespace WebCore {
 
 class Database;
+class DatabaseBackendBase;
 class DatabaseContext;
 class DatabaseTaskSynchronizer;
 class DatabaseThread;
@@ -51,15 +53,17 @@ public:
 
     // For life-cycle management (inherited from ActiveDOMObject):
     virtual void contextDestroyed() OVERRIDE;
+    virtual void willStop() OVERRIDE;
     virtual void stop() OVERRIDE;
 
     PassRefPtr<DatabaseContext> backend();
     DatabaseThread* databaseThread();
 
     void setHasOpenDatabases() { m_hasOpenDatabases = true; }
-
-    // When the database cleanup is done, cleanupSync will be signalled.
-    bool stopDatabases(DatabaseTaskSynchronizer*);
+    void didOpenDatabase(DatabaseBackendBase&);
+    void didCloseDatabase(DatabaseBackendBase&);
+    // Blocks the caller thread until cleanup tasks are completed.
+    void stopDatabases();
 
     bool allowDatabaseAccess() const;
 
@@ -69,9 +73,12 @@ public:
 private:
     explicit DatabaseContext(ExecutionContext*);
 
-    void stopDatabases() { stopDatabases(0); }
+    void stopSyncDatabases();
 
     RefPtr<DatabaseThread> m_databaseThread;
+    // The contents of m_openSyncDatabases are raw pointers. It's safe because
+    // DatabaseBackendSync is always closed before destruction.
+    HashSet<DatabaseBackendBase*> m_openSyncDatabases;
     bool m_hasOpenDatabases; // This never changes back to false, even after the database thread is closed.
     bool m_isRegistered;
     bool m_hasRequestedTermination;

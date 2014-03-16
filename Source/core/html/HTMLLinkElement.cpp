@@ -40,12 +40,12 @@
 #include "core/fetch/CSSStyleSheetResource.h"
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/imports/LinkImport.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/frame/ContentSecurityPolicy.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "wtf/StdLibExtras.h"
 
 namespace WebCore {
@@ -342,6 +342,11 @@ const AtomicString& HTMLLinkElement::type() const
     return getAttribute(typeAttr);
 }
 
+bool HTMLLinkElement::async() const
+{
+    return fastHasAttribute(HTMLNames::asyncAttr);
+}
+
 IconType HTMLLinkElement::iconType() const
 {
     return m_relAttribute.iconType();
@@ -581,10 +586,10 @@ void LinkStyle::process()
 
         bool mediaQueryMatches = true;
         if (!m_owner->media().isEmpty()) {
-            Frame* frame = loadingFrame();
+            LocalFrame* frame = loadingFrame();
             if (Document* document = loadingFrame()->document()) {
                 RefPtr<RenderStyle> documentStyle = StyleResolver::styleForDocument(*document);
-                RefPtr<MediaQuerySet> media = MediaQuerySet::create(m_owner->media());
+                RefPtrWillBeRawPtr<MediaQuerySet> media = MediaQuerySet::create(m_owner->media());
                 MediaQueryEvaluator evaluator(frame->view()->mediaType(), frame, documentStyle.get());
                 mediaQueryMatches = evaluator.eval(media.get());
             }

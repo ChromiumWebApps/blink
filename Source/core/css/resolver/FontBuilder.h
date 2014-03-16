@@ -51,13 +51,13 @@ public:
     void inheritFrom(const FontDescription&);
     void fromSystemFont(CSSValueID, float effectiveZoom);
 
-    void setFontFamilyInitial(float effectiveZoom);
+    void setFontFamilyInitial();
     void setFontFamilyInherit(const FontDescription&);
-    void setFontFamilyValue(CSSValue*, float effectiveZoom);
+    void setFontFamilyValue(CSSValue*);
 
-    void setFontSizeInitial(float effectiveZoom);
-    void setFontSizeInherit(const FontDescription&, float effectiveZoom);
-    void setFontSizeValue(CSSValue*, RenderStyle* parentStyle, const RenderStyle* rootElementStyle, float effectiveZoom);
+    void setFontSizeInitial();
+    void setFontSizeInherit(const FontDescription&);
+    void setFontSizeValue(CSSValue*, RenderStyle* parentStyle, const RenderStyle* rootElementStyle);
 
     void setWeight(FontWeight);
     void setWeightBolder();
@@ -71,9 +71,9 @@ public:
     void setFeatureSettingsValue(CSSValue*);
 
     void setScript(const String& locale);
-    void setItalic(FontItalic);
-    void setSmallCaps(FontSmallCaps);
-    void setTextRenderingMode(TextRenderingMode);
+    void setStyle(FontStyle);
+    void setVariant(FontVariant);
+    void setTextRendering(TextRenderingMode);
     void setKerning(FontDescription::Kerning);
     void setFontSmoothing(FontSmoothingMode);
 
@@ -90,7 +90,14 @@ public:
     // FIXME: This is only used by an ASSERT in StyleResolver. Remove?
     bool fontDirty() const { return m_fontDirty; }
 
+    static TextRenderingMode initialTextRendering() { return AutoTextRendering; }
+    static FontVariant initialVariant() { return FontVariantNormal; }
+    static FontStyle initialStyle() { return FontStyleNormal; }
+    static FontDescription::Kerning initialKerning() { return FontDescription::AutoKerning; }
+    static FontSmoothingMode initialFontSmoothing() { return AutoSmoothing; }
+
     friend class FontDescriptionChangeScope;
+
 private:
 
     // FIXME: "size" arg should be first for consistency with other similar functions.
@@ -98,7 +105,7 @@ private:
     void checkForOrientationChange(RenderStyle*);
     // This function fixes up the default font size if it detects that the current generic font family has changed. -dwh
     void checkForGenericFamilyChange(RenderStyle*, const RenderStyle* parentStyle);
-    void checkForZoomChange(RenderStyle*, const RenderStyle* parentStyle);
+    void updateComputedSize(RenderStyle*, const RenderStyle* parentStyle);
 
     float getComputedSizeFromSpecifiedSize(FontDescription&, float effectiveZoom, float specifiedSize);
 

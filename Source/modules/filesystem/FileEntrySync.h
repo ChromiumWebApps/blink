@@ -31,6 +31,7 @@
 #ifndef FileEntrySync_h
 #define FileEntrySync_h
 
+#include "heap/Handle.h"
 #include "modules/filesystem/EntrySync.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -44,18 +45,20 @@ class FileWriterSync;
 
 class FileEntrySync FINAL : public EntrySync {
 public:
-    static PassRefPtr<FileEntrySync> create(PassRefPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
+    static PassRefPtrWillBeRawPtr<FileEntrySync> create(PassRefPtrWillBeRawPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
     {
-        return adoptRef(new FileEntrySync(fileSystem, fullPath));
+        return adoptRefWillBeNoop(new FileEntrySync(fileSystem, fullPath));
     }
 
     virtual bool isFile() const OVERRIDE { return true; }
 
-    PassRefPtr<File> file(ExceptionState&);
-    PassRefPtr<FileWriterSync> createWriter(ExceptionState&);
+    PassRefPtrWillBeRawPtr<File> file(ExceptionState&);
+    PassRefPtrWillBeRawPtr<FileWriterSync> createWriter(ExceptionState&);
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
-    FileEntrySync(PassRefPtr<DOMFileSystemBase>, const String& fullPath);
+    FileEntrySync(PassRefPtrWillBeRawPtr<DOMFileSystemBase>, const String& fullPath);
 };
 
 DEFINE_TYPE_CASTS(FileEntrySync, EntrySync, entry, entry->isFile(), entry.isFile());

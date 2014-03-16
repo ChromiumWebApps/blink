@@ -40,7 +40,7 @@ typedef HashMap<const InlineTextBox*, pair<Vector<const SimpleFontData*>, GlyphO
 
 class InlineFlowBox : public InlineBox {
 public:
-    InlineFlowBox(RenderObject* obj)
+    InlineFlowBox(RenderObject& obj)
         : InlineBox(obj)
         , m_firstChild(0)
         , m_lastChild(0)
@@ -61,7 +61,7 @@ public:
         // an invisible marker exists.  The side effect of having an invisible marker is that the quirks mode behavior of shrinking lines with no
         // text children must not apply.  This change also means that gaps will exist between image bullet list items.  Even when the list bullet
         // is an image, the line is still considered to be immune from the quirk.
-        m_hasTextChildren = obj->style()->display() == LIST_ITEM;
+        m_hasTextChildren = obj.style()->display() == LIST_ITEM;
         m_hasTextDescendants = m_hasTextChildren;
     }
 
@@ -140,13 +140,13 @@ public:
     {
         if (!includeLogicalLeftEdge())
             return 0;
-        return isHorizontal() ? renderer()->style(isFirstLineStyle())->borderLeftWidth() : renderer()->style(isFirstLineStyle())->borderTopWidth();
+        return isHorizontal() ? renderer().style(isFirstLineStyle())->borderLeftWidth() : renderer().style(isFirstLineStyle())->borderTopWidth();
     }
     int borderLogicalRight() const
     {
         if (!includeLogicalRightEdge())
             return 0;
-        return isHorizontal() ? renderer()->style(isFirstLineStyle())->borderRightWidth() : renderer()->style(isFirstLineStyle())->borderBottomWidth();
+        return isHorizontal() ? renderer().style(isFirstLineStyle())->borderRightWidth() : renderer().style(isFirstLineStyle())->borderBottomWidth();
     }
     int paddingLogicalLeft() const
     {
@@ -244,7 +244,7 @@ public:
     LayoutRect logicalLayoutOverflowRect(LayoutUnit lineTop, LayoutUnit lineBottom) const
     {
         LayoutRect result = layoutOverflowRect(lineTop, lineBottom);
-        if (!renderer()->isHorizontalWritingMode())
+        if (!renderer().isHorizontalWritingMode())
             result = result.transposedRect();
         return result;
     }
@@ -270,7 +270,7 @@ public:
     LayoutRect logicalVisualOverflowRect(LayoutUnit lineTop, LayoutUnit lineBottom) const
     {
         LayoutRect result = visualOverflowRect(lineTop, lineBottom);
-        if (!renderer()->isHorizontalWritingMode())
+        if (!renderer().isHorizontalWritingMode())
             result = result.transposedRect();
         return result;
     }
@@ -282,13 +282,13 @@ public:
     FloatRect frameRectIncludingLineHeight(LayoutUnit lineTop, LayoutUnit lineBottom) const
     {
         if (isHorizontal())
-            return FloatRect(m_topLeft.x(), lineTop, width(), lineBottom - lineTop);
-        return FloatRect(lineTop, m_topLeft.y(), lineBottom - lineTop, height());
+            return FloatRect(m_topLeft.x(), lineTop.toFloat(), width(), (lineBottom - lineTop).toFloat());
+        return FloatRect(lineTop.toFloat(), m_topLeft.y(), (lineBottom - lineTop).toFloat(), height());
     }
 
     FloatRect logicalFrameRectIncludingLineHeight(LayoutUnit lineTop, LayoutUnit lineBottom) const
     {
-        return FloatRect(logicalLeft(), lineTop, logicalWidth(), lineBottom - lineTop);
+        return FloatRect(logicalLeft(), lineTop.toFloat(), logicalWidth(), (lineBottom - lineTop).toFloat());
     }
 
     bool descendantsHaveSameLineHeightAndBaseline() const { return m_descendantsHaveSameLineHeightAndBaseline; }

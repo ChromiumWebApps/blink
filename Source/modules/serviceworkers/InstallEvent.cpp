@@ -61,8 +61,8 @@ ScriptPromise InstallEvent::reloadAll(ExecutionContext* context)
     notImplemented();
 
     // For now this just returns a promise which is already rejected.
-    ScriptPromise promise = ScriptPromise::createPending(context);
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(promise, context);
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(context);
+    ScriptPromise promise = resolver->promise();
     resolver->reject(ScriptValue::createNull());
     return promise;
 }
@@ -81,6 +81,11 @@ InstallEvent::InstallEvent(const AtomicString& type, const EventInit& initialize
     : InstallPhaseEvent(type, initializer, observer)
 {
     ScriptWrappable::init(this);
+}
+
+void InstallEvent::trace(Visitor* visitor)
+{
+    InstallPhaseEvent::trace(visitor);
 }
 
 } // namespace WebCore

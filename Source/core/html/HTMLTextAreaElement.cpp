@@ -40,11 +40,14 @@
 #include "core/events/BeforeTextInsertedEvent.h"
 #include "core/events/Event.h"
 #include "core/events/ThreadLocalEventNames.h"
+#include "core/frame/FrameHost.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/FormDataList.h"
 #include "core/html/forms/FormController.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/TextControlInnerElements.h"
-#include "core/frame/Frame.h"
+#include "core/page/Chrome.h"
+#include "core/page/ChromeClient.h"
 #include "core/rendering/RenderTextControlMultiLine.h"
 #include "platform/text/PlatformLocale.h"
 #include "wtf/StdLibExtras.h"
@@ -262,7 +265,7 @@ void HTMLTextAreaElement::defaultEventHandler(Event* event)
 
 void HTMLTextAreaElement::handleFocusEvent(Element*, FocusType)
 {
-    if (Frame* frame = document().frame())
+    if (LocalFrame* frame = document().frame())
         frame->spellChecker().didBeginEditing(this);
 }
 
@@ -277,6 +280,9 @@ void HTMLTextAreaElement::subtreeHasChanged()
 
     // When typing in a textarea, childrenChanged is not called, so we need to force the directionality check.
     calculateAndAdjustDirectionality();
+
+    ASSERT(document().isActive());
+    document().frameHost()->chrome().client().didChangeValueInTextField(*this);
 }
 
 void HTMLTextAreaElement::handleBeforeTextInsertedEvent(BeforeTextInsertedEvent* event) const
@@ -437,10 +443,13 @@ String HTMLTextAreaElement::suggestedValue() const
 void HTMLTextAreaElement::setSuggestedValue(const String& value)
 {
     m_suggestedValue = value;
-    setInnerTextValue(m_suggestedValue);
+
+    if (!value.isNull())
+        setInnerTextValue(m_suggestedValue);
+    else
+        setInnerTextValue(m_value);
     updatePlaceholderVisibility(false);
     setNeedsStyleRecalc(SubtreeStyleChange);
-    setFormControlValueMatchesRenderer(true);
 }
 
 String HTMLTextAreaElement::validationMessage() const

@@ -96,12 +96,13 @@ CSSKeyframesRule::CSSKeyframesRule(StyleRuleKeyframes* keyframesRule, CSSStyleSh
 
 CSSKeyframesRule::~CSSKeyframesRule()
 {
+#if !ENABLE(OILPAN)
     ASSERT(m_childRuleCSSOMWrappers.size() == m_keyframesRule->keyframes().size());
-
     for (unsigned i = 0; i < m_childRuleCSSOMWrappers.size(); ++i) {
         if (m_childRuleCSSOMWrappers[i])
             m_childRuleCSSOMWrappers[i]->setParentRule(0);
     }
+#endif
 }
 
 void CSSKeyframesRule::setName(const String& name)
@@ -183,9 +184,9 @@ CSSKeyframeRule* CSSKeyframesRule::item(unsigned index) const
         return 0;
 
     ASSERT(m_childRuleCSSOMWrappers.size() == m_keyframesRule->keyframes().size());
-    RefPtr<CSSKeyframeRule>& rule = m_childRuleCSSOMWrappers[index];
+    RefPtrWillBeMember<CSSKeyframeRule>& rule = m_childRuleCSSOMWrappers[index];
     if (!rule)
-        rule = adoptRef(new CSSKeyframeRule(m_keyframesRule->keyframes()[index].get(), const_cast<CSSKeyframesRule*>(this)));
+        rule = adoptRefWillBeNoop(new CSSKeyframeRule(m_keyframesRule->keyframes()[index].get(), const_cast<CSSKeyframesRule*>(this)));
 
     return rule.get();
 }
@@ -193,7 +194,7 @@ CSSKeyframeRule* CSSKeyframesRule::item(unsigned index) const
 CSSRuleList* CSSKeyframesRule::cssRules()
 {
     if (!m_ruleListCSSOMWrapper)
-        m_ruleListCSSOMWrapper = adoptPtr(new LiveCSSRuleList<CSSKeyframesRule>(this));
+        m_ruleListCSSOMWrapper = LiveCSSRuleList<CSSKeyframesRule>::create(this);
     return m_ruleListCSSOMWrapper.get();
 }
 
@@ -201,6 +202,16 @@ void CSSKeyframesRule::reattach(StyleRuleBase* rule)
 {
     ASSERT(rule);
     m_keyframesRule = toStyleRuleKeyframes(rule);
+}
+
+void CSSKeyframesRule::trace(Visitor* visitor)
+{
+    CSSRule::trace(visitor);
+#if ENABLE(OILPAN)
+    visitor->trace(m_childRuleCSSOMWrappers);
+#endif
+    visitor->trace(m_keyframesRule);
+    visitor->trace(m_ruleListCSSOMWrapper);
 }
 
 } // namespace WebCore

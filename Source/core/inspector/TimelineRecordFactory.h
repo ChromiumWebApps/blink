@@ -59,6 +59,7 @@ public:
     static PassRefPtr<JSONObject> createXHRReadyStateChangeData(const String& url, int readyState);
     static PassRefPtr<JSONObject> createXHRLoadData(const String& url);
     static PassRefPtr<JSONObject> createEvaluateScriptData(const String&, double lineNumber);
+    static PassRefPtr<JSONObject> createConsoleTimeData(const String&);
     static PassRefPtr<JSONObject> createTimeStampData(const String&);
     static PassRefPtr<JSONObject> createResourceSendRequestData(const String& requestId, const ResourceRequest&);
     static PassRefPtr<JSONObject> createScheduleResourceRequestData(const String&);
@@ -73,6 +74,7 @@ public:
     static PassRefPtr<JSONObject> createAnimationFrameData(int callbackId);
     static PassRefPtr<JSONObject> createNodeData(long long nodeId);
     static PassRefPtr<JSONObject> createLayerData(long long layerRootNodeId);
+    static PassRefPtr<JSONObject> createLayerTreeData(PassRefPtr<JSONValue> layerTree);
     static PassRefPtr<JSONObject> createFrameData(int frameId);
     static PassRefPtr<JSONObject> createGPUTaskData(bool foreign);
 
@@ -99,6 +101,8 @@ public:
         data->setNumber("identifier", identifier);
         return data.release();
     }
+
+    static PassRefPtr<JSONObject> createEmbedderCallbackData(const String& callbackName);
 private:
     TimelineRecordFactory() { }
 };

@@ -42,7 +42,7 @@ namespace WebCore {
 typedef unsigned MainThreadScrollingReasons;
 
 class Document;
-class Frame;
+class LocalFrame;
 class FrameView;
 class GraphicsLayer;
 class Page;
@@ -111,7 +111,7 @@ public:
 
     static String mainThreadScrollingReasonsAsText(MainThreadScrollingReasons);
     String mainThreadScrollingReasonsAsText() const;
-    Region computeShouldHandleScrollGestureOnMainThreadRegion(const Frame*, const IntPoint& frameLocation) const;
+    Region computeShouldHandleScrollGestureOnMainThreadRegion(const LocalFrame*, const IntPoint& frameLocation) const;
 
     void updateTouchEventTargetRectsIfNeeded();
 
@@ -122,9 +122,6 @@ public:
 protected:
     explicit ScrollingCoordinator(Page*);
 
-    static GraphicsLayer* scrollLayerForScrollableArea(ScrollableArea*);
-    static GraphicsLayer* horizontalScrollbarLayerForScrollableArea(ScrollableArea*);
-    static GraphicsLayer* verticalScrollbarLayerForScrollableArea(ScrollableArea*);
     bool isForMainFrame(ScrollableArea*) const;
 
     unsigned computeCurrentWheelEventHandlerCount();
@@ -143,9 +140,6 @@ private:
     void setShouldUpdateScrollLayerPositionOnMainThread(MainThreadScrollingReasons);
 
     bool hasVisibleSlowRepaintViewportConstrainedObjects(FrameView*) const;
-
-    static blink::WebLayer* scrollingWebLayerForScrollableArea(ScrollableArea*);
-    static blink::WebLayer* containerWebLayerForScrollableArea(ScrollableArea*);
 
     bool touchHitTestingEnabled() const;
     void setShouldHandleScrollGestureOnMainThreadRegion(const Region&);

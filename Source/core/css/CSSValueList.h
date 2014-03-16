@@ -33,19 +33,19 @@ class CSSValueList : public CSSValue {
 public:
     static PassRefPtrWillBeRawPtr<CSSValueList> createCommaSeparated()
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new CSSValueList(CommaSeparator));
+        return adoptRefWillBeRefCountedGarbageCollected(new CSSValueList(CommaSeparator));
     }
     static PassRefPtrWillBeRawPtr<CSSValueList> createSpaceSeparated()
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new CSSValueList(SpaceSeparator));
+        return adoptRefWillBeRefCountedGarbageCollected(new CSSValueList(SpaceSeparator));
     }
     static PassRefPtrWillBeRawPtr<CSSValueList> createSlashSeparated()
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new CSSValueList(SlashSeparator));
+        return adoptRefWillBeRefCountedGarbageCollected(new CSSValueList(SlashSeparator));
     }
     static PassRefPtrWillBeRawPtr<CSSValueList> createFromParserValueList(CSSParserValueList* list)
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new CSSValueList(list));
+        return adoptRefWillBeRefCountedGarbageCollected(new CSSValueList(list));
     }
 
     size_t length() const { return m_values.size(); }
@@ -53,8 +53,8 @@ public:
     const CSSValue* item(size_t index) const { return index < m_values.size() ? m_values[index].get() : 0; }
     CSSValue* itemWithoutBoundsCheck(size_t index) { return m_values[index].get(); }
 
-    void append(PassRefPtr<CSSValue> value) { m_values.append(value); }
-    void prepend(PassRefPtr<CSSValue> value) { m_values.prepend(value); }
+    void append(PassRefPtrWillBeRawPtr<CSSValue> value) { m_values.append(value); }
+    void prepend(PassRefPtrWillBeRawPtr<CSSValue> value) { m_values.prepend(value); }
     bool removeAll(CSSValue*);
     bool hasValue(CSSValue*) const;
     PassRefPtrWillBeRawPtr<CSSValueList> copy();
@@ -77,7 +77,7 @@ private:
     explicit CSSValueList(ValueListSeparator);
     explicit CSSValueList(CSSParserValueList*);
 
-    Vector<RefPtr<CSSValue>, 4> m_values;
+    WillBeHeapVector<RefPtrWillBeMember<CSSValue>, 4> m_values;
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSValueList, isValueList());
@@ -85,6 +85,7 @@ DEFINE_CSS_VALUE_TYPE_CASTS(CSSValueList, isValueList());
 // Objects of this class are intended to be stack-allocated and scoped to a single function.
 // Please take care not to pass these around as they do hold onto a raw pointer.
 class CSSValueListInspector {
+    STACK_ALLOCATED();
 public:
     CSSValueListInspector(CSSValue* value) : m_list((value && value->isValueList()) ? toCSSValueList(value) : 0) { }
     CSSValue* item(size_t index) const { ASSERT_WITH_SECURITY_IMPLICATION(index < length()); return m_list->itemWithoutBoundsCheck(index); }
@@ -99,6 +100,7 @@ private:
 // Objects of this class are intended to be stack-allocated and scoped to a single function.
 // Please take care not to pass these around as they do hold onto a raw pointer.
 class CSSValueListIterator {
+    STACK_ALLOCATED();
 public:
     CSSValueListIterator(CSSValue* value) : m_inspector(value), m_position(0) { }
     bool hasMore() const { return m_position < m_inspector.length(); }

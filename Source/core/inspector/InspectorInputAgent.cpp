@@ -31,11 +31,11 @@
 #include "config.h"
 #include "core/inspector/InspectorInputAgent.h"
 
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorClient.h"
 #include "core/page/Chrome.h"
 #include "core/page/EventHandler.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "platform/JSONValues.h"
 #include "platform/PlatformKeyboardEvent.h"
@@ -269,11 +269,6 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
     }
 
     m_page->mainFrame()->eventHandler().handleTouchEvent(event);
-}
-
-void InspectorInputAgent::dispatchGestureEvent(ErrorString*, const String& type, int x, int y, const double* timestamp, const int* deltaX, const int* deltaY, const double* scale)
-{
-    // Handled on the browser level.
 }
 
 } // namespace WebCore

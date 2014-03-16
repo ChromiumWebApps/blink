@@ -84,11 +84,13 @@ ScriptValue IDBRequest::result(ExceptionState& exceptionState)
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::requestNotFinishedErrorMessage);
         return ScriptValue();
     }
+    if (m_contextStopped || !executionContext())
+        return ScriptValue();
     m_resultDirty = false;
     return idbAnyToScriptValue(&m_requestState, m_result);
 }
 
-PassRefPtr<DOMError> IDBRequest::error(ExceptionState& exceptionState) const
+PassRefPtrWillBeRawPtr<DOMError> IDBRequest::error(ExceptionState& exceptionState) const
 {
     if (m_readyState != DONE) {
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::requestNotFinishedErrorMessage);
@@ -99,6 +101,9 @@ PassRefPtr<DOMError> IDBRequest::error(ExceptionState& exceptionState) const
 
 ScriptValue IDBRequest::source(ExecutionContext* context) const
 {
+    if (m_contextStopped || !executionContext())
+        return ScriptValue();
+
     DOMRequestState requestState(context);
     return idbAnyToScriptValue(&requestState, m_source);
 }
@@ -211,7 +216,7 @@ bool IDBRequest::shouldEnqueueEvent() const
     return true;
 }
 
-void IDBRequest::onError(PassRefPtr<DOMError> error)
+void IDBRequest::onError(PassRefPtrWillBeRawPtr<DOMError> error)
 {
     IDB_TRACE("IDBRequest::onError()");
     if (!shouldEnqueueEvent())

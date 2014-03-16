@@ -50,20 +50,14 @@ HTMLFormControlElement* HTMLLegendElement::associatedControl()
 {
     // Check if there's a fieldset belonging to this legend.
     Element* fieldset = parentElement();
-    while (fieldset && !fieldset->hasTagName(fieldsetTag))
+    while (fieldset && !isHTMLFieldSetElement(*fieldset))
         fieldset = fieldset->parentElement();
     if (!fieldset)
         return 0;
 
     // Find first form element inside the fieldset that is not a legend element.
     // FIXME: Should we consider tabindex?
-    Element* element = fieldset;
-    while ((element = ElementTraversal::next(*element, fieldset))) {
-        if (element->isFormControlElement())
-            return toHTMLFormControlElement(element);
-    }
-
-    return 0;
+    return Traversal<HTMLFormControlElement>::next(*fieldset, fieldset);
 }
 
 void HTMLLegendElement::focus(bool, FocusType type)
@@ -88,7 +82,7 @@ HTMLFormElement* HTMLLegendElement::form() const
     // its parent, then the form attribute must return the same value as the
     // form attribute on that fieldset element. Otherwise, it must return null.
     ContainerNode* fieldset = parentNode();
-    if (!fieldset || !fieldset->hasTagName(fieldsetTag))
+    if (!isHTMLFieldSetElement(fieldset))
         return 0;
 
     return toHTMLFieldSetElement(fieldset)->formOwner();

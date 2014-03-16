@@ -31,7 +31,6 @@
 #include "config.h"
 #include "core/inspector/InspectorCanvasAgent.h"
 
-#include "HTMLNames.h"
 #include "bindings/v8/ScriptObject.h"
 #include "bindings/v8/ScriptProfiler.h"
 #include "core/html/HTMLCanvasElement.h"
@@ -44,7 +43,7 @@
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 
 using WebCore::TypeBuilder::Array;
 using WebCore::TypeBuilder::Canvas::ResourceId;
@@ -135,7 +134,7 @@ void InspectorCanvasAgent::hasUninstrumentedCanvases(ErrorString* errorString, b
 
 void InspectorCanvasAgent::captureFrame(ErrorString* errorString, const FrameId* frameId, TraceLogId* traceLogId)
 {
-    Frame* frame = frameId ? m_pageAgent->assertFrame(errorString, *frameId) : m_pageAgent->mainFrame();
+    LocalFrame* frame = frameId ? m_pageAgent->assertFrame(errorString, *frameId) : m_pageAgent->mainFrame();
     if (!frame)
         return;
     InjectedScriptCanvasModule module = injectedScriptCanvasModule(errorString, mainWorldScriptState(frame));
@@ -145,7 +144,7 @@ void InspectorCanvasAgent::captureFrame(ErrorString* errorString, const FrameId*
 
 void InspectorCanvasAgent::startCapturing(ErrorString* errorString, const FrameId* frameId, TraceLogId* traceLogId)
 {
-    Frame* frame = frameId ? m_pageAgent->assertFrame(errorString, *frameId) : m_pageAgent->mainFrame();
+    LocalFrame* frame = frameId ? m_pageAgent->assertFrame(errorString, *frameId) : m_pageAgent->mainFrame();
     if (!frame)
         return;
     InjectedScriptCanvasModule module = injectedScriptCanvasModule(errorString, mainWorldScriptState(frame));
@@ -213,7 +212,7 @@ ScriptObject InspectorCanvasAgent::notifyRenderingContextWasWrapped(const Script
     DOMWindow* domWindow = 0;
     if (scriptState)
         domWindow = scriptState->domWindow();
-    Frame* frame = domWindow ? domWindow->frame() : 0;
+    LocalFrame* frame = domWindow ? domWindow->frame() : 0;
     if (frame && !m_framesWithUninstrumentedCanvases.contains(frame))
         m_framesWithUninstrumentedCanvases.set(frame, false);
     String frameId = m_pageAgent->frameId(frame);
@@ -270,10 +269,11 @@ void InspectorCanvasAgent::findFramesWithUninstrumentedCanvases()
 
         virtual void visitNode(Node* node) OVERRIDE
         {
-            if (!node->hasTagName(HTMLNames::canvasTag) || !node->document().frame())
+            ASSERT(node);
+            if (!isHTMLCanvasElement(*node) || !node->document().frame())
                 return;
 
-            Frame* frame = node->document().frame();
+            LocalFrame* frame = node->document().frame();
             if (frame->page() != m_page)
                 return;
 
@@ -306,11 +306,11 @@ bool InspectorCanvasAgent::checkIsEnabled(ErrorString* errorString) const
     return false;
 }
 
-void InspectorCanvasAgent::didCommitLoad(Frame*, DocumentLoader* loader)
+void InspectorCanvasAgent::didCommitLoad(LocalFrame*, DocumentLoader* loader)
 {
     if (!m_enabled)
         return;
-    Frame* frame = loader->frame();
+    LocalFrame* frame = loader->frame();
     if (frame == m_pageAgent->mainFrame()) {
         for (FramesWithUninstrumentedCanvases::iterator it = m_framesWithUninstrumentedCanvases.begin(); it != m_framesWithUninstrumentedCanvases.end(); ++it)
             it->value = false;
@@ -328,7 +328,7 @@ void InspectorCanvasAgent::didCommitLoad(Frame*, DocumentLoader* loader)
     }
 }
 
-void InspectorCanvasAgent::frameDetachedFromParent(Frame* frame)
+void InspectorCanvasAgent::frameDetachedFromParent(LocalFrame* frame)
 {
     if (m_enabled)
         m_framesWithUninstrumentedCanvases.remove(frame);

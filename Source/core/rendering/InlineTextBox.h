@@ -43,7 +43,7 @@ Color correctedTextColor(Color textColor, Color backgroundColor);
 
 class InlineTextBox : public InlineBox {
 public:
-    InlineTextBox(RenderObject* obj)
+    InlineTextBox(RenderObject& obj)
         : InlineBox(obj)
         , m_prevTextBox(0)
         , m_nextTextBox(0)
@@ -122,7 +122,7 @@ protected:
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, LayoutUnit lineTop, LayoutUnit lineBottom) OVERRIDE;
 
 public:
-    RenderText* textRenderer() const;
+    RenderText& textRenderer() const;
 
 private:
     virtual void deleteLine() OVERRIDE FINAL;
@@ -185,7 +185,7 @@ protected:
     virtual void paintTextMatchMarker(GraphicsContext*, const FloatPoint& boxOrigin, DocumentMarker*, RenderStyle*, const Font&);
 
 private:
-    void paintDecoration(GraphicsContext*, const FloatPoint& boxOrigin, TextDecoration, TextDecorationStyle, const ShadowList*);
+    void paintDecoration(GraphicsContext*, const FloatPoint& boxOrigin, TextDecoration, const ShadowList*);
     void paintSelection(GraphicsContext*, const FloatPoint& boxOrigin, RenderStyle*, const Font&, Color textColor);
 
     TextRun::ExpansionBehavior expansionBehavior() const
@@ -197,7 +197,7 @@ private:
 
 DEFINE_INLINE_BOX_TYPE_CASTS(InlineTextBox);
 
-inline RenderText* InlineTextBox::textRenderer() const
+inline RenderText& InlineTextBox::textRenderer() const
 {
     return toRenderText(renderer());
 }

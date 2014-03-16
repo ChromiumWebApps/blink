@@ -37,8 +37,8 @@
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/frame/ContentSecurityPolicy.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/CrossOriginPreflightResultCache.h"
 #include "core/loader/DocumentThreadableLoaderClient.h"
@@ -98,42 +98,31 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(const ResourceReques
 {
     ASSERT(m_options.crossOriginRequestPolicy == UseAccessControl);
 
-    OwnPtr<ResourceRequest> crossOriginRequest = adoptPtr(new ResourceRequest(request));
+    if ((m_options.preflightPolicy == ConsiderPreflight && isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight) {
+        // Cross-origin requests are only allowed for HTTP and registered schemes. We would catch this when checking response headers later, but there is no reason to send a request that's guaranteed to be denied.
+        if (!SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(request.url().protocol())) {
+            m_client->didFailAccessControlCheck(ResourceError(errorDomainBlinkInternal, 0, request.url().string(), "Cross origin requests are only supported for HTTP."));
+            return;
+        }
 
-    if ((m_options.preflightPolicy == ConsiderPreflight && isSimpleCrossOriginAccessRequest(crossOriginRequest->httpMethod(), crossOriginRequest->httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight) {
-        updateRequestForAccessControl(*crossOriginRequest, securityOrigin(), m_options.allowCredentials);
-        makeSimpleCrossOriginAccessRequest(*crossOriginRequest);
+        ResourceRequest crossOriginRequest(request);
+        updateRequestForAccessControl(crossOriginRequest, securityOrigin(), m_options.allowCredentials);
+        loadRequest(crossOriginRequest);
     } else {
         m_simpleRequest = false;
+
+        OwnPtr<ResourceRequest> crossOriginRequest = adoptPtr(new ResourceRequest(request));
         // Do not set the Origin header for preflight requests.
         updateRequestForAccessControl(*crossOriginRequest, 0, m_options.allowCredentials);
         m_actualRequest = crossOriginRequest.release();
 
-        if (CrossOriginPreflightResultCache::shared().canSkipPreflight(securityOrigin()->toString(), m_actualRequest->url(), m_options.allowCredentials, m_actualRequest->httpMethod(), m_actualRequest->httpHeaderFields()))
+        if (CrossOriginPreflightResultCache::shared().canSkipPreflight(securityOrigin()->toString(), m_actualRequest->url(), m_options.allowCredentials, m_actualRequest->httpMethod(), m_actualRequest->httpHeaderFields())) {
             preflightSuccess();
-        else
-            makeCrossOriginAccessRequestWithPreflight(*m_actualRequest);
+        } else {
+            ResourceRequest preflightRequest = createAccessControlPreflightRequest(*m_actualRequest, securityOrigin());
+            loadRequest(preflightRequest);
+        }
     }
-}
-
-void DocumentThreadableLoader::makeSimpleCrossOriginAccessRequest(const ResourceRequest& request)
-{
-    ASSERT(m_options.preflightPolicy != ForcePreflight);
-    ASSERT(m_options.preflightPolicy == PreventPreflight || isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields()));
-
-    // Cross-origin requests are only allowed for HTTP and registered schemes. We would catch this when checking response headers later, but there is no reason to send a request that's guaranteed to be denied.
-    if (!SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(request.url().protocol())) {
-        m_client->didFailAccessControlCheck(ResourceError(errorDomainBlinkInternal, 0, request.url().string(), "Cross origin requests are only supported for HTTP."));
-        return;
-    }
-
-    loadRequest(request);
-}
-
-void DocumentThreadableLoader::makeCrossOriginAccessRequestWithPreflight(const ResourceRequest& request)
-{
-    ResourceRequest preflightRequest = createAccessControlPreflightRequest(request, securityOrigin());
-    loadRequest(preflightRequest);
 }
 
 DocumentThreadableLoader::~DocumentThreadableLoader()
@@ -392,7 +381,7 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request)
         }
 
         if (m_options.timeoutMilliseconds > 0)
-            m_timeoutTimer.startOneShot(m_options.timeoutMilliseconds / 1000.0);
+            m_timeoutTimer.startOneShot(m_options.timeoutMilliseconds / 1000.0, FROM_HERE);
 
         FetchRequest newRequest(request, m_options.initiator, options);
         ASSERT(!resource());

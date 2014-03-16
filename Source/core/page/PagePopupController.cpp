@@ -44,9 +44,9 @@ PagePopupController::PagePopupController(PagePopupClient* client)
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<PagePopupController> PagePopupController::create(PagePopupClient* client)
+PassRefPtrWillBeRawPtr<PagePopupController> PagePopupController::create(PagePopupClient* client)
 {
-    return adoptRef(new PagePopupController(client));
+    return adoptRefWillBeNoop(new PagePopupController(client));
 }
 
 void PagePopupController::setValueAndClosePopup(int numValue, const String& stringValue)

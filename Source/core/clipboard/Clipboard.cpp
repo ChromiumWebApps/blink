@@ -33,7 +33,7 @@
 #include "core/editing/markup.h"
 #include "core/fetch/ImageResource.h"
 #include "core/fileapi/FileList.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderObject.h"
@@ -107,9 +107,9 @@ static String normalizeType(const String& type, bool* convertToURL = 0)
     return cleanType;
 }
 
-PassRefPtr<Clipboard> Clipboard::create(ClipboardType type, ClipboardAccessPolicy policy, PassRefPtr<DataObject> dataObject)
+PassRefPtrWillBeRawPtr<Clipboard> Clipboard::create(ClipboardType type, ClipboardAccessPolicy policy, PassRefPtrWillBeRawPtr<DataObject> dataObject)
 {
-    return adoptRef(new Clipboard(type, policy , dataObject));
+    return adoptRefWillBeNoop(new Clipboard(type, policy , dataObject));
 }
 
 Clipboard::~Clipboard()
@@ -194,15 +194,15 @@ Vector<String> Clipboard::types() const
     return types;
 }
 
-PassRefPtr<FileList> Clipboard::files() const
+PassRefPtrWillBeRawPtr<FileList> Clipboard::files() const
 {
-    RefPtr<FileList> files = FileList::create();
+    RefPtrWillBeRawPtr<FileList> files = FileList::create();
     if (!canReadData())
         return files.release();
 
     for (size_t i = 0; i < m_dataObject->length(); ++i) {
         if (m_dataObject->item(i)->kind() == DataObjectItem::FileKind) {
-            RefPtr<Blob> blob = m_dataObject->item(i)->getAsFile();
+            RefPtrWillBeRawPtr<Blob> blob = m_dataObject->item(i)->getAsFile();
             if (blob && blob->isFile())
                 files->append(toFile(blob.get()));
         }
@@ -221,8 +221,8 @@ void Clipboard::setDragImage(Element* image, int x, int y, ExceptionState& excep
         return;
     }
     IntPoint location(x, y);
-    if (image->hasTagName(HTMLNames::imgTag) && !image->inDocument())
-        setDragImageResource(toHTMLImageElement(image)->cachedImage(), location);
+    if (isHTMLImageElement(*image) && !image->inDocument())
+        setDragImageResource(toHTMLImageElement(*image).cachedImage(), location);
     else
         setDragImageElement(image, location);
 }
@@ -237,7 +237,7 @@ void Clipboard::setDragImageElement(Node* node, const IntPoint& loc)
     setDragImage(0, node, loc);
 }
 
-PassOwnPtr<DragImage> Clipboard::createDragImage(IntPoint& loc, Frame* frame) const
+PassOwnPtr<DragImage> Clipboard::createDragImage(IntPoint& loc, LocalFrame* frame) const
 {
     if (m_dragImageElement) {
         loc = m_dragLoc;
@@ -339,7 +339,7 @@ void Clipboard::writeURL(const KURL& url, const String& title)
     m_dataObject->setHTMLAndBaseURL(urlToMarkup(url, title), url);
 }
 
-void Clipboard::writeRange(Range* selectedRange, Frame* frame)
+void Clipboard::writeRange(Range* selectedRange, LocalFrame* frame)
 {
     ASSERT(selectedRange);
     if (!m_dataObject)
@@ -440,7 +440,7 @@ bool Clipboard::hasDropZoneType(const String& keyword)
     return false;
 }
 
-PassRefPtr<DataTransferItemList> Clipboard::items()
+PassRefPtrWillBeRawPtr<DataTransferItemList> Clipboard::items()
 {
     // FIXME: According to the spec, we are supposed to return the same collection of items each
     // time. We now return a wrapper that always wraps the *same* set of items, so JS shouldn't be
@@ -448,12 +448,12 @@ PassRefPtr<DataTransferItemList> Clipboard::items()
     return DataTransferItemList::create(this, m_dataObject);
 }
 
-PassRefPtr<DataObject> Clipboard::dataObject() const
+PassRefPtrWillBeRawPtr<DataObject> Clipboard::dataObject() const
 {
     return m_dataObject;
 }
 
-Clipboard::Clipboard(ClipboardType type, ClipboardAccessPolicy policy, PassRefPtr<DataObject> dataObject)
+Clipboard::Clipboard(ClipboardType type, ClipboardAccessPolicy policy, PassRefPtrWillBeRawPtr<DataObject> dataObject)
     : m_policy(policy)
     , m_dropEffect("uninitialized")
     , m_effectAllowed("uninitialized")
@@ -478,7 +478,7 @@ bool Clipboard::hasFileOfType(const String& type) const
     if (!canReadTypes())
         return false;
 
-    RefPtr<FileList> fileList = files();
+    RefPtrWillBeRawPtr<FileList> fileList = files();
     if (fileList->isEmpty())
         return false;
 
@@ -520,6 +520,11 @@ String convertDragOperationToDropZoneOperation(DragOperation operation)
     default:
         return String("copy");
     }
+}
+
+void Clipboard::trace(Visitor* visitor)
+{
+    visitor->trace(m_dataObject);
 }
 
 } // namespace WebCore

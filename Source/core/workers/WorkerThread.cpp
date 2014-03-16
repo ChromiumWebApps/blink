@@ -35,8 +35,6 @@
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "heap/ThreadState.h"
-#include "modules/webdatabase/DatabaseManager.h"
-#include "modules/webdatabase/DatabaseTask.h"
 #include "platform/PlatformThreadData.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
@@ -67,7 +65,7 @@ unsigned WorkerThread::workerThreadCount()
     return workerThreads().size();
 }
 
-WorkerThread::WorkerThread(WorkerLoaderProxy& workerLoaderProxy, WorkerReportingProxy& workerReportingProxy, PassOwnPtr<WorkerThreadStartupData> startupData)
+WorkerThread::WorkerThread(WorkerLoaderProxy& workerLoaderProxy, WorkerReportingProxy& workerReportingProxy, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData> startupData)
     : m_threadID(0)
     , m_workerLoaderProxy(workerLoaderProxy)
     , m_workerReportingProxy(workerReportingProxy)
@@ -114,6 +112,7 @@ void WorkerThread::workerThread()
         MutexLocker lock(m_threadCreationMutex);
         ThreadState::attach();
         m_workerGlobalScope = createWorkerGlobalScope(m_startupData.release());
+        m_runLoop.setWorkerGlobalScope(workerGlobalScope());
 
         if (m_runLoop.terminated()) {
             // The worker was terminated before the thread had a chance to run. Since the context didn't exist yet,
@@ -136,29 +135,29 @@ void WorkerThread::workerThread()
 
     ThreadIdentifier threadID = m_threadID;
 
-    ASSERT(m_workerGlobalScope->hasOneRef());
-
     // The below assignment will destroy the context, which will in turn notify messaging proxy.
     // We cannot let any objects survive past thread exit, because no other thread will run GC or otherwise destroy them.
+    // If Oilpan is enabled, we detach of the context/global scope, with the final heap cleanup below sweeping it out.
+#if ENABLE(OILPAN)
+    m_workerGlobalScope->dispose();
+#else
+    ASSERT(m_workerGlobalScope->hasOneRef());
+#endif
     m_workerGlobalScope = nullptr;
 
-    // Cleanup thread heap which causes all objects to be finalized.
-    // After this call thread heap must be empty.
-    ThreadState::current()->cleanup();
+    ThreadState::detach();
 
     // Clean up PlatformThreadData before WTF::WTFThreadData goes away!
     PlatformThreadData::current().destroy();
 
     // The thread object may be already destroyed from notification now, don't try to access "this".
     detachThread(threadID);
-
-    ThreadState::detach();
 }
 
 void WorkerThread::runEventLoop()
 {
     // Does not return until terminated.
-    m_runLoop.run(m_workerGlobalScope.get());
+    m_runLoop.run();
 }
 
 class WorkerThreadShutdownFinishTask : public ExecutionContextTask {
@@ -190,21 +189,11 @@ public:
     {
         WorkerGlobalScope* workerGlobalScope = toWorkerGlobalScope(context);
 
-        // FIXME: Should we stop the databases as part of stopActiveDOMObjects() below?
-        DatabaseTaskSynchronizer cleanupSync;
-        DatabaseManager::manager().stopDatabases(workerGlobalScope, &cleanupSync);
-
         workerGlobalScope->stopActiveDOMObjects();
-
-        workerGlobalScope->notifyObserversOfStop();
 
         // Event listeners would keep DOMWrapperWorld objects alive for too long. Also, they have references to JS objects,
         // which become dangling once Heap is destroyed.
         workerGlobalScope->removeAllEventListeners();
-
-        // We wait for the database thread to clean up all its stuff so that we
-        // can do more stringent leak checks as we exit.
-        cleanupSync.waitForTaskCompletion();
 
         // Stick a shutdown command at the end of the queue, so that we deal
         // with all the cleanup tasks the databases post first.
@@ -229,8 +218,7 @@ void WorkerThread::stop()
     // Ensure that tasks are being handled by thread event loop. If script execution weren't forbidden, a while(1) loop in JS could keep the thread alive forever.
     if (m_workerGlobalScope) {
         m_workerGlobalScope->script()->scheduleExecutionTermination();
-
-        DatabaseManager::manager().interruptAllDatabasesForContext(m_workerGlobalScope.get());
+        m_workerGlobalScope->willStopActiveDOMObjects();
         m_runLoop.postTaskAndTerminate(WorkerThreadShutdownStartTask::create());
         return;
     }

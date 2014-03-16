@@ -29,11 +29,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGEllipseElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGEllipseElement::SVGEllipseElement(Document& document)
     : SVGGeometryElement(SVGNames::ellipseTag, document)
     , m_cx(SVGAnimatedLength::create(this, SVGNames::cxAttr, SVGLength::create(LengthModeWidth)))
@@ -47,7 +42,6 @@ inline SVGEllipseElement::SVGEllipseElement(Document& document)
     addToPropertyMap(m_cy);
     addToPropertyMap(m_rx);
     addToPropertyMap(m_ry);
-    registerAnimatedPropertiesForSVGEllipseElement();
 }
 
 PassRefPtr<SVGEllipseElement> SVGEllipseElement::create(Document& document)

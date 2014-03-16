@@ -269,7 +269,8 @@ public:
         // FIXME: in an unlikely coincidence that two threads decide
         // to collect garbage at the same time, avoid doing two GCs in
         // a row.
-        ASSERT(!m_state->isInGC());
+        RELEASE_ASSERT(!m_state->isInGC());
+        RELEASE_ASSERT(!m_state->isSweepInProgress());
         ThreadState::stopThreads();
         m_state->enterGC();
     }
@@ -577,7 +578,7 @@ Address ThreadHeap<Header>::allocateLargeObject(size_t size, const GCInfo* gcInf
     Header* header = new (NotNull, headerAddress) Header(size, gcInfo);
     Address result = headerAddress + sizeof(*header);
     ASSERT(!(reinterpret_cast<uintptr_t>(result) & allocationMask));
-    LargeHeapObject<Header>* largeObject = new (largeObjectAddress) LargeHeapObject<Header>(pageMemory, gcInfo);
+    LargeHeapObject<Header>* largeObject = new (largeObjectAddress) LargeHeapObject<Header>(pageMemory, gcInfo, threadState());
 
     // Poison the object header and allocationGranularity bytes after the object
     ASAN_POISON_MEMORY_REGION(header, sizeof(*header));
@@ -661,6 +662,12 @@ void ThreadHeap<Header>::allocatePage(const GCInfo* gcInfo)
         RELEASE_ASSERT(pageMemory);
     }
     HeapPage<Header>* page = new (pageMemory->writableStart()) HeapPage<Header>(pageMemory, this, gcInfo);
+    // FIXME: Oilpan: Linking new pages into the front of the list is
+    // crucial when performing allocations during finalization because
+    // it ensures that those pages are not swept in the current GC
+    // round. We should create a separate page list for that to
+    // separate out the pages allocated during finalization clearly
+    // from the pages currently being swept.
     page->link(&m_firstPage);
     addToFreeList(page->payload(), HeapPage<Header>::payloadSize());
 }
@@ -724,7 +731,7 @@ void ThreadHeap<Header>::sweep()
 template<typename Header>
 void ThreadHeap<Header>::assertEmpty()
 {
-    // No nested GCs are permitted. The thread is exiting.
+    // No allocations are permitted. The thread is exiting.
     NoAllocationScope<AnyThread> noAllocation;
     makeConsistentForGC();
     for (HeapPage<Header>* page = m_firstPage; page; page = page->next()) {
@@ -820,7 +827,7 @@ int BaseHeap::bucketIndexForSize(size_t size)
 
 template<typename Header>
 HeapPage<Header>::HeapPage(PageMemory* storage, ThreadHeap<Header>* heap, const GCInfo* gcInfo)
-    : BaseHeapPage(storage, gcInfo)
+    : BaseHeapPage(storage, gcInfo, heap->threadState())
     , m_next(0)
     , m_heap(heap)
 {
@@ -1179,9 +1186,9 @@ public:
         visitHeader(header, header->payload(), callback);
     }
 
-    virtual void registerWeakMembers(const void* containingObject, WeakPointerCallback callback) OVERRIDE
+    virtual void registerWeakMembers(const void* closure, const void* containingObject, WeakPointerCallback callback) OVERRIDE
     {
-        Heap::pushWeakPointerCallback(const_cast<void*>(containingObject), callback);
+        Heap::pushWeakObjectPointerCallback(const_cast<void*>(closure), const_cast<void*>(containingObject), callback);
     }
 
     virtual bool isMarked(const void* objectPointer) OVERRIDE
@@ -1206,6 +1213,12 @@ public:
 
     FOR_EACH_TYPED_HEAP(DEFINE_VISITOR_METHODS)
 #undef DEFINE_VISITOR_METHODS
+
+protected:
+    virtual void registerWeakCell(void** cell, WeakPointerCallback callback) OVERRIDE
+    {
+        Heap::pushWeakCellPointerCallback(cell, callback);
+    }
 };
 
 void Heap::init()
@@ -1213,24 +1226,27 @@ void Heap::init()
     ThreadState::init();
     CallbackStack::init(&s_markingStack);
     CallbackStack::init(&s_weakCallbackStack);
+    s_markingVisitor = new MarkingVisitor();
 }
 
 void Heap::shutdown()
 {
-    ThreadState::shutdown();
-    CallbackStack::shutdown(&s_markingStack);
+    delete s_markingVisitor;
     CallbackStack::shutdown(&s_weakCallbackStack);
+    CallbackStack::shutdown(&s_markingStack);
+    ThreadState::shutdown();
 }
 
-bool Heap::contains(Address address)
+BaseHeapPage* Heap::contains(Address address)
 {
     ASSERT(ThreadState::isAnyThreadInGC());
     ThreadState::AttachedThreadStateSet& threads = ThreadState::attachedThreads();
     for (ThreadState::AttachedThreadStateSet::iterator it = threads.begin(), end = threads.end(); it != end; ++it) {
-        if ((*it)->contains(address))
-            return true;
+        BaseHeapPage* page = (*it)->contains(address);
+        if (page)
+            return page;
     }
-    return false;
+    return 0;
 }
 
 Address Heap::checkAndMarkPointer(Visitor* visitor, Address address)
@@ -1258,11 +1274,20 @@ bool Heap::popAndInvokeTraceCallback(Visitor* visitor)
     return s_markingStack->popAndInvokeCallback(&s_markingStack, visitor);
 }
 
-void Heap::pushWeakPointerCallback(void* object, WeakPointerCallback callback)
+void Heap::pushWeakCellPointerCallback(void** cell, WeakPointerCallback callback)
+{
+    ASSERT(Heap::contains(cell));
+    CallbackStack::Item* slot = s_weakCallbackStack->allocateEntry(&s_weakCallbackStack);
+    *slot = CallbackStack::Item(cell, callback);
+}
+
+void Heap::pushWeakObjectPointerCallback(void* closure, void* object, WeakPointerCallback callback)
 {
     ASSERT(Heap::contains(object));
-    CallbackStack::Item* slot = s_weakCallbackStack->allocateEntry(&s_weakCallbackStack);
-    *slot = CallbackStack::Item(object, callback);
+    BaseHeapPage* heapPageForObject = reinterpret_cast<BaseHeapPage*>(pageHeaderAddress(reinterpret_cast<Address>(object)));
+    ASSERT(Heap::contains(object) == heapPageForObject);
+    ThreadState* state = heapPageForObject->threadState();
+    state->pushWeakObjectPointerCallback(closure, callback);
 }
 
 bool Heap::popAndInvokeWeakPointerCallback(Visitor* visitor)
@@ -1283,22 +1308,35 @@ void Heap::collectGarbage(ThreadState::StackState stackState, GCType gcType)
     ThreadState::current()->clearGCRequested();
     GCScope gcScope(stackState);
 
-    // Disallow allocation during garbage collection.
+    // Disallow allocation during garbage collection (but not
+    // during the finalization that happens when the gcScope is
+    // torn down).
     NoAllocationScope<AnyThread> noAllocationScope;
-    prepareForGC();
-    MarkingVisitor marker;
 
-    ThreadState::visitRoots(&marker);
+    prepareForGC();
+
+    ThreadState::visitRoots(s_markingVisitor);
     // Recursively mark all objects that are reachable from the roots.
-    while (popAndInvokeTraceCallback(&marker)) { }
+    while (popAndInvokeTraceCallback(s_markingVisitor)) { }
 
     // Call weak callbacks on objects that may now be pointing to dead
     // objects.
-    while (popAndInvokeWeakPointerCallback(&marker)) { }
+    while (popAndInvokeWeakPointerCallback(s_markingVisitor)) { }
 
     // It is not permitted to trace pointers of live objects in the weak
     // callback phase, so the marking stack should still be empty here.
     s_markingStack->assertIsEmpty();
+}
+
+void Heap::collectAllGarbage(ThreadState::StackState stackState, GCType gcType)
+{
+    // FIXME: oilpan: we should perform a single GC and everything
+    // should die. Unfortunately it is not the case for all objects
+    // because the hierarchy was not completely moved to the heap and
+    // some heap allocated objects own objects that contain persistents
+    // pointing to other heap allocated objects.
+    for (int i = 0; i < 5; i++)
+        collectGarbage(stackState, gcType);
 }
 
 void Heap::getStats(HeapStats* stats)
@@ -1337,6 +1375,7 @@ template class HeapPage<HeapObjectHeader>;
 template class ThreadHeap<FinalizedHeapObjectHeader>;
 template class ThreadHeap<HeapObjectHeader>;
 
+Visitor* Heap::s_markingVisitor;
 CallbackStack* Heap::s_markingStack;
 CallbackStack* Heap::s_weakCallbackStack;
 }

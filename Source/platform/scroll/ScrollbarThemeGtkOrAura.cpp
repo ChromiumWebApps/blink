@@ -51,7 +51,7 @@ static bool useMockTheme()
 ScrollbarTheme* ScrollbarTheme::nativeTheme()
 {
     if (RuntimeEnabledFeatures::overlayScrollbarsEnabled()) {
-        DEFINE_STATIC_LOCAL(ScrollbarThemeOverlay, theme, (10, 0, ScrollbarThemeOverlay::AllowHitTest, Color(128, 128, 128, 192)));
+        DEFINE_STATIC_LOCAL(ScrollbarThemeOverlay, theme, (10, 0, ScrollbarThemeOverlay::AllowHitTest));
         return &theme;
     }
 
@@ -141,11 +141,6 @@ void ScrollbarThemeGtkOrAura::paintThumb(GraphicsContext* gc, ScrollbarThemeClie
     else
         state = blink::WebThemeEngine::StateNormal;
     blink::Platform::current()->themeEngine()->paint(canvas, scrollbar->orientation() == HorizontalScrollbar ? blink::WebThemeEngine::PartScrollbarHorizontalThumb : blink::WebThemeEngine::PartScrollbarVerticalThumb, state, blink::WebRect(rect), 0);
-}
-
-bool ScrollbarThemeGtkOrAura::shouldCenterOnThumb(ScrollbarThemeClient*, const PlatformMouseEvent& evt)
-{
-    return (evt.shiftKey() && evt.button() == LeftButton) || (evt.button() == MiddleButton);
 }
 
 IntSize ScrollbarThemeGtkOrAura::buttonSize(ScrollbarThemeClient* scrollbar)

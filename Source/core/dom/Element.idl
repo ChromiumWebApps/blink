@@ -96,7 +96,7 @@
 
     [RaisesException, CustomElementCallbacks, MeasureAs=InsertAdjacentElement] Element insertAdjacentElement(DOMString where, Element element);
     [RaisesException, MeasureAs=InsertAdjacentText] void insertAdjacentText(DOMString where, DOMString text);
-    [CustomElementCallbacks, RaisesException] void insertAdjacentHTML(DOMString where, DOMString html);
+    [CustomElementCallbacks, RaisesException, MeasureAs=InsertAdjacentHTML] void insertAdjacentHTML(DOMString where, DOMString html);
 
     [Reflect=class, PerWorldBindings] attribute DOMString className;
     [PerWorldBindings] readonly attribute DOMTokenList classList;
@@ -111,6 +111,7 @@
     [RaisesException, ImplementedAs=matches, MeasureAs=ElementPrefixedMatchesSelector] boolean webkitMatchesSelector(DOMString selectors);
 
     // Shadow DOM API
+    [RuntimeEnabled=ShadowDOM, Reflect, TreatNullAs=NullString, PerWorldBindings] attribute DOMString pseudo;
     [RuntimeEnabled=ShadowDOM, RaisesException] ShadowRoot createShadowRoot();
     [RuntimeEnabled=ShadowDOM, PerWorldBindings] readonly attribute ShadowRoot shadowRoot;
     [RuntimeEnabled=ShadowDOM, PerWorldBindings] NodeList getDestinationInsertionPoints();
@@ -125,10 +126,10 @@
 
     // Mozilla version
     const unsigned short ALLOW_KEYBOARD_INPUT = 1;
-    [RuntimeEnabled=Fullscreen, PerWorldBindings, ActivityLogging=ForAllWorlds, MeasureAs=PrefixedElementRequestFullScreen] void webkitRequestFullScreen([Default=Undefined] optional unsigned short flags);
+    [PerWorldBindings, ActivityLogging=ForAllWorlds, MeasureAs=PrefixedElementRequestFullScreen] void webkitRequestFullScreen([Default=Undefined] optional unsigned short flags);
 
     // W3C version
-    [RuntimeEnabled=Fullscreen, PerWorldBindings, ActivityLogging=ForAllWorlds, MeasureAs=PrefixedElementRequestFullscreen] void webkitRequestFullscreen();
+    [PerWorldBindings, ActivityLogging=ForAllWorlds, MeasureAs=PrefixedElementRequestFullscreen] void webkitRequestFullscreen();
 
     void webkitRequestPointerLock();
 

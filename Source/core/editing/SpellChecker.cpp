@@ -37,7 +37,7 @@
 #include "core/editing/TextCheckingHelper.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/loader/EmptyClients.h"
 #include "core/page/Page.h"
@@ -55,12 +55,12 @@ namespace {
 bool isSelectionInTextField(const VisibleSelection& selection)
 {
     HTMLTextFormControlElement* textControl = enclosingTextFormControl(selection.start());
-    return textControl && textControl->hasTagName(inputTag) && toHTMLInputElement(textControl)->isTextField();
+    return isHTMLInputElement(textControl) && toHTMLInputElement(textControl)->isTextField();
 }
 
 } // namespace
 
-PassOwnPtr<SpellChecker> SpellChecker::create(Frame& frame)
+PassOwnPtr<SpellChecker> SpellChecker::create(LocalFrame& frame)
 {
     return adoptPtr(new SpellChecker(frame));
 }
@@ -83,7 +83,7 @@ TextCheckerClient& SpellChecker::textChecker() const
     return spellCheckerClient().textChecker();
 }
 
-SpellChecker::SpellChecker(Frame& frame)
+SpellChecker::SpellChecker(LocalFrame& frame)
     : m_frame(frame)
     , m_spellCheckRequester(adoptPtr(new SpellCheckRequester(frame)))
 {
@@ -103,7 +103,7 @@ void SpellChecker::toggleContinuousSpellChecking()
     spellCheckerClient().toggleContinuousSpellChecking();
     if (isContinuousSpellCheckingEnabled())
         return;
-    for (Frame* frame = m_frame.page()->mainFrame(); frame && frame->document(); frame = frame->tree().traverseNext()) {
+    for (LocalFrame* frame = m_frame.page()->mainFrame(); frame && frame->document(); frame = frame->tree().traverseNext()) {
         for (Node* node = &frame->document()->rootNode(); node; node = NodeTraversal::next(*node)) {
             node->setAlreadySpellChecked(false);
         }
@@ -128,7 +128,7 @@ void SpellChecker::didBeginEditing(Element* element)
             HTMLTextFormControlElement* textControl = toHTMLTextFormControlElement(element);
             parent = textControl;
             element = textControl->innerTextElement();
-            isTextField = textControl->hasTagName(inputTag) && toHTMLInputElement(textControl)->isTextField();
+            isTextField = isHTMLInputElement(*textControl) && toHTMLInputElement(*textControl).isTextField();
         }
 
         if (isTextField || !parent->isAlreadySpellChecked()) {
@@ -144,7 +144,7 @@ void SpellChecker::didBeginEditing(Element* element)
 void SpellChecker::ignoreSpelling()
 {
     if (RefPtr<Range> selectedRange = m_frame.selection().toNormalizedRange())
-        m_frame.document()->markers()->removeMarkers(selectedRange.get(), DocumentMarker::Spelling);
+        m_frame.document()->markers().removeMarkers(selectedRange.get(), DocumentMarker::Spelling);
 }
 
 void SpellChecker::advanceToNextMisspelling(bool startBeforeSelection)
@@ -290,7 +290,7 @@ void SpellChecker::advanceToNextMisspelling(bool startBeforeSelection)
         m_frame.selection().setSelection(VisibleSelection(badGrammarRange.get(), SEL_DEFAULT_AFFINITY));
         m_frame.selection().revealSelection();
 
-        m_frame.document()->markers()->addMarker(badGrammarRange.get(), DocumentMarker::Grammar, grammarDetail.userDescription);
+        m_frame.document()->markers().addMarker(badGrammarRange.get(), DocumentMarker::Grammar, grammarDetail.userDescription);
     } else if (!misspelledWord.isEmpty()) {
         // We found a misspelling, but not any earlier bad grammar. Select the misspelling, update the spelling panel, and store
         // a marker so we draw the red squiggle later.
@@ -300,7 +300,7 @@ void SpellChecker::advanceToNextMisspelling(bool startBeforeSelection)
         m_frame.selection().revealSelection();
 
         spellCheckerClient().updateSpellingUIWithMisspelledWord(misspelledWord);
-        m_frame.document()->markers()->addMarker(misspellingRange.get(), DocumentMarker::Spelling);
+        m_frame.document()->markers().addMarker(misspellingRange.get(), DocumentMarker::Spelling);
     }
 }
 
@@ -319,7 +319,7 @@ void SpellChecker::clearMisspellingsAndBadGrammar(const VisibleSelection &moving
 {
     RefPtr<Range> selectedRange = movingSelection.toNormalizedRange();
     if (selectedRange)
-        m_frame.document()->markers()->removeMarkers(selectedRange.get(), DocumentMarker::MisspellingMarkers());
+        m_frame.document()->markers().removeMarkers(selectedRange.get(), DocumentMarker::MisspellingMarkers());
 }
 
 void SpellChecker::markMisspellingsAndBadGrammar(const VisibleSelection &movingSelection)
@@ -376,7 +376,7 @@ void SpellChecker::markMisspellingsAfterTypingToWord(const VisiblePosition &word
         m_frame.editor().replaceSelectionWithText(autocorrectedString, false, false);
 
         // Reset the charet one character further.
-        m_frame.selection().moveTo(m_frame.selection().end());
+        m_frame.selection().moveTo(m_frame.selection().selection().visibleEnd());
         m_frame.selection().modify(FrameSelection::AlterationMove, DirectionForward, CharacterGranularity);
     }
 
@@ -498,8 +498,8 @@ void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask
 
     for (int iter = 0; iter < kNumChunksToCheck; ++iter) {
         checkRange = fullParagraphToCheck.subrange(currentChunkStart, kChunkSize);
-        setStart(checkRange.get(), startOfSentence(checkRange->startPosition()));
-        setEnd(checkRange.get(), endOfSentence(checkRange->endPosition()));
+        setStart(checkRange.get(), startOfSentence(VisiblePosition(checkRange->startPosition())));
+        setEnd(checkRange.get(), endOfSentence(VisiblePosition(checkRange->endPosition())));
 
         int checkingLength = 0;
         markAllMisspellingsAndBadGrammarInRanges(textCheckingOptions, checkRange.get(), checkRange.get(), asynchronous, iter, &checkingLength);
@@ -569,7 +569,7 @@ void SpellChecker::markAndReplaceFor(PassRefPtr<SpellCheckRequest> request, cons
         if (shouldMarkSpelling && result->decoration == TextDecorationTypeSpelling && resultLocation >= paragraph.checkingStart() && resultLocation + resultLength <= spellingRangeEndOffset && !resultEndsAtAmbiguousBoundary) {
             ASSERT(resultLength > 0 && resultLocation >= 0);
             RefPtr<Range> misspellingRange = paragraph.subrange(resultLocation, resultLength);
-            misspellingRange->startContainer()->document().markers()->addMarker(misspellingRange.get(), DocumentMarker::Spelling, result->replacement, result->hash);
+            misspellingRange->startContainer()->document().markers().addMarker(misspellingRange.get(), DocumentMarker::Spelling, result->replacement, result->hash);
         } else if (shouldMarkGrammar && result->decoration == TextDecorationTypeGrammar && paragraph.checkingRangeCovers(resultLocation, resultLength)) {
             ASSERT(resultLength > 0 && resultLocation >= 0);
             for (unsigned j = 0; j < result->details.size(); j++) {
@@ -577,13 +577,13 @@ void SpellChecker::markAndReplaceFor(PassRefPtr<SpellCheckRequest> request, cons
                 ASSERT(detail->length > 0 && detail->location >= 0);
                 if (paragraph.checkingRangeCovers(resultLocation + detail->location, detail->length)) {
                     RefPtr<Range> badGrammarRange = paragraph.subrange(resultLocation + detail->location, detail->length);
-                    badGrammarRange->startContainer()->document().markers()->addMarker(badGrammarRange.get(), DocumentMarker::Grammar, detail->userDescription, result->hash);
+                    badGrammarRange->startContainer()->document().markers().addMarker(badGrammarRange.get(), DocumentMarker::Grammar, detail->userDescription, result->hash);
                 }
             }
         } else if (result->decoration == TextDecorationTypeInvisibleSpellcheck && resultLocation >= paragraph.checkingStart() && resultLocation + resultLength <= spellingRangeEndOffset) {
             ASSERT(resultLength > 0 && resultLocation >= 0);
             RefPtr<Range> invisibleSpellcheckRange = paragraph.subrange(resultLocation, resultLength);
-            invisibleSpellcheckRange->startContainer()->document().markers()->addMarker(invisibleSpellcheckRange.get(), DocumentMarker::InvisibleSpellcheck, result->replacement, result->hash);
+            invisibleSpellcheckRange->startContainer()->document().markers().addMarker(invisibleSpellcheckRange.get(), DocumentMarker::InvisibleSpellcheck, result->replacement, result->hash);
         }
     }
 
@@ -598,7 +598,7 @@ void SpellChecker::markAndReplaceFor(PassRefPtr<SpellCheckRequest> request, cons
                 m_frame.selection().modify(FrameSelection::AlterationMove, DirectionForward, CharacterGranularity);
         } else {
             // If this fails for any reason, the fallback is to go one position beyond the last replacement
-            m_frame.selection().moveTo(m_frame.selection().end());
+            m_frame.selection().moveTo(m_frame.selection().selection().visibleEnd());
             m_frame.selection().modify(FrameSelection::AlterationMove, DirectionForward, CharacterGranularity);
         }
     }
@@ -639,8 +639,8 @@ void SpellChecker::updateMarkersForWordsAffectedByEditing(bool doNotRemoveIfSele
     // Of course, if current selection is a range, we potentially will edit two words that fall on the boundaries of
     // selection, and remove words between the selection boundaries.
     //
-    VisiblePosition startOfSelection = m_frame.selection().selection().start();
-    VisiblePosition endOfSelection = m_frame.selection().selection().end();
+    VisiblePosition startOfSelection = m_frame.selection().selection().visibleStart();
+    VisiblePosition endOfSelection = m_frame.selection().selection().visibleEnd();
     if (startOfSelection.isNull())
         return;
     // First word is the word that ends after or on the start of selection.
@@ -691,7 +691,7 @@ void SpellChecker::updateMarkersForWordsAffectedByEditing(bool doNotRemoveIfSele
     ASSERT(document);
     RefPtr<Range> wordRange = Range::create(*document, startOfFirstWord.deepEquivalent(), endOfLastWord.deepEquivalent());
 
-    document->markers()->removeMarkers(wordRange.get(), DocumentMarker::MisspellingMarkers(), DocumentMarkerController::RemovePartiallyOverlappingMarker);
+    document->markers().removeMarkers(wordRange.get(), DocumentMarker::MisspellingMarkers(), DocumentMarkerController::RemovePartiallyOverlappingMarker);
 }
 
 void SpellChecker::didEndEditingOnTextField(Element* e)
@@ -705,7 +705,7 @@ void SpellChecker::didEndEditingOnTextField(Element* e)
     if (isGrammarCheckingEnabled() || unifiedTextCheckerEnabled())
         markerTypes.add(DocumentMarker::Grammar);
     for (Node* node = innerText; node; node = NodeTraversal::next(*node, innerText)) {
-        m_frame.document()->markers()->removeMarkers(node, markerTypes);
+        m_frame.document()->markers().removeMarkers(node, markerTypes);
     }
 }
 
@@ -741,19 +741,19 @@ void SpellChecker::respondToChangedSelection(const VisibleSelection& oldSelectio
 
         if (textChecker().shouldEraseMarkersAfterChangeSelection(TextCheckingTypeSpelling)) {
             if (RefPtr<Range> wordRange = newAdjacentWords.toNormalizedRange())
-                m_frame.document()->markers()->removeMarkers(wordRange.get(), DocumentMarker::Spelling);
+                m_frame.document()->markers().removeMarkers(wordRange.get(), DocumentMarker::Spelling);
         }
         if (textChecker().shouldEraseMarkersAfterChangeSelection(TextCheckingTypeGrammar)) {
             if (RefPtr<Range> sentenceRange = newSelectedSentence.toNormalizedRange())
-                m_frame.document()->markers()->removeMarkers(sentenceRange.get(), DocumentMarker::Grammar);
+                m_frame.document()->markers().removeMarkers(sentenceRange.get(), DocumentMarker::Grammar);
         }
     }
 
     // When continuous spell checking is off, existing markers disappear after the selection changes.
     if (!isContinuousSpellCheckingEnabled)
-        m_frame.document()->markers()->removeMarkers(DocumentMarker::Spelling);
+        m_frame.document()->markers().removeMarkers(DocumentMarker::Spelling);
     if (!isContinuousGrammarCheckingEnabled)
-        m_frame.document()->markers()->removeMarkers(DocumentMarker::Grammar);
+        m_frame.document()->markers().removeMarkers(DocumentMarker::Grammar);
 }
 
 void SpellChecker::spellCheckAfterBlur()
@@ -810,7 +810,7 @@ bool SpellChecker::selectionStartHasMarkerFor(DocumentMarker::MarkerType markerT
 
     unsigned startOffset = static_cast<unsigned>(from);
     unsigned endOffset = static_cast<unsigned>(from + length);
-    Vector<DocumentMarker*> markers = m_frame.document()->markers()->markersFor(node);
+    Vector<DocumentMarker*> markers = m_frame.document()->markers().markersFor(node);
     for (size_t i = 0; i < markers.size(); ++i) {
         DocumentMarker* marker = markers[i];
         if (marker->startOffset() <= startOffset && endOffset <= marker->endOffset() && marker->type() == markerType)

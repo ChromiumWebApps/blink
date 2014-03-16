@@ -89,6 +89,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_drawsContent(false)
     , m_contentsVisible(true)
     , m_isRootForIsolatedGroup(false)
+    , m_hasGpuRasterizationHint(false)
     , m_hasScrollParent(false)
     , m_hasClipParent(false)
     , m_paintingPhase(GraphicsLayerPaintAllWithOverflowClip)
@@ -99,7 +100,6 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_replicaLayer(0)
     , m_replicatedLayer(0)
     , m_paintCount(0)
-    , m_contentsSolidColor(Color::transparent)
     , m_contentsLayer(0)
     , m_contentsLayerId(0)
     , m_scrollableArea(0)
@@ -157,7 +157,7 @@ bool GraphicsLayer::hasAncestor(GraphicsLayer* ancestor) const
     return false;
 }
 
-bool GraphicsLayer::setChildren(const Vector<GraphicsLayer*>& newChildren)
+bool GraphicsLayer::setChildren(const GraphicsLayerVector& newChildren)
 {
     // If the contents of the arrays are the same, nothing to do.
     if (newChildren == m_children)
@@ -278,8 +278,8 @@ bool GraphicsLayer::replaceChild(GraphicsLayer* oldChild, GraphicsLayer* newChil
 
 void GraphicsLayer::removeAllChildren()
 {
-    while (m_children.size()) {
-        GraphicsLayer* curLayer = m_children[0];
+    while (!m_children.isEmpty()) {
+        GraphicsLayer* curLayer = m_children.last();
         ASSERT(curLayer->parent());
         curLayer->removeFromParent();
     }
@@ -288,14 +288,8 @@ void GraphicsLayer::removeAllChildren()
 void GraphicsLayer::removeFromParent()
 {
     if (m_parent) {
-        unsigned i;
-        for (i = 0; i < m_parent->m_children.size(); i++) {
-            if (this == m_parent->m_children[i]) {
-                m_parent->m_children.remove(i);
-                break;
-            }
-        }
-
+        // We use reverseFind so that removeAllChildren() isn't n^2.
+        m_parent->m_children.remove(m_parent->m_children.reverseFind(this));
         setParent(0);
     }
 
@@ -358,13 +352,8 @@ void GraphicsLayer::updateChildList()
         childHost->addChild(m_contentsLayer);
     }
 
-    const Vector<GraphicsLayer*>& childLayers = children();
-    size_t numChildren = childLayers.size();
-    for (size_t i = 0; i < numChildren; ++i) {
-        GraphicsLayer* curChild = childLayers[i];
-
-        childHost->addChild(curChild->platformLayer());
-    }
+    for (size_t i = 0; i < m_children.size(); ++i)
+        childHost->addChild(m_children[i]->platformLayer());
 
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         childHost->addChild(m_linkHighlights[i]->layer());
@@ -619,6 +608,11 @@ void GraphicsLayer::dumpProperties(TextStream& ts, int indent, LayerTreeFlags fl
         ts << "(contentsVisible " << m_contentsVisible << ")\n";
     }
 
+    if (m_hasGpuRasterizationHint) {
+        writeIndent(ts, indent + 1);
+        ts << "(hasGpuRasterizationHint " << m_hasGpuRasterizationHint << ")\n";
+    }
+
     if (!m_backfaceVisibility) {
         writeIndent(ts, indent + 1);
         ts << "(backfaceVisibility " << (m_backfaceVisibility ? "visible" : "hidden") << ")\n";
@@ -723,6 +717,19 @@ void GraphicsLayer::dumpProperties(TextStream& ts, int indent, LayerTreeFlags fl
             writeIndent(ts, indent + 1);
             ts << "(hasClipParent 1)\n";
         }
+    }
+
+    if (flags & LayerTreeIncludesDebugInfo) {
+        writeIndent(ts, indent + 1);
+        ts << "(compositingReasons\n";
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(compositingReasonStringMap); ++i) {
+            if (m_debugInfo.compositingReasons() & compositingReasonStringMap[i].reason) {
+                writeIndent(ts, indent + 2);
+                ts << compositingReasonStringMap[i].description << "\n";
+            }
+        }
+        writeIndent(ts, indent + 1);
+        ts << ")\n";
     }
 
     if (m_children.size()) {
@@ -945,6 +952,12 @@ void GraphicsLayer::setIsRootForIsolatedGroup(bool isolated)
     platformLayer()->setIsRootForIsolatedGroup(isolated);
 }
 
+void GraphicsLayer::setHasGpuRasterizationHint(bool hasHint)
+{
+    m_hasGpuRasterizationHint = hasHint;
+    m_layer->setHasGpuRasterizationHint(hasHint);
+}
+
 void GraphicsLayer::setContentsNeedsDisplay()
 {
     if (WebLayer* contentsLayer = contentsLayerIfRegistered()) {
@@ -1017,27 +1030,6 @@ void GraphicsLayer::setContentsToNinePatch(Image* image, const IntRect& aperture
         registerContentsLayer(m_ninePatchLayer->layer());
     }
     setContentsTo(m_ninePatchLayer ? m_ninePatchLayer->layer() : 0);
-}
-
-void GraphicsLayer::setContentsToSolidColor(const Color& color)
-{
-    if (color == m_contentsSolidColor)
-        return;
-
-    m_contentsSolidColor = color;
-    if (color.alpha()) {
-        if (!m_solidColorLayer) {
-            m_solidColorLayer = adoptPtr(Platform::current()->compositorSupport()->createSolidColorLayer());
-            registerContentsLayer(m_solidColorLayer->layer());
-        }
-        m_solidColorLayer->setBackgroundColor(color.rgb());
-    } else {
-        if (!m_solidColorLayer)
-            return;
-        unregisterContentsLayer(m_solidColorLayer->layer());
-        m_solidColorLayer.clear();
-    }
-    setContentsTo(m_solidColorLayer ? m_solidColorLayer->layer() : 0);
 }
 
 bool GraphicsLayer::addAnimation(PassOwnPtr<WebAnimation> popAnimation)
@@ -1202,13 +1194,13 @@ void GraphicsLayer::paint(GraphicsContext& context, const IntRect& clip)
 }
 
 
-void GraphicsLayer::notifyAnimationStarted(double wallClockTime, double monotonicTime, WebAnimation::TargetProperty)
+void GraphicsLayer::notifyAnimationStarted(double monotonicTime, WebAnimation::TargetProperty)
 {
     if (m_client)
-        m_client->notifyAnimationStarted(this, wallClockTime, monotonicTime);
+        m_client->notifyAnimationStarted(this, monotonicTime);
 }
 
-void GraphicsLayer::notifyAnimationFinished(double, double, WebAnimation::TargetProperty)
+void GraphicsLayer::notifyAnimationFinished(double, WebAnimation::TargetProperty)
 {
     // Do nothing.
 }

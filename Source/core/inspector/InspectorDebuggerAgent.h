@@ -37,6 +37,7 @@
 #include "core/inspector/ConsoleAPITypes.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/PromiseTracker.h"
 #include "core/inspector/ScriptBreakpoint.h"
 #include "core/inspector/ScriptDebugListener.h"
 #include "wtf/Forward.h"
@@ -95,8 +96,8 @@ public:
     void addMessageToConsole(MessageSource, MessageType, MessageLevel, const String&, PassRefPtr<ScriptCallStack>, unsigned long);
     void addMessageToConsole(MessageSource, MessageType, MessageLevel, const String&, ScriptState*, PassRefPtr<ScriptArguments>, unsigned long);
 
-    String preprocessEventListener(Frame*, const String& source, const String& url, const String& functionName);
-    PassOwnPtr<ScriptSourceCode> preprocess(Frame*, const ScriptSourceCode&);
+    String preprocessEventListener(LocalFrame*, const String& source, const String& url, const String& functionName);
+    PassOwnPtr<ScriptSourceCode> preprocess(LocalFrame*, const ScriptSourceCode&);
 
     // Part of the protocol.
     virtual void enable(ErrorString*) OVERRIDE FINAL;
@@ -161,6 +162,10 @@ public:
     void didPostPromiseTask(ExecutionContext*, ExecutionContextTask*, bool isResolved);
     void willPerformPromiseTask(ExecutionContext*, ExecutionContextTask*);
     void didPerformPromiseTask();
+    bool isPromiseTrackerEnabled();
+    void didCreatePromise(const ScriptObject& promise);
+    void didUpdatePromiseParent(const ScriptObject& promise, const ScriptObject& parentPromise);
+    void didUpdatePromiseState(const ScriptObject& promise, V8PromiseCustom::PromiseState, const ScriptValue& result);
     bool canBreakProgram();
     void breakProgram(InspectorFrontend::Debugger::Reason::Enum breakReason, PassRefPtr<JSONObject> data);
     void scriptExecutionBlockedByCSP(const String& directiveText);
@@ -248,6 +253,7 @@ private:
     bool m_skipAllPauses;
     OwnPtr<ScriptRegexp> m_cachedSkipStackRegExp;
     AsyncCallStackTracker m_asyncCallStackTracker;
+    PromiseTracker m_promiseTracker;
 };
 
 } // namespace WebCore

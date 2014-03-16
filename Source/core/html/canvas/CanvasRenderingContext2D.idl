@@ -25,12 +25,14 @@
 
 enum CanvasWindingRule { "nonzero", "evenodd" };
 
-interface CanvasRenderingContext2D : CanvasRenderingContext {
+interface CanvasRenderingContext2D {
+
+    readonly attribute HTMLCanvasElement canvas;
 
     void save();
     void restore();
 
-    [StrictTypeChecking, RuntimeEnabled=ExperimentalCanvasFeatures] attribute SVGMatrix currentTransform;
+    [StrictTypeChecking, RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException=Setter] attribute SVGMatrix currentTransform;
     void scale(float sx, float sy);
     void rotate(float angle);
     void translate(float tx, float ty);
@@ -63,24 +65,30 @@ interface CanvasRenderingContext2D : CanvasRenderingContext {
 
     void beginPath();
 
-    attribute Path currentPath;
+    attribute Path2D currentPath;
 
-    // FIXME: These methods should be shared with CanvasRenderingContext2D in the CanvasPathMethods interface.
-    void closePath();
-    void moveTo(float x, float y);
-    void lineTo(float x, float y);
-    void quadraticCurveTo(float cpx, float cpy, float x, float y);
-    void bezierCurveTo(float cp1x, float cp1y, float cp2x, float cp2y, float x, float y);
-    [RaisesException] void arcTo(float x1, float y1, float x2, float y2, float radius);
-    void rect(float x, float y, float width, float height);
-    [RaisesException] void arc(float x, float y, float radius, float startAngle, float endAngle, [Default=Undefined] optional boolean anticlockwise);
-    [RaisesException] void ellipse(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float endAngle, [Default=Undefined] optional boolean anticlockwise);
-
-    void fill(optional CanvasWindingRule winding);
+    // FIXME: Simplify these using optional CanvasWindingRule once crbug.com/339000 gets fixed.
+    void fill();
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] void fill(Path2D? path);
+    void fill(CanvasWindingRule winding);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] void fill(Path2D? path, CanvasWindingRule winding);
     void stroke();
-    void clip(optional CanvasWindingRule winding);
-    boolean isPointInPath(float x, float y, optional CanvasWindingRule winding);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] void stroke(Path2D? path);
+    // FIXME: Simplify these using optional CanvasWindingRule once crbug.com/339000 gets fixed.
+    void clip();
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] void clip(Path2D? path);
+    void clip(CanvasWindingRule winding);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] void clip(Path2D? path, CanvasWindingRule winding);
+
+    // FIXME: Simplify these using optional CanvasWindingRule once crbug.com/339000 gets fixed.
+    boolean isPointInPath(float x, float y);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] boolean isPointInPath(Path2D? path, float x, float y);
+    boolean isPointInPath(float x, float y, CanvasWindingRule winding);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] boolean isPointInPath(Path2D? path, float x, float y, CanvasWindingRule winding);
+
+    // FIXME: Simplify these using optional CanvasWindingRule once crbug.com/339000 gets fixed.
     boolean isPointInStroke(float x, float y);
+    [RuntimeEnabled=ExperimentalCanvasFeatures, RaisesException] boolean isPointInStroke(Path2D? path, float x, float y);
 
     // text
     attribute DOMString font;
@@ -147,6 +155,7 @@ interface CanvasRenderingContext2D : CanvasRenderingContext {
 
     [RaisesException] CanvasPattern createPattern(HTMLCanvasElement? canvas, [TreatNullAs=NullString] DOMString repetitionType);
     [RaisesException] CanvasPattern createPattern(HTMLImageElement? image, [TreatNullAs=NullString] DOMString repetitionType);
+    [RaisesException] CanvasPattern createPattern(HTMLVideoElement? image, [TreatNullAs=NullString] DOMString repetitionType);
     [RaisesException] ImageData createImageData(ImageData? imagedata);
     [RaisesException] ImageData createImageData(float sw, float sh);
 
@@ -170,3 +179,4 @@ interface CanvasRenderingContext2D : CanvasRenderingContext {
     Canvas2DContextAttributes getContextAttributes();
 };
 
+CanvasRenderingContext2D implements CanvasPathMethods;

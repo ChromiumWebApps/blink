@@ -37,6 +37,7 @@
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/css/resolver/StyleResourceLoader.h"
+#include "heap/Handle.h"
 #include "wtf/Deque.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
@@ -71,7 +72,7 @@ class StyleRuleKeyframes;
 class StyleRulePage;
 class ViewportStyleResolver;
 
-struct MatchResult;
+class MatchResult;
 
 enum StyleSharingBehavior {
     AllowStyleSharing,
@@ -91,6 +92,8 @@ const unsigned styleSharingListSize = 40;
 typedef WTF::Deque<Element*, styleSharingListSize> StyleSharingList;
 
 struct CSSPropertyValue {
+    STACK_ALLOCATED();
+public:
     CSSPropertyValue(CSSPropertyID property, CSSValue* value)
         : property(property), value(value) { }
     // Stores value=propertySet.getPropertyCSSValue(id).get().
@@ -119,7 +122,7 @@ public:
         RuleMatchingBehavior = MatchAllRules);
 
     PassRefPtr<RenderStyle> styleForKeyframe(Element*, const RenderStyle&, RenderStyle* parentStyle, const StyleKeyframe*, const AtomicString& animationName);
-    static PassRefPtr<KeyframeEffectModel> createKeyframeEffectModel(Element&, const Vector<RefPtr<MutableStylePropertySet> >&, KeyframeEffectModel::KeyframeVector&);
+    static PassRefPtrWillBeRawPtr<KeyframeEffectModel> createKeyframeEffectModel(Element&, const Vector<RefPtr<MutableStylePropertySet> >&, KeyframeEffectModel::KeyframeVector&);
 
     PassRefPtr<RenderStyle> pseudoStyleForElement(Element*, const PseudoStyleRequest&, RenderStyle* parentStyle);
 
@@ -135,15 +138,15 @@ public:
 
     // FIXME: It could be better to call appendAuthorStyleSheets() directly after we factor StyleResolver further.
     // https://bugs.webkit.org/show_bug.cgi?id=108890
-    void appendAuthorStyleSheets(unsigned firstNew, const Vector<RefPtr<CSSStyleSheet> >&);
+    void appendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
     void resetAuthorStyle(const ContainerNode*);
     void finishAppendAuthorStyleSheets();
 
     TreeBoundaryCrossingRules& treeBoundaryCrossingRules() { return m_treeBoundaryCrossingRules; }
     void processScopedRules(const RuleSet& authorRules, const KURL&, ContainerNode* scope = 0);
 
-    void lazyAppendAuthorStyleSheets(unsigned firstNew, const Vector<RefPtr<CSSStyleSheet> >&);
-    void removePendingAuthorStyleSheets(const Vector<RefPtr<CSSStyleSheet> >&);
+    void lazyAppendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
+    void removePendingAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
     void appendPendingAuthorStyleSheets();
     bool hasPendingAuthorStyleSheets() const { return m_pendingStyleSheets.size() > 0 || m_needCollectFeatures; }
 
@@ -174,8 +177,8 @@ public:
         AllButEmptyCSSRules = UAAndUserCSSRules | AuthorCSSRules | CrossOriginCSSRules,
         AllCSSRules         = AllButEmptyCSSRules | EmptyCSSRules,
     };
-    PassRefPtr<CSSRuleList> cssRulesForElement(Element*, unsigned rulesToInclude = AllButEmptyCSSRules);
-    PassRefPtr<CSSRuleList> pseudoCSSRulesForElement(Element*, PseudoId, unsigned rulesToInclude = AllButEmptyCSSRules);
+    PassRefPtrWillBeRawPtr<CSSRuleList> cssRulesForElement(Element*, unsigned rulesToInclude = AllButEmptyCSSRules);
+    PassRefPtrWillBeRawPtr<CSSRuleList> pseudoCSSRulesForElement(Element*, PseudoId, unsigned rulesToInclude = AllButEmptyCSSRules);
     PassRefPtr<StyleRuleList> styleRulesForElement(Element*, unsigned rulesToInclude);
 
     // |properties| is an array with |count| elements.
@@ -196,10 +199,15 @@ public:
     // Exposed for RenderStyle::isStyleAvilable().
     static RenderStyle* styleNotYetAvailable() { return s_styleNotYetAvailable; }
 
-    RuleFeatureSet& ensureRuleFeatureSet()
+    RuleFeatureSet& ensureUpdatedRuleFeatureSet()
     {
         if (hasPendingAuthorStyleSheets())
             appendPendingAuthorStyleSheets();
+        return m_features;
+    }
+
+    RuleFeatureSet& ruleFeatureSet()
+    {
         return m_features;
     }
 
@@ -227,9 +235,9 @@ private:
     virtual void fontsNeedUpdate(CSSFontSelector*) OVERRIDE;
 
 private:
-    void initWatchedSelectorRules(const Vector<RefPtr<StyleRule> >& watchedSelectors);
+    void initWatchedSelectorRules(const WillBeHeapVector<RefPtrWillBeMember<StyleRule> >& watchedSelectors);
 
-    void addTreeBoundaryCrossingRules(const Vector<MinimalRuleData>&, ContainerNode* scope);
+    void addTreeBoundaryCrossingRules(const WillBeHeapVector<MinimalRuleData>&, ContainerNode* scope);
 
     // FIXME: This should probably go away, folded into FontBuilder.
     void updateFont(StyleResolverState&);
@@ -267,7 +275,7 @@ private:
     template <StyleApplicationPass pass>
     void applyAnimatedProperties(StyleResolverState&, const AnimationEffect::CompositableValueMap&);
     void matchPageRules(MatchResult&, RuleSet*, bool isLeftPage, bool isFirstPage, const String& pageName);
-    void matchPageRulesForList(Vector<StyleRulePage*>& matchedRules, const Vector<StyleRulePage*>&, bool isLeftPage, bool isFirstPage, const String& pageName);
+    void matchPageRulesForList(WillBeHeapVector<RawPtrWillBeMember<StyleRulePage> >& matchedRules, const WillBeHeapVector<RawPtrWillBeMember<StyleRulePage> >&, bool isLeftPage, bool isFirstPage, const String& pageName);
     void collectViewportRules();
     Settings* documentSettings() { return m_document.settings(); }
 
@@ -279,7 +287,7 @@ private:
     bool pseudoStyleForElementInternal(Element&, const PseudoStyleRequest&, RenderStyle* parentStyle, StyleResolverState&);
 
     // FIXME: This likely belongs on RuleSet.
-    typedef HashMap<StringImpl*, RefPtr<StyleRuleKeyframes> > KeyframesRuleMap;
+    typedef WillBePersistentHeapHashMap<StringImpl*, RefPtrWillBeMember<StyleRuleKeyframes> > KeyframesRuleMap;
     KeyframesRuleMap m_keyframesRuleMap;
 
     static RenderStyle* s_styleNotYetAvailable;
@@ -289,7 +297,7 @@ private:
     MatchedPropertiesCache m_matchedPropertiesCache;
 
     OwnPtr<MediaQueryEvaluator> m_medium;
-    MediaQueryResultList m_viewportDependentMediaQueryResults;
+    WillBePersistentMediaQueryResultList m_viewportDependentMediaQueryResults;
 
     RefPtr<RenderStyle> m_rootDefaultStyle;
 
@@ -305,11 +313,11 @@ private:
     // FIXME: The entire logic of collecting features on StyleResolver, as well as transferring them
     // between various parts of machinery smells wrong. This needs to be better somehow.
     RuleFeatureSet m_features;
-    OwnPtr<RuleSet> m_siblingRuleSet;
-    OwnPtr<RuleSet> m_uncommonAttributeRuleSet;
+    OwnPtrWillBePersistent<RuleSet> m_siblingRuleSet;
+    OwnPtrWillBePersistent<RuleSet> m_uncommonAttributeRuleSet;
 
     // FIXME: watched selectors should be implemented using injected author stylesheets: http://crbug.com/316960
-    OwnPtr<RuleSet> m_watchedSelectorsRules;
+    OwnPtrWillBePersistent<RuleSet> m_watchedSelectorsRules;
     TreeBoundaryCrossingRules m_treeBoundaryCrossingRules;
 
     bool m_needCollectFeatures;

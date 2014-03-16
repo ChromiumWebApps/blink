@@ -81,7 +81,7 @@ var kExampleCommitDataXML =
    "core/platform may not depend on core/ even for testing.\n" +
    "\n" +
    "BUG=301947\n" +
-   "R=abarth@chromium.org, abarth\n" +
+   "TBR=abarth@chromium.org, abarth\n" +
    "\n" +
    "Review URL: https://codereview.chromium.org/25284004\n" +
    "\n" +
@@ -93,7 +93,7 @@ var kExampleCommitDataXML =
    "core/platform may not depend on core/ even for testing.\n" +
    "\n" +
    "BUG=301947\n" +
-   "R=abarth@chromium.org, abarth\n" +
+   "TBR=abarth@chromium.org, abarth\n" +
    "\n" +
    "Review URL: https://codereview.chromium.org/25284004\n" +
    "\n" +
@@ -114,7 +114,7 @@ var kExampleCommitDataXML =
    "<content type='text'>\n" +
    "These were all failures noticed when running check-blink-deps\n" +
    "\n" +
-   "R=abarth@chromium.org, abarth\n" +
+   "R=abarth@chromium.org,abarth,abarth\n" +
    "BUG=301947\n" +
    "\n" +
    "Review URL: https://codereview.chromium.org/25275005\n" +
@@ -126,7 +126,7 @@ var kExampleCommitDataXML =
    "<pre>\n" +
    "These were all failures noticed when running check-blink-deps\n" +
    "\n" +
-   "R=abarth@chromium.org, abarth\n" +
+   "R=abarth@chromium.org,abarth,abarth\n" +
    "BUG=301947\n" +
    "\n" +
    "Review URL: https://codereview.chromium.org/25275005\n" +
@@ -135,38 +135,123 @@ var kExampleCommitDataXML =
    "</pre>\n" +
    "</div>\n" +
    "</content>\n" +
+   "<entry>\n" +
+   "<title>Mark Skia suppressions for rebasline.</title>\n" +
+   "<updated>2014-02-27T14:44:41Z</updated>\n" +
+   "<author>\n" +
+   "<name>fmalita@chromium.org</name>\n" +
+   "</author>\n" +
+   "<published>2014-02-27T14:44:41Z</published>\n" +
+   "<link rel='alternate' type='text/html' href='http://blink.lc/blink/commit/?id=35030357db3c0967974273faf5e65fe3d7cc041b'/>\n" +
+   "<id>35030357db3c0967974273faf5e65fe3d7cc041b</id>\n" +
+   "<content type='text'>\n" +
+   "Unreviewed gardening.\n" +
+   "Stray R=123 in the middle...\n" +
+   "\n" +
+   "BUG=/341448,344497\n" +
+   "TBR=robertphillips@google.com\n" +
+   "\n" +
+   "Review URL: https://codereview.chromium.org/183123002\n" +
+   "\n" +
+   "git-svn-id: svn://svn.chromium.org/blink/trunk@168027 bbb929c8-8fbe-4397-9dbb-9b2b20218538\n" +
+   "</content>\n" +
+   "<content type='xhtml'>\n" +
+   "<div xmlns='http://www.w3.org/1999/xhtml'>\n" +
+   "<pre>\n" +
+   "Unreviewed gardening.\n" +
+   "Stray R=123 in the middle...\n" +
+   "\n" +
+   "BUG=/341448 ,   344497/ \n" +
+   "TBR=robertphillips@google.com\n" +
+   "\n" +
+   "Review URL: https://codereview.chromium.org/183123002\n" +
+   "\n" +
+   "git-svn-id: svn://svn.chromium.org/blink/trunk@168027 bbb929c8-8fbe-4397-9dbb-9b2b20218538\n" +
+   "</pre>\n" +
+   "</div>\n" +
+   "</content>\n" +
+   "</entry>\n" +
+
+   "<entry>\n" +
+   "<title>Remove yurys and loislo from WTF watchlist</title>\n" +
+   "<updated>2014-03-03T07:23:31Z</updated>\n" +
+   "<author>\n" +
+   "<name>yurys@chromium.org</name>\n" +
+   "</author>\n" +
+   "<published>2014-03-03T07:23:31Z</published>\n" +
+   "<link rel='alternate' type='text/html' href='http://blink.lc/blink/commit/?id=43118424ccd1d65ea7ec9ba26c32195e5fdde6e4'/>\n" +
+   "<id>43118424ccd1d65ea7ec9ba26c32195e5fdde6e4</id>\n" +
+   "<content type='text'>\n" +
+   "BUG=None\n" +
+   "R=loislo@chromium.org\n" +
+   "\n" +
+   "Review URL: https://codereview.chromium.org/176883013\n" +
+   "\n" +
+   "git-svn-id: svn://svn.chromium.org/blink/trunk@168268 bbb929c8-8fbe-4397-9dbb-9b2b20218538\n" +
+   "</content>\n" +
+   "<content type='xhtml'>\n" +
+   "<div xmlns='http://www.w3.org/1999/xhtml'>\n" +
+   "<pre>\n" +
+   "BUG=None\n" +
+   "R=loislo@chromium.org\n" +
+   "\n" +
+   "Review URL: https://codereview.chromium.org/176883013\n" +
+   "\n" +
+   "git-svn-id: svn://svn.chromium.org/blink/trunk@168268 bbb929c8-8fbe-4397-9dbb-9b2b20218538\n" +
+   "</pre>\n" +
+   "</div>\n" +
+   "</content>\n" +
    "</entry>\n" +
    "</feed>\n";
 
-
 var kExampleCommitDataList = [{
     "revision": 158545,
-    "title": "This matches Gecko's behavior for these types of properties.",
+    "title": "Throw SecurityError when setting 'Replaceable' properties cross-origin.",
     "time": "2013-09-30T20:22:01Z",
     "summary": "This matches Gecko's behavior for these types of properties.",
     "author": "mkwst@chromium.org",
-    "reviewer": "jochen@chromium",
-    "bugID": 17325,
+    "reviewer": "jochen@chromium.org",
+    "bugID": [17325],
     "revertedRevision": undefined
   },
   {
     "revision": 158544,
-    "title": "core/platform may not depend on core/ even for testing.",
+    "title": "Fix one more layering violation caught by check-blink-deps",
     "time": "2013-09-30T19:36:21Z",
     "summary": "core/platform may not depend on core/ even for testing.",
     "author": "eseidel@chromium.org",
-    "reviewer": "abarth@chromium",
-    "bugID": 301947,
+    "reviewer": "abarth@chromium.org, abarth",
+    "bugID": [301947],
     "revertedRevision": undefined
   },
   {
     "revision": 158543,
-    "title": "These were all failures noticed when running check-blink-deps",
+    "title": "Update DEPS include_rules after addition of root-level platform directory",
     "time": "2013-09-30T19:28:49Z",
     "summary": "These were all failures noticed when running check-blink-deps",
     "author": "eseidel@chromium.org",
-    "reviewer": "abarth@chromium",
-    "bugID": 301947,
+    "reviewer": "abarth@chromium.org, abarth, abarth",
+    "bugID": [301947],
+    "revertedRevision": undefined
+  },
+  {
+    "revision": 168027,
+    "title": "Mark Skia suppressions for rebasline.",
+    "time": "2014-02-27T14:44:41Z",
+    "summary": "Unreviewed gardening.",
+    "author": "fmalita@chromium.org",
+    "reviewer": "robertphillips@google.com",
+    "bugID": [341448, 344497],
+    "revertedRevision": undefined
+  },
+  {
+    "revision": 168268,
+    "title": "Remove yurys and loislo from WTF watchlist",
+    "time": "2014-03-03T07:23:31Z",
+    "summary": "BUG=None",
+    "author": "yurys@chromium.org",
+    "reviewer": "loislo@chromium.org",
+    "bugID": null,
     "revertedRevision": undefined
   }
 ];

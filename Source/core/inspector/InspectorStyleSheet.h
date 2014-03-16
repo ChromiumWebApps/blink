@@ -29,6 +29,7 @@
 #include "core/css/CSSPropertySourceData.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/inspector/InspectorStyleTextEditor.h"
+#include "heap/Handle.h"
 #include "platform/JSONValues.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassRefPtr.h"
@@ -51,7 +52,7 @@ class InspectorPageAgent;
 class InspectorResourceAgent;
 class InspectorStyleSheet;
 
-typedef Vector<RefPtr<CSSRule> > CSSRuleVector;
+typedef WillBePersistentHeapVector<RefPtrWillBeMember<CSSRule> > CSSRuleVector;
 typedef String ErrorString;
 
 class InspectorCSSId {
@@ -148,8 +149,6 @@ private:
     PassRefPtr<CSSRuleSourceData> extractSourceData() const;
     bool applyStyleText(const String&);
     String shorthandValue(const String& shorthandProperty) const;
-    String shorthandPriority(const String& shorthandProperty) const;
-    Vector<String> longhandProperties(const String& shorthandProperty) const;
     NewLineAndWhitespace& newLineAndWhitespaceDelimiters() const;
     inline Document* ownerDocument() const;
 
@@ -171,10 +170,9 @@ public:
         virtual void didReparseStyleSheet() = 0;
     };
 
-    typedef HashMap<CSSStyleDeclaration*, RefPtr<InspectorStyle> > InspectorStyleMap;
     static PassRefPtr<InspectorStyleSheet> create(InspectorPageAgent*, InspectorResourceAgent*, const String& id, PassRefPtr<CSSStyleSheet> pageStyleSheet, TypeBuilder::CSS::StyleSheetOrigin::Enum, const String& documentURL, Listener*);
     static String styleSheetURL(CSSStyleSheet* pageStyleSheet);
-    static void collectFlatRules(PassRefPtr<CSSRuleList>, CSSRuleVector* result);
+    static void collectFlatRules(PassRefPtrWillBeRawPtr<CSSRuleList>, CSSRuleVector* result);
 
     virtual ~InspectorStyleSheet();
 
@@ -226,10 +224,8 @@ private:
 
     bool checkPageStyleSheet(ExceptionState&) const;
     bool ensureText() const;
-    bool ensureSourceData();
     void ensureFlatRules() const;
     bool styleSheetTextWithChangedStyle(CSSStyleDeclaration*, const String& newStyleText, String* result);
-    void revalidateStyle(CSSStyleDeclaration*);
     bool originalStyleSheetText(String* result) const;
     bool resourceStyleSheetText(String* result) const;
     bool inlineStyleSheetText(String* result) const;
@@ -245,7 +241,6 @@ private:
     RefPtr<CSSStyleSheet> m_pageStyleSheet;
     TypeBuilder::CSS::StyleSheetOrigin::Enum m_origin;
     String m_documentURL;
-    bool m_isRevalidating;
     ParsedStyleSheet* m_parsedStyleSheet;
     mutable CSSRuleVector m_flatRules;
     Listener* m_listener;

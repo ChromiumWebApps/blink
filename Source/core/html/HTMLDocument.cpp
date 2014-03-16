@@ -56,8 +56,8 @@
 #include "HTMLNames.h"
 #include "bindings/v8/ScriptController.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/page/FocusController.h"
 #include "core/page/FrameTree.h"
@@ -114,7 +114,7 @@ void HTMLDocument::setDesignMode(const String& value)
 HTMLBodyElement* HTMLDocument::htmlBodyElement() const
 {
     HTMLElement* body = this->body();
-    return (body && body->hasTagName(bodyTag)) ? toHTMLBodyElement(body) : 0;
+    return isHTMLBodyElement(body) ? toHTMLBodyElement(body) : 0;
 }
 
 const AtomicString& HTMLDocument::bodyAttributeValue(const QualifiedName& name) const
@@ -200,7 +200,7 @@ void HTMLDocument::addItemToMap(HashCountedSet<AtomicString>& map, const AtomicS
     if (name.isEmpty())
         return;
     map.add(name);
-    if (Frame* f = frame())
+    if (LocalFrame* f = frame())
         f->script().namedItemAdded(this, name);
 }
 
@@ -209,7 +209,7 @@ void HTMLDocument::removeItemFromMap(HashCountedSet<AtomicString>& map, const At
     if (name.isEmpty())
         return;
     map.remove(name);
-    if (Frame* f = frame())
+    if (LocalFrame* f = frame())
         f->script().namedItemRemoved(this, name);
 }
 
@@ -298,13 +298,6 @@ bool HTMLDocument::isCaseSensitiveAttribute(const QualifiedName& attributeName)
     static HashSet<StringImpl*>* htmlCaseInsensitiveAttributesSet = createHtmlCaseInsensitiveAttributesSet();
     bool isPossibleHTMLAttr = !attributeName.hasPrefix() && (attributeName.namespaceURI() == nullAtom);
     return !isPossibleHTMLAttr || !htmlCaseInsensitiveAttributesSet->contains(attributeName.localName().impl());
-}
-
-void HTMLDocument::clear()
-{
-    // FIXME: This does nothing, and that seems unlikely to be correct.
-    // We've long had a comment saying that IE doesn't support this.
-    // But I do see it in the documentation for Mozilla.
 }
 
 void HTMLDocument::write(DOMWindow* callingWindow, const Vector<String>& text)

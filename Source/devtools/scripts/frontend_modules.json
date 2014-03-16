@@ -16,13 +16,15 @@
             "TextRange.js",
             "UIString.js",
             "UserMetrics.js",
-            "utilities.js"
+            "utilities.js",
+            "WebInspector.js"
         ]
     },
     {
         "name": "sdk",
         "dependencies": ["common"],
         "sources": [
+            "Target.js",
             "ApplicationCacheModel.js",
             "CompilerScriptMapping.js",
             "ConsoleModel.js",
@@ -51,6 +53,7 @@
             "InspectorBackend.js",
             "IsolatedFileSystemManager.js",
             "IsolatedFileSystem.js",
+            "LayerTreeModel.js",
             "Linkifier.js",
             "NetworkLog.js",
             "NetworkUISourceCodeProvider.js",
@@ -97,11 +100,14 @@
             "Dialog.js",
             "DockController.js",
             "Drawer.js",
+            "DropDownMenu.js",
             "EmptyView.js",
             "FilterBar.js",
+            "FilterSuggestionBuilder.js",
             "GoToLineDialog.js",
             "HelpScreen.js",
             "InplaceEditor.js",
+            "InspectedPagePlaceholder.js",
             "InspectorView.js",
             "KeyboardShortcut.js",
             "OverviewGrid.js",
@@ -113,7 +119,6 @@
             "SearchableView.js",
             "Section.js",
             "SettingsUI.js",
-            "SidebarOverlay.js",
             "SidebarPane.js",
             "SidebarTreeElement.js",
             "ShortcutsScreen.js",
@@ -150,7 +155,6 @@
         "sources": [
             "AdvancedSearchController.js",
             "HandlerRegistry.js",
-            "ConsoleMessage.js",
             "CookiesTable.js",
             "DOMBreakpointsSidebarPane.js",
             "DOMPresentationUtils.js",
@@ -161,6 +165,13 @@
             "InspectElementModeController.js",
             "ObjectPopoverHelper.js",
             "ObjectPropertiesSection.js",
+            "PieChart.js"
+        ]
+    },
+    {
+        "name": "screencast",
+        "dependencies": ["sdk", "ui"],
+        "sources": [
             "ScreencastView.js"
         ]
     },
@@ -237,8 +248,17 @@
         ]
     },
     {
+        "name": "console",
+        "dependencies": ["components"],
+        "sources": [
+            "ConsoleView.js",
+            "ConsoleViewMessage.js",
+            "ConsolePanel.js"
+        ]
+    },
+    {
         "name": "sources",
-        "dependencies": ["components", "source_frame", "workers"],
+        "dependencies": ["components", "source_frame", "workers", "console"],
         "sources": [
             "BreakpointsSidebarPane.js",
             "CSSSourceFrame.js",
@@ -272,20 +292,11 @@
         ]
     },
     {
-        "name": "console",
-        "dependencies": ["components"],
-        "sources": [
-            "ConsoleView.js",
-            "ConsolePanel.js"
-        ]
-    },
-    {
         "name": "timeline",
         "dependencies": ["components"],
         "sources": [
             "CountersGraph.js",
             "MemoryStatistics.js",
-            "PieChart.js",
             "TimelineEventOverview.js",
             "TimelineFrameModel.js",
             "TimelineFrameOverview.js",
@@ -295,6 +306,7 @@
             "TimelineFlameChart.js",
             "TimelinePanel.js",
             "TimelinePresentationModel.js",
+            "TimelineUIUtils.js",
             "TimelineView.js"
         ]
     },
@@ -316,12 +328,12 @@
         "name": "layers",
         "dependencies": ["components"],
         "sources": [
-            "LayerTreeModel.js",
             "LayersPanel.js",
             "LayerTree.js",
             "Layers3DView.js",
             "LayerDetailsView.js",
-            "PaintProfilerView.js"
+            "PaintProfilerView.js",
+            "TransformController.js"
         ]
     },
     {
@@ -438,8 +450,9 @@
             "settings",
             "tests",
             "profiler",
-            "host_stub"
+            "host_stub",
+            "screencast"
         ],
-        "sources": []
+        "sources": [ "inspector.js" ]
     }
 ]

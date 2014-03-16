@@ -30,6 +30,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/rendering/AutoTableLayout.h"
+#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/FixedTableLayout.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestResult.h"
@@ -304,12 +305,9 @@ void RenderTable::updateLogicalWidth()
     setMarginStart(0);
     setMarginEnd(0);
     if (!hasPerpendicularContainingBlock) {
-        LayoutUnit containerLogicalWidthForAutoMargins = availableLogicalWidth;
-        if (avoidsFloats() && cb->containsFloats())
-            containerLogicalWidthForAutoMargins = containingBlockAvailableLineWidth();
         ComputedMarginValues marginValues;
         bool hasInvertedDirection =  cb->style()->isLeftToRightDirection() == style()->isLeftToRightDirection();
-        computeInlineDirectionMargins(cb, containerLogicalWidthForAutoMargins, logicalWidth(),
+        computeInlineDirectionMargins(cb, availableLogicalWidth, logicalWidth(),
             hasInvertedDirection ? marginValues.m_start : marginValues.m_end,
             hasInvertedDirection ? marginValues.m_end : marginValues.m_start);
         setMarginStart(marginValues.m_start);
@@ -413,6 +411,9 @@ void RenderTable::simplifiedNormalFlowLayout()
 
 void RenderTable::layout()
 {
+    // Note: RenderTable is handled differently than other RenderBlocks and the LayoutScope
+    //       must be created before the table begins laying out.
+    FastTextAutosizer::LayoutScope fastTextAutosizerLayoutScope(this);
     ASSERT(needsLayout());
 
     LayoutRectRecorder recorder(*this);
@@ -426,7 +427,7 @@ void RenderTable::layout()
     recalcBordersInRowDirection();
 
     LayoutRepainter repainter(*this, checkForRepaintDuringLayout());
-    LayoutStateMaintainer statePusher(this, locationOffset());
+    LayoutStateMaintainer statePusher(*this, locationOffset());
 
     setLogicalHeight(0);
 
@@ -454,6 +455,8 @@ void RenderTable::layout()
     bool collapsing = collapseBorders();
 
     for (RenderObject* child = firstChild(); child; child = child->nextSibling()) {
+        if (!child->needsLayout() && child->isBox())
+            toRenderBox(child)->markForPaginationRelayoutIfNeeded(layouter);
         if (child->isTableSection()) {
             RenderTableSection* section = toRenderTableSection(child);
             if (m_columnLogicalWidthChanged)
@@ -572,7 +575,7 @@ void RenderTable::layout()
     statePusher.pop();
 
     if (view()->layoutState()->pageLogicalHeight())
-        setPageLogicalOffset(view()->layoutState()->pageLogicalOffset(this, logicalTop()));
+        setPageLogicalOffset(view()->layoutState()->pageLogicalOffset(*this, logicalTop()));
 
     bool didFullRepaint = repainter.repaintAfterLayout();
     // Repaint with our new bounds if they are different from our old bounds.

@@ -6,7 +6,7 @@
 #include "modules/screen_orientation/ScreenOrientation.h"
 
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Screen.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
 #include "public/platform/Platform.h"
@@ -83,7 +83,7 @@ void ScreenOrientation::lockOrientationAsync(blink::WebScreenOrientations orient
         return;
     m_lockedOrientations = orientations;
     if (!m_orientationLockTimer.isActive())
-        m_orientationLockTimer.startOneShot(0);
+        m_orientationLockTimer.startOneShot(0, FROM_HERE);
 }
 
 void ScreenOrientation::orientationLockTimerFired(Timer<ScreenOrientation>*)
@@ -99,19 +99,20 @@ const char* ScreenOrientation::supplementName()
     return "ScreenOrientation";
 }
 
-Document& ScreenOrientation::document() const
+Document* ScreenOrientation::document() const
 {
-    ASSERT(m_associatedDOMWindow);
+    if (!m_associatedDOMWindow || !m_associatedDOMWindow->isCurrentlyDisplayedInFrame())
+        return 0;
     ASSERT(m_associatedDOMWindow->document());
-    return *m_associatedDOMWindow->document();
+    return m_associatedDOMWindow->document();
 }
 
 ScreenOrientation& ScreenOrientation::from(Screen& screen)
 {
-    ScreenOrientation* supplement = static_cast<ScreenOrientation*>(Supplement<Screen>::from(screen, supplementName()));
+    ScreenOrientation* supplement = static_cast<ScreenOrientation*>(WillBeHeapSupplement<Screen>::from(screen, supplementName()));
     if (!supplement) {
         supplement = new ScreenOrientation(screen);
-        provideTo(screen, supplementName(), adoptPtr(supplement));
+        provideTo(screen, supplementName(), adoptPtrWillBeNoop(supplement));
     }
     return *supplement;
 }
@@ -123,7 +124,9 @@ ScreenOrientation::~ScreenOrientation()
 const AtomicString& ScreenOrientation::orientation(Screen& screen)
 {
     ScreenOrientation& screenOrientation = ScreenOrientation::from(screen);
-    ScreenOrientationController& controller = ScreenOrientationController::from(screenOrientation.document());
+    if (!screenOrientation.document())
+        return emptyAtom;
+    ScreenOrientationController& controller = ScreenOrientationController::from(*screenOrientation.document());
     return orientationToString(controller.orientation());
 }
 

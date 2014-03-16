@@ -38,16 +38,26 @@ function findUsingRegExp(string, regexp)
 
 function findReviewer(message)
 {
-    var regexp = /R=([^.]+)/;
-    return findUsingRegExp(message, regexp);
+    var regexp = /(?:^|\n)\s*(?:TB)?R=(.+)/;
+    var reviewers = findUsingRegExp(message, regexp);
+    if (!reviewers)
+        return null;
+    return reviewers.replace(/\s*,\s*/g, ', ');
 }
 
 function findBugID(message)
 {
-    var regexp = /BUG=(\d+)/;
-    var bugID = parseInt(findUsingRegExp(message, regexp), 10);
-    return isNaN(bugID) ? 0 : bugID;
-
+    var regexp = /(?:^|\n)\s*BUG=(.+)/;
+    var value = findUsingRegExp(message, regexp);
+    if (!value)
+        return null;
+    var result = value.split(/\s*,\s*/).map(function(id) {
+        var parsedID = parseInt(id.replace(/[^\d]/g, ''), 10);
+        return isNaN(parsedID) ? 0 : parsedID;
+    }).filter(function(id) {
+        return !!id;
+    });
+    return result.length ? result : null;
 }
 
 function findRevision(message)
@@ -59,7 +69,13 @@ function findRevision(message)
 
 function parseCommitMessage(message) {
     var lines = message.split('\n');
-    var title = lines[1];
+    var title = '';
+    lines.some(function(line) {
+        if (line) {
+            title = line;
+            return true;
+        }
+    });
     var summary = lines.join('\n').trim();
     return {
         title: title,
@@ -76,6 +92,8 @@ function parseCommitData(responseXML)
     var commits = Array.prototype.map.call(responseXML.getElementsByTagName('entry'), function(logentry) {
         var author = $.trim(logentry.getElementsByTagName('author')[0].textContent);
         var time = logentry.getElementsByTagName('published')[0].textContent;
+        var titleElement = logentry.getElementsByTagName('title')[0];
+        var title = titleElement ? titleElement.textContent : null;
 
         // FIXME: This isn't a very high-fidelity reproduction of the commit message,
         // but it's good enough for our purposes.
@@ -83,7 +101,7 @@ function parseCommitData(responseXML)
 
         return {
             'revision': message.revision,
-            'title': message.title,
+            'title': title || message.title,
             'time': time,
             'summary': message.title,
             'author': author,

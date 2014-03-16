@@ -35,7 +35,7 @@ class Document;
 class DocumentInit;
 class DocumentType;
 class ExceptionState;
-class Frame;
+class LocalFrame;
 class HTMLDocument;
 class KURL;
 class XMLDocument;
@@ -47,7 +47,7 @@ public:
 
     void ref() { m_document.ref(); }
     void deref() { m_document.deref(); }
-    Document* document() { return &m_document; }
+    Document& document() const { return m_document; }
 
     // DOM methods & attributes for DOMImplementation
     static bool hasFeature(const String& feature, const String& version);
@@ -64,7 +64,7 @@ public:
     PassRefPtr<HTMLDocument> createHTMLDocument(const String& title);
 
     // Other methods (not part of DOM)
-    static PassRefPtr<Document> createDocument(const String& mimeType, Frame*, const KURL&, bool inViewSourceMode);
+    static PassRefPtr<Document> createDocument(const String& mimeType, LocalFrame*, const KURL&, bool inViewSourceMode);
     static PassRefPtr<Document> createDocument(const String& mimeType, const DocumentInit&, bool inViewSourceMode);
 
     static bool isXMLMIMEType(const String&);

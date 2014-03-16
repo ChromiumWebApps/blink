@@ -55,11 +55,7 @@ private:
     RefPtr<SVGAnimatedLength> m_y1;
     RefPtr<SVGAnimatedLength> m_x2;
     RefPtr<SVGAnimatedLength> m_y2;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGLinearGradientElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGLinearGradientElement, hasTagName(SVGNames::linearGradientTag));
 
 } // namespace WebCore
 

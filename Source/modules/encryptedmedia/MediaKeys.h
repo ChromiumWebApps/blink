@@ -47,21 +47,21 @@ class WebContentDecryptionModule;
 
 namespace WebCore {
 
-class ContentDecryptionModule;
 class HTMLMediaElement;
 class ExceptionState;
 
 // References are held by JS and HTMLMediaElement.
-// The ContentDecryptionModule has the same lifetime as this object.
+// The WebContentDecryptionModule has the same lifetime as this object.
 class MediaKeys : public RefCountedWillBeGarbageCollectedFinalized<MediaKeys>, public ContextLifecycleObserver, public ScriptWrappable {
-    DECLARE_GC_INFO;
 public:
     static PassRefPtrWillBeRawPtr<MediaKeys> create(ExecutionContext*, const String& keySystem, ExceptionState&);
     ~MediaKeys();
 
+    const String& keySystem() const { return m_keySystem; }
+
     PassRefPtrWillBeRawPtr<MediaKeySession> createSession(ExecutionContext*, const String& contentType, Uint8Array* initData, ExceptionState&);
 
-    const String& keySystem() const { return m_keySystem; }
+    static bool isTypeSupported(const String& keySystem, const String& contentType);
 
     void setMediaElement(HTMLMediaElement*);
 
@@ -73,12 +73,12 @@ public:
     virtual void contextDestroyed() OVERRIDE;
 
 protected:
-    MediaKeys(ExecutionContext*, const String& keySystem, PassOwnPtr<ContentDecryptionModule>);
+    MediaKeys(ExecutionContext*, const String& keySystem, PassOwnPtr<blink::WebContentDecryptionModule>);
     void initializeNewSessionTimerFired(Timer<MediaKeys>*);
 
     HTMLMediaElement* m_mediaElement;
     const String m_keySystem;
-    OwnPtr<ContentDecryptionModule> m_cdm;
+    OwnPtr<blink::WebContentDecryptionModule> m_cdm;
 
     // FIXME: Check whether |initData| can be changed by JS. Maybe we should not pass it as a pointer.
     struct InitializeNewSessionData {

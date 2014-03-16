@@ -61,8 +61,6 @@ public:
     void setOrientToAuto();
     void setOrientToAngle(PassRefPtr<SVGAngleTearOff>);
 
-    static const SVGPropertyInfo* orientTypePropertyInfo();
-
     SVGAnimatedLength* refX() const { return m_refX.get(); }
     SVGAnimatedLength* refY() const { return m_refY.get(); }
     SVGAnimatedLength* markerWidth() const { return m_markerWidth.get(); }
@@ -92,11 +90,7 @@ private:
     RefPtr<SVGAnimatedLength> m_markerHeight;
     RefPtr<SVGAnimatedAngle> m_orientAngle;
     RefPtr<SVGAnimatedEnumeration<SVGMarkerUnitsType> > m_markerUnits;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGMarkerElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGMarkerElement, hasTagName(SVGNames::markerTag));
 
 }
 

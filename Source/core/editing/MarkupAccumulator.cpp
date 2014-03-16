@@ -96,10 +96,11 @@ void MarkupAccumulator::appendCharactersReplacingEntities(StringBuilder& result,
         appendCharactersReplacingEntitiesInternal(result, source.characters16() + offset, length, entityMaps, WTF_ARRAY_LENGTH(entityMaps), entityMask);
 }
 
-MarkupAccumulator::MarkupAccumulator(Vector<Node*>* nodes, EAbsoluteURLs resolveUrlsMethod, const Range* range)
+MarkupAccumulator::MarkupAccumulator(Vector<Node*>* nodes, EAbsoluteURLs resolveUrlsMethod, const Range* range, SerializationType serializationType)
     : m_nodes(nodes)
     , m_range(range)
     , m_resolveURLsMethod(resolveUrlsMethod)
+    , m_serializationType(serializationType)
 {
 }
 
@@ -109,7 +110,15 @@ MarkupAccumulator::~MarkupAccumulator()
 
 String MarkupAccumulator::serializeNodes(Node& targetNode, EChildrenOnly childrenOnly, Vector<QualifiedName>* tagNamesToSkip)
 {
-    serializeNodesWithNamespaces(targetNode, childrenOnly, 0, tagNamesToSkip);
+    Namespaces* namespaces = 0;
+    Namespaces namespaceHash;
+    if (!serializeAsHTMLDocument(targetNode)) {
+        // Add pre-bound namespaces for XML fragments.
+        namespaceHash.set(xmlAtom.impl(), XMLNames::xmlNamespaceURI.impl());
+        namespaces = &namespaceHash;
+    }
+
+    serializeNodesWithNamespaces(targetNode, childrenOnly, namespaces, tagNamesToSkip);
     return m_markup.toString();
 }
 
@@ -129,8 +138,8 @@ void MarkupAccumulator::serializeNodesWithNamespaces(Node& targetNode, EChildren
     if (!childrenOnly)
         appendStartTag(targetNode, &namespaceHash);
 
-    if (!(targetNode.document().isHTMLDocument() && elementCannotHaveEndTag(targetNode))) {
-        Node* current = targetNode.hasTagName(templateTag) ? toHTMLTemplateElement(targetNode).content()->firstChild() : targetNode.firstChild();
+    if (!(serializeAsHTMLDocument(targetNode) && elementCannotHaveEndTag(targetNode))) {
+        Node* current = isHTMLTemplateElement(targetNode) ? toHTMLTemplateElement(targetNode).content()->firstChild() : targetNode.firstChild();
         for ( ; current; current = current->nextSibling())
             serializeNodesWithNamespaces(*current, IncludeNode, &namespaceHash, tagNamesToSkip);
     }
@@ -222,12 +231,17 @@ void MarkupAccumulator::appendQuotedURLAttributeValue(StringBuilder& result, con
     result.append(quoteChar);
 }
 
-bool MarkupAccumulator::shouldAddNamespaceElement(const Element& element)
+bool MarkupAccumulator::shouldAddNamespaceElement(const Element& element, Namespaces& namespaces)
 {
     // Don't add namespace attribute if it is already defined for this elem.
     const AtomicString& prefix = element.prefix();
-    if (prefix.isEmpty())
-        return !element.hasAttribute(xmlnsAtom);
+    if (prefix.isEmpty()) {
+        if (element.hasAttribute(xmlnsAtom)) {
+            namespaces.set(emptyAtom.impl(), element.namespaceURI().impl());
+            return false;
+        }
+        return true;
+    }
 
     DEFINE_STATIC_LOCAL(String, xmlnsWithColon, ("xmlns:"));
     return !element.hasAttribute(xmlnsWithColon + prefix);
@@ -275,7 +289,7 @@ void MarkupAccumulator::appendNamespace(StringBuilder& result, const AtomicStrin
 
 EntityMask MarkupAccumulator::entityMaskForText(const Text& text) const
 {
-    if (!text.document().isHTMLDocument())
+    if (!serializeAsHTMLDocument(text))
         return EntityMaskInPCDATA;
 
     const QualifiedName* parentName = 0;
@@ -381,7 +395,7 @@ void MarkupAccumulator::appendElement(StringBuilder& result, Element& element, N
     if (element.hasAttributes()) {
         unsigned length = element.attributeCount();
         for (unsigned int i = 0; i < length; i++)
-            appendAttribute(result, element, *element.attributeItem(i), namespaces);
+            appendAttribute(result, element, element.attributeItem(i), namespaces);
     }
 
     // Give an opportunity to subclasses to add their own attributes.
@@ -399,7 +413,7 @@ void MarkupAccumulator::appendOpenTag(StringBuilder& result, const Element& elem
 {
     result.append('<');
     result.append(nodeNamePreservingCase(element));
-    if (!element.document().isHTMLDocument() && namespaces && shouldAddNamespaceElement(element))
+    if (!serializeAsHTMLDocument(element) && namespaces && shouldAddNamespaceElement(element, *namespaces))
         appendNamespace(result, element.prefix(), element.namespaceURI(), *namespaces);
 }
 
@@ -422,14 +436,14 @@ static inline bool attributeIsInSerializedNamespace(const Attribute& attribute)
 
 void MarkupAccumulator::appendAttribute(StringBuilder& result, const Element& element, const Attribute& attribute, Namespaces* namespaces)
 {
-    bool documentIsHTML = element.document().isHTMLDocument();
+    bool documentIsHTML = serializeAsHTMLDocument(element);
 
     result.append(' ');
 
-    if (documentIsHTML && !attributeIsInSerializedNamespace(attribute))
+    QualifiedName prefixedName = attribute.name();
+    if (documentIsHTML && !attributeIsInSerializedNamespace(attribute)) {
         result.append(attribute.name().localName());
-    else {
-        QualifiedName prefixedName = attribute.name();
+    } else {
         if (attribute.namespaceURI() == XLinkNames::xlinkNamespaceURI) {
             if (!attribute.prefix())
                 prefixedName.setPrefix(xlinkAtom);
@@ -445,16 +459,16 @@ void MarkupAccumulator::appendAttribute(StringBuilder& result, const Element& el
 
     result.append('=');
 
-    if (element.isURLAttribute(attribute))
+    if (element.isURLAttribute(attribute)) {
         appendQuotedURLAttributeValue(result, element, attribute);
-    else {
+    } else {
         result.append('"');
         appendAttributeValue(result, attribute.value(), documentIsHTML);
         result.append('"');
     }
 
     if (!documentIsHTML && namespaces && shouldAddNamespaceAttribute(attribute, *namespaces))
-        appendNamespace(result, attribute.prefix(), attribute.namespaceURI(), *namespaces);
+        appendNamespace(result, prefixedName.prefix(), prefixedName.namespaceURI(), *namespaces);
 }
 
 void MarkupAccumulator::appendCDATASection(StringBuilder& result, const String& section)
@@ -504,9 +518,9 @@ void MarkupAccumulator::appendStartMarkup(StringBuilder& result, Node& node, Nam
 // 4. Other elements self-close.
 bool MarkupAccumulator::shouldSelfClose(const Node& node)
 {
-    if (node.document().isHTMLDocument())
+    if (serializeAsHTMLDocument(node))
         return false;
-    if (node.hasChildNodes())
+    if (node.hasChildren())
         return false;
     if (node.isHTMLElement() && !elementCannotHaveEndTag(node))
         return false;
@@ -527,12 +541,19 @@ bool MarkupAccumulator::elementCannotHaveEndTag(const Node& node)
 
 void MarkupAccumulator::appendEndMarkup(StringBuilder& result, const Node& node)
 {
-    if (!node.isElementNode() || shouldSelfClose(node) || (!node.hasChildNodes() && elementCannotHaveEndTag(node)))
+    if (!node.isElementNode() || shouldSelfClose(node) || (!node.hasChildren() && elementCannotHaveEndTag(node)))
         return;
 
     result.appendLiteral("</");
     result.append(nodeNamePreservingCase(toElement(node)));
     result.append('>');
+}
+
+bool MarkupAccumulator::serializeAsHTMLDocument(const Node& node) const
+{
+    if (m_serializationType == ForcedXML)
+        return false;
+    return node.document().isHTMLDocument();
 }
 
 }

@@ -41,8 +41,9 @@
 namespace WebCore {
 
 class DOMWrapperWorld;
-class Frame;
+class LocalFrame;
 class GraphicsContext;
+class GraphicsLayer;
 class InjectedScriptManager;
 class InspectorBackendDispatcher;
 class InspectorAgent;
@@ -51,6 +52,7 @@ class InspectorDOMAgent;
 class InspectorFrontend;
 class InspectorFrontendChannel;
 class InspectorFrontendClient;
+class InspectorLayerTreeAgent;
 class InspectorPageAgent;
 class InspectorTimelineAgent;
 class InspectorOverlay;
@@ -83,7 +85,7 @@ public:
     void registerModuleAgent(PassOwnPtr<InspectorAgent>);
 
     void setInspectorFrontendClient(PassOwnPtr<InspectorFrontendClient>);
-    void didClearWindowObjectInMainWorld(Frame*);
+    void didClearWindowObjectInMainWorld(LocalFrame*);
     void setInjectedScriptForOrigin(const String& origin, const String& source);
 
     void dispatchMessageFromFrontend(const String& message);
@@ -102,10 +104,10 @@ public:
     void hideHighlight();
     Node* highlightedNode() const;
 
-    bool handleGestureEvent(Frame*, const PlatformGestureEvent&);
-    bool handleMouseEvent(Frame*, const PlatformMouseEvent&);
-    bool handleTouchEvent(Frame*, const PlatformTouchEvent&);
-    bool handleKeyboardEvent(Frame*, const PlatformKeyboardEvent&);
+    bool handleGestureEvent(LocalFrame*, const PlatformGestureEvent&);
+    bool handleMouseEvent(LocalFrame*, const PlatformMouseEvent&);
+    bool handleTouchEvent(LocalFrame*, const PlatformTouchEvent&);
+    bool handleKeyboardEvent(LocalFrame*, const PlatformKeyboardEvent&);
 
     void requestPageScaleFactor(float scale, const IntPoint& origin);
     bool deviceEmulationEnabled();
@@ -130,6 +132,8 @@ public:
 
     void scriptsEnabled(bool);
 
+    void willAddPageOverlay(const GraphicsLayer*);
+    void didRemovePageOverlay(const GraphicsLayer*);
 private:
     InspectorController(Page*, InspectorClient*);
 
@@ -145,6 +149,7 @@ private:
     InspectorDOMAgent* m_domAgent;
     InspectorPageAgent* m_pageAgent;
     InspectorTimelineAgent* m_timelineAgent;
+    InspectorLayerTreeAgent* m_layerTreeAgent;
 
     RefPtr<InspectorBackendDispatcher> m_inspectorBackendDispatcher;
     OwnPtr<InspectorFrontendClient> m_inspectorFrontendClient;

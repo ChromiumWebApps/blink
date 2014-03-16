@@ -132,7 +132,7 @@ TEST_F(AnimationDocumentTimelineTest, HasStarted)
 
 TEST_F(AnimationDocumentTimelineTest, EmptyKeyframeAnimation)
 {
-    RefPtr<KeyframeEffectModel> effect = KeyframeEffectModel::create(KeyframeEffectModel::KeyframeVector());
+    RefPtrWillBeRawPtr<KeyframeEffectModel> effect = KeyframeEffectModel::create(KeyframeEffectModel::KeyframeVector());
     RefPtr<Animation> anim = Animation::create(element.get(), effect, timing);
 
     timeline->play(anim.get());
@@ -149,7 +149,7 @@ TEST_F(AnimationDocumentTimelineTest, EmptyKeyframeAnimation)
 
 TEST_F(AnimationDocumentTimelineTest, EmptyForwardsKeyframeAnimation)
 {
-    RefPtr<KeyframeEffectModel> effect = KeyframeEffectModel::create(KeyframeEffectModel::KeyframeVector());
+    RefPtrWillBeRawPtr<KeyframeEffectModel> effect = KeyframeEffectModel::create(KeyframeEffectModel::KeyframeVector());
     timing.fillMode = Timing::FillModeForwards;
     RefPtr<Animation> anim = Animation::create(element.get(), effect, timing);
 
@@ -275,7 +275,7 @@ TEST_F(AnimationDocumentTimelineTest, PlayAfterDocumentDeref)
     timing.iterationDuration = 2;
     timing.startDelay = 5;
 
-    timeline = document->timeline();
+    timeline = &document->timeline();
     element = nullptr;
     document = nullptr;
 

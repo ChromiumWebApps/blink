@@ -258,7 +258,7 @@ void RenderDeprecatedFlexibleBox::layoutBlock(bool relayoutChildren)
         return;
 
     LayoutRepainter repainter(*this, checkForRepaintDuringLayout());
-    LayoutStateMaintainer statePusher(this, locationOffset());
+    LayoutStateMaintainer statePusher(*this, locationOffset());
 
     RenderFlowThread* flowThread = flowThreadContainingBlock();
     if (updateRegionsAndShapesLogicalSize(flowThread))
@@ -300,7 +300,7 @@ void RenderDeprecatedFlexibleBox::layoutBlock(bool relayoutChildren)
     updateLayerTransform();
 
     if (view()->layoutState()->pageLogicalHeight())
-        setPageLogicalOffset(view()->layoutState()->pageLogicalOffset(this, logicalTop()));
+        setPageLogicalOffset(view()->layoutState()->pageLogicalOffset(*this, logicalTop()));
 
     // Update our scrollbars if we're overflow:auto/scroll/hidden now that we know if
     // we overflow or not.
@@ -942,9 +942,9 @@ void RenderDeprecatedFlexibleBox::applyLineClamp(FlexBoxIterator& iterator, bool
         const Font& font = style(numVisibleLines == 1)->font();
 
         // Get ellipsis width, and if the last child is an anchor, it will go after the ellipsis, so add in a space and the anchor width too
-        LayoutUnit totalWidth;
+        float totalWidth;
         InlineBox* anchorBox = lastLine->lastChild();
-        if (anchorBox && anchorBox->renderer()->style()->isLink())
+        if (anchorBox && anchorBox->renderer().style()->isLink())
             totalWidth = anchorBox->logicalWidth() + font.width(RenderBlockFlow::constructTextRun(this, font, ellipsisAndSpace, 2, style(), style()->direction()));
         else {
             anchorBox = 0;
@@ -952,26 +952,26 @@ void RenderDeprecatedFlexibleBox::applyLineClamp(FlexBoxIterator& iterator, bool
         }
 
         // See if this width can be accommodated on the last visible line
-        RenderBlockFlow* destBlock = lastVisibleLine->block();
-        RenderBlockFlow* srcBlock = lastLine->block();
+        RenderBlockFlow& destBlock = lastVisibleLine->block();
+        RenderBlockFlow& srcBlock = lastLine->block();
 
         // FIXME: Directions of src/destBlock could be different from our direction and from one another.
-        if (!srcBlock->style()->isLeftToRightDirection())
+        if (!srcBlock.style()->isLeftToRightDirection())
             continue;
 
-        bool leftToRight = destBlock->style()->isLeftToRightDirection();
+        bool leftToRight = destBlock.style()->isLeftToRightDirection();
         if (!leftToRight)
             continue;
 
-        LayoutUnit blockRightEdge = destBlock->logicalRightOffsetForLine(lastVisibleLine->y(), false);
+        LayoutUnit blockRightEdge = destBlock.logicalRightOffsetForLine(lastVisibleLine->y(), false);
         if (!lastVisibleLine->lineCanAccommodateEllipsis(leftToRight, blockRightEdge, lastVisibleLine->x() + lastVisibleLine->logicalWidth(), totalWidth))
             continue;
 
         // Let the truncation code kick in.
         // FIXME: the text alignment should be recomputed after the width changes due to truncation.
-        LayoutUnit blockLeftEdge = destBlock->logicalLeftOffsetForLine(lastVisibleLine->y(), false);
-        lastVisibleLine->placeEllipsis(anchorBox ? ellipsisAndSpaceStr : ellipsisStr, leftToRight, blockLeftEdge, blockRightEdge, totalWidth, anchorBox);
-        destBlock->setHasMarkupTruncation(true);
+        LayoutUnit blockLeftEdge = destBlock.logicalLeftOffsetForLine(lastVisibleLine->y(), false);
+        lastVisibleLine->placeEllipsis(anchorBox ? ellipsisAndSpaceStr : ellipsisStr, leftToRight, blockLeftEdge.toFloat(), blockRightEdge.toFloat(), totalWidth, anchorBox);
+        destBlock.setHasMarkupTruncation(true);
     }
 }
 

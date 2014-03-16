@@ -39,6 +39,7 @@ class CSSFontSelector;
 class CSSSegmentedFontFace;
 class Document;
 class FontDescription;
+class RemoteFontFaceSource;
 class SimpleFontData;
 class StyleRuleFontFace;
 
@@ -67,7 +68,8 @@ public:
     void addSource(PassOwnPtr<CSSFontFaceSource>);
 
     void beginLoadIfNeeded(CSSFontFaceSource*, CSSFontSelector* = 0);
-    void fontLoaded(CSSFontFaceSource*);
+    void fontLoaded(RemoteFontFaceSource*);
+    void fontLoadWaitLimitExceeded(RemoteFontFaceSource*);
 
     PassRefPtr<SimpleFontData> getFontData(const FontDescription&);
 
@@ -103,6 +105,8 @@ public:
     FontFace::LoadStatus loadStatus() const { return m_fontFace->loadStatus(); }
     void willUseFontData(const FontDescription&);
     void load(const FontDescription&, CSSFontSelector* = 0);
+
+    bool hadBlankText() { return isValid() && m_sources.first()->hadBlankText(); }
 
 private:
     void setLoadStatus(FontFace::LoadStatus);

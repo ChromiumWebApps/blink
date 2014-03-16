@@ -28,10 +28,9 @@
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/QualifiedName.h"
-#include "core/svg/SVGAnimatedType.h"
 #include "core/svg/SVGAnimatedTypeAnimator.h"
-#include "core/svg/SVGAnimatorFactory.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "core/svg/SVGElementInstance.h"
 
 namespace WebCore {
 
@@ -39,7 +38,7 @@ SVGAnimateElement::SVGAnimateElement(const QualifiedName& tagName, Document& doc
     : SVGAnimationElement(tagName, document)
     , m_animatedPropertyType(AnimatedString)
 {
-    ASSERT(hasTagName(SVGNames::animateTag) || hasTagName(SVGNames::setTag) || hasTagName(SVGNames::animateTransformTag));
+    ASSERT(isSVGAnimateElement(*this));
     ScriptWrappable::init(this);
 }
 
@@ -63,29 +62,6 @@ bool SVGAnimateElement::hasValidAttributeType()
     return m_animatedPropertyType != AnimatedUnknown && !hasInvalidCSSAttributeType();
 }
 
-AnimatedPropertyType SVGAnimateElement::determineAnimatedPropertyType(SVGElement* targetElement) const
-{
-    ASSERT(targetElement);
-
-    Vector<AnimatedPropertyType> propertyTypes;
-    targetElement->animatedPropertyTypeForAttribute(attributeName(), propertyTypes);
-    if (propertyTypes.isEmpty())
-        return AnimatedUnknown;
-
-    ASSERT(propertyTypes.size() <= 2);
-    AnimatedPropertyType type = propertyTypes[0];
-
-    // Animations of transform lists are not allowed for <animate> or <set>
-    // http://www.w3.org/TR/SVG/animate.html#AnimationAttributesAndProperties
-    if (type == AnimatedTransformList && !hasTagName(SVGNames::animateTransformTag))
-        return AnimatedUnknown;
-
-    if (propertyTypes.size() == 2)
-        ASSERT(propertyTypes[0] == propertyTypes[1]);
-
-    return type;
-}
-
 void SVGAnimateElement::calculateAnimatedValue(float percentage, unsigned repeatCount, SVGSMILElement* resultElement)
 {
     ASSERT(resultElement);
@@ -93,22 +69,22 @@ void SVGAnimateElement::calculateAnimatedValue(float percentage, unsigned repeat
     if (!targetElement || !isSVGAnimateElement(*resultElement))
         return;
 
-    ASSERT(m_animatedPropertyType == determineAnimatedPropertyType(targetElement));
+    ASSERT(m_animatedPropertyType == determineAnimatedPropertyType());
 
     ASSERT(percentage >= 0 && percentage <= 1);
-    ASSERT(m_animatedPropertyType != AnimatedTransformList || hasTagName(SVGNames::animateTransformTag));
+    ASSERT(m_animatedPropertyType != AnimatedTransformList || isSVGAnimateTransformElement(*this));
     ASSERT(m_animatedPropertyType != AnimatedUnknown);
     ASSERT(m_animator);
     ASSERT(m_animator->type() == m_animatedPropertyType);
-    ASSERT(m_fromType);
-    ASSERT(m_fromType->type() == m_animatedPropertyType);
-    ASSERT(m_toType);
+    ASSERT(m_fromProperty);
+    ASSERT(m_fromProperty->type() == m_animatedPropertyType);
+    ASSERT(m_toProperty);
 
     SVGAnimateElement* resultAnimationElement = toSVGAnimateElement(resultElement);
-    ASSERT(resultAnimationElement->m_animatedType);
+    ASSERT(resultAnimationElement->m_animatedProperty);
     ASSERT(resultAnimationElement->m_animatedPropertyType == m_animatedPropertyType);
 
-    if (hasTagName(SVGNames::setTag))
+    if (isSVGSetElement(*this))
         percentage = 1;
 
     if (calcMode() == CalcModeDiscrete)
@@ -117,23 +93,16 @@ void SVGAnimateElement::calculateAnimatedValue(float percentage, unsigned repeat
     // Target element might have changed.
     m_animator->setContextElement(targetElement);
 
-    // Be sure to detach list wrappers before we modfiy their underlying value. If we'd do
-    // if after calculateAnimatedValue() ran the cached pointers in the list propery tear
-    // offs would point nowhere, and we couldn't create copies of those values anymore,
-    // while detaching. This is covered by assertions, moving this down would fire them.
-    if (!m_animatedProperties.isEmpty())
-        m_animator->animValWillChange(m_animatedProperties);
-
     // Values-animation accumulates using the last values entry corresponding to the end of duration time.
-    SVGAnimatedType* toAtEndOfDurationType = m_toAtEndOfDurationType ? m_toAtEndOfDurationType.get() : m_toType.get();
-    m_animator->calculateAnimatedValue(percentage, repeatCount, m_fromType.get(), m_toType.get(), toAtEndOfDurationType, resultAnimationElement->m_animatedType.get());
+    NewSVGPropertyBase* toAtEndOfDurationProperty = m_toAtEndOfDurationProperty ? m_toAtEndOfDurationProperty.get() : m_toProperty.get();
+    m_animator->calculateAnimatedValue(percentage, repeatCount, m_fromProperty.get(), m_toProperty.get(), toAtEndOfDurationProperty, resultAnimationElement->m_animatedProperty.get());
 }
 
 bool SVGAnimateElement::calculateToAtEndOfDurationValue(const String& toAtEndOfDurationString)
 {
     if (toAtEndOfDurationString.isEmpty())
         return false;
-    m_toAtEndOfDurationType = ensureAnimator()->constructFromString(toAtEndOfDurationString);
+    m_toAtEndOfDurationProperty = ensureAnimator()->constructFromString(toAtEndOfDurationString);
     return true;
 }
 
@@ -144,7 +113,7 @@ bool SVGAnimateElement::calculateFromAndToValues(const String& fromString, const
         return false;
 
     determinePropertyValueTypes(fromString, toString);
-    ensureAnimator()->calculateFromAndToValues(m_fromType, m_toType, fromString, toString);
+    ensureAnimator()->calculateFromAndToValues(m_fromProperty, m_toProperty, fromString, toString);
     ASSERT(m_animatedPropertyType == m_animator->type());
     return true;
 }
@@ -162,32 +131,34 @@ bool SVGAnimateElement::calculateFromAndByValues(const String& fromString, const
     if (animationMode() == FromByAnimation && !animatedPropertyTypeSupportsAddition())
         return false;
 
-    ASSERT(!hasTagName(SVGNames::setTag));
+    ASSERT(!isSVGSetElement(*this));
 
     determinePropertyValueTypes(fromString, byString);
-    ensureAnimator()->calculateFromAndByValues(m_fromType, m_toType, fromString, byString);
+    ensureAnimator()->calculateFromAndByValues(m_fromProperty, m_toProperty, fromString, byString);
     ASSERT(m_animatedPropertyType == m_animator->type());
     return true;
 }
 
-#ifndef NDEBUG
-static inline bool propertyTypesAreConsistent(AnimatedPropertyType expectedPropertyType, const SVGElementAnimatedPropertyList& animatedTypes)
+namespace {
+
+Vector<SVGElement*> findElementInstances(SVGElement* targetElement)
 {
-    SVGElementAnimatedPropertyList::const_iterator end = animatedTypes.end();
-    for (SVGElementAnimatedPropertyList::const_iterator it = animatedTypes.begin(); it != end; ++it) {
-        for (size_t i = 0; i < it->properties.size(); ++i) {
-            if (expectedPropertyType != it->properties[i]->animatedPropertyType()) {
-                // This is the only allowed inconsistency. SVGAnimatedAngleAnimator handles both SVGAnimatedAngle & SVGAnimatedEnumeration for markers orient attribute.
-                if (expectedPropertyType == AnimatedAngle && it->properties[i]->animatedPropertyType() == AnimatedEnumeration)
-                    return true;
-                return false;
-            }
-        }
+    ASSERT(targetElement);
+    Vector<SVGElement*> animatedElements;
+
+    animatedElements.append(targetElement);
+
+    const HashSet<SVGElementInstance*>& instances = targetElement->instancesForElement();
+    const HashSet<SVGElementInstance*>::const_iterator end = instances.end();
+    for (HashSet<SVGElementInstance*>::const_iterator it = instances.begin(); it != end; ++it) {
+        if (SVGElement* shadowTreeElement = (*it)->shadowTreeElement())
+            animatedElements.append(shadowTreeElement);
     }
 
-    return true;
+    return animatedElements;
 }
-#endif
+
+}
 
 void SVGAnimateElement::resetAnimatedType()
 {
@@ -203,25 +174,23 @@ void SVGAnimateElement::resetAnimatedType()
 
     if (shouldApply == ApplyXMLAnimation) {
         // SVG DOM animVal animation code-path.
-        m_animatedProperties = animator->findAnimatedPropertiesForAttributeName(targetElement, attributeName);
-        SVGElementAnimatedPropertyList::const_iterator end = m_animatedProperties.end();
-        for (SVGElementAnimatedPropertyList::const_iterator it = m_animatedProperties.begin(); it != end; ++it)
-            document().accessSVGExtensions()->addElementReferencingTarget(this, it->element);
+        m_animatedElements = findElementInstances(targetElement);
+        ASSERT(!m_animatedElements.isEmpty());
 
-        ASSERT(!m_animatedProperties.isEmpty());
+        Vector<SVGElement*>::const_iterator end = m_animatedElements.end();
+        for (Vector<SVGElement*>::const_iterator it = m_animatedElements.begin(); it != end; ++it)
+            document().accessSVGExtensions().addElementReferencingTarget(this, *it);
 
-        ASSERT(propertyTypesAreConsistent(m_animatedPropertyType, m_animatedProperties));
-        if (!m_animatedType)
-            m_animatedType = animator->startAnimValAnimation(m_animatedProperties);
-        else {
-            animator->resetAnimValToBaseVal(m_animatedProperties, m_animatedType.get());
-            animator->animValDidChange(m_animatedProperties);
-        }
+        if (!m_animatedProperty)
+            m_animatedProperty = animator->startAnimValAnimation(m_animatedElements);
+        else
+            m_animatedProperty = animator->resetAnimValToBaseVal(m_animatedElements);
+
         return;
     }
 
     // CSS properties animation code-path.
-    ASSERT(m_animatedProperties.isEmpty());
+    ASSERT(m_animatedElements.isEmpty());
     String baseValue;
 
     if (shouldApply == ApplyCSSAnimation) {
@@ -229,8 +198,7 @@ void SVGAnimateElement::resetAnimatedType()
         computeCSSPropertyValue(targetElement, cssPropertyID(attributeName.localName()), baseValue);
     }
 
-    if (!m_animatedType || !m_animatedType->setValueAsString(attributeName, baseValue))
-        m_animatedType = animator->constructFromString(baseValue);
+    m_animatedProperty = animator->constructFromString(baseValue);
 }
 
 static inline void applyCSSPropertyToTarget(SVGElement* targetElement, CSSPropertyID id, const String& value)
@@ -294,6 +262,7 @@ static inline void removeCSSPropertyFromTargetAndInstances(SVGElement* targetEle
 static inline void notifyTargetAboutAnimValChange(SVGElement* targetElement, const QualifiedName& attributeName)
 {
     ASSERT_WITH_SECURITY_IMPLICATION(!targetElement->m_deletionHasBegun);
+    targetElement->invalidateSVGAttributes();
     targetElement->svgAttributeChanged(attributeName);
 }
 
@@ -317,52 +286,51 @@ static inline void notifyTargetAndInstancesAboutAnimValChange(SVGElement* target
 
 void SVGAnimateElement::clearAnimatedType(SVGElement* targetElement)
 {
-    if (!m_animatedType)
+    if (!m_animatedProperty)
         return;
 
     if (!targetElement) {
-        m_animatedType.clear();
+        m_animatedProperty.clear();
         return;
     }
 
-    if (m_animatedProperties.isEmpty()) {
+    if (m_animatedElements.isEmpty()) {
         // CSS properties animation code-path.
         removeCSSPropertyFromTargetAndInstances(targetElement, attributeName());
-        m_animatedType.clear();
+        m_animatedProperty.clear();
         return;
     }
 
     // SVG DOM animVal animation code-path.
     if (m_animator) {
-        m_animator->stopAnimValAnimation(m_animatedProperties);
+        m_animator->stopAnimValAnimation(m_animatedElements);
         notifyTargetAndInstancesAboutAnimValChange(targetElement, attributeName());
     }
 
-    m_animatedProperties.clear();
-    m_animatedType.clear();
+    m_animatedElements.clear();
+    m_animatedProperty.clear();
 }
 
 void SVGAnimateElement::applyResultsToTarget()
 {
-    ASSERT(m_animatedPropertyType != AnimatedTransformList || hasTagName(SVGNames::animateTransformTag));
+    ASSERT(m_animatedPropertyType != AnimatedTransformList || isSVGAnimateTransformElement(*this));
     ASSERT(m_animatedPropertyType != AnimatedUnknown);
     ASSERT(m_animator);
 
     // Early exit if our animated type got destructed by a previous endedActiveInterval().
-    if (!m_animatedType)
+    if (!m_animatedProperty)
         return;
 
-    if (m_animatedProperties.isEmpty()) {
+    if (m_animatedElements.isEmpty()) {
         // CSS properties animation code-path.
         // Convert the result of the animation to a String and apply it as CSS property on the target & all instances.
-        applyCSSPropertyToTargetAndInstances(targetElement(), attributeName(), m_animatedType->valueAsString());
+        applyCSSPropertyToTargetAndInstances(targetElement(), attributeName(), m_animatedProperty->valueAsString());
         return;
     }
 
     // SVG DOM animVal animation code-path.
     // At this point the SVG DOM values are already changed, unlike for CSS.
     // We only have to trigger update notifications here.
-    m_animator->animValDidChange(m_animatedProperties);
     notifyTargetAndInstancesAboutAnimValChange(targetElement(), attributeName());
 }
 
@@ -414,18 +382,18 @@ void SVGAnimateElement::setAttributeName(const QualifiedName& attributeName)
 
 void SVGAnimateElement::resetAnimatedPropertyType()
 {
-    ASSERT(!m_animatedType);
-    m_fromType.clear();
-    m_toType.clear();
-    m_toAtEndOfDurationType.clear();
+    ASSERT(!m_animatedProperty);
+    m_fromProperty.clear();
+    m_toProperty.clear();
+    m_toAtEndOfDurationProperty.clear();
     m_animator.clear();
-    m_animatedPropertyType = targetElement() ? determineAnimatedPropertyType(targetElement()) : AnimatedString;
+    m_animatedPropertyType = determineAnimatedPropertyType();
 }
 
 SVGAnimatedTypeAnimator* SVGAnimateElement::ensureAnimator()
 {
     if (!m_animator)
-        m_animator = SVGAnimatorFactory::create(this, targetElement(), m_animatedPropertyType);
+        m_animator = SVGAnimatedTypeAnimator::create(m_animatedPropertyType, this, targetElement());
     ASSERT(m_animatedPropertyType == m_animator->type());
     return m_animator.get();
 }

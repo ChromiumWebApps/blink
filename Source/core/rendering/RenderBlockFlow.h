@@ -46,6 +46,7 @@ namespace WebCore {
 class MarginInfo;
 class LineBreaker;
 class LineWidth;
+class RenderMultiColumnFlowThread;
 
 class RenderBlockFlow : public RenderBlock {
 public:
@@ -112,6 +113,8 @@ public:
 
     void removeFloatingObjects();
 
+    virtual void addChild(RenderObject* newChild, RenderObject* beforeChild = 0) OVERRIDE;
+
     void moveAllChildrenIncludingFloatsTo(RenderBlock* toBlock, bool fullRemoveInsert);
 
     bool generatesLineBoxesForInlineChild(RenderObject*);
@@ -171,6 +174,8 @@ public:
     // Direction resolved from string value.
     static TextRun constructTextRun(RenderObject* context, const Font&, const String&, RenderStyle*,
         TextRun::ExpansionBehavior = TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion, TextRunFlags = DefaultTextRunFlags);
+    static TextRun constructTextRun(RenderObject* context, const Font&, const RenderText*, unsigned offset, unsigned length, RenderStyle*,
+        TextRun::ExpansionBehavior = TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion);
 
     // Explicit direction.
     static TextRun constructTextRun(RenderObject* context, const Font&, const String&, RenderStyle*, TextDirection,
@@ -191,7 +196,12 @@ public:
     static TextRun constructTextRun(RenderObject* context, const Font&, const UChar* characters, int length, RenderStyle*, TextDirection,
         TextRun::ExpansionBehavior = TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion);
 
+    RenderMultiColumnFlowThread* multiColumnFlowThread() const { return m_rareData ? m_rareData->m_multiColumnFlowThread : 0; }
+
     void addOverflowFromInlineChildren();
+
+    // FIXME: This should be const to avoid a const_cast, but can modify child dirty bits and RenderCombineText
+    void computeInlinePreferredLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth);
 
     GapRects inlineSelectionGaps(RenderBlock* rootBlock, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock,
         LayoutUnit& lastLogicalTop, LayoutUnit& lastLogicalLeft, LayoutUnit& lastLogicalRight, const PaintInfo*);
@@ -214,6 +224,15 @@ protected:
     {
         return adjustLogicalLeftOffsetForLine(logicalLeftFloatOffsetForLine(logicalTop, fixedOffset, logicalHeight), applyTextIndent);
     }
+
+    virtual RenderObject* layoutSpecialExcludedChild(bool /*relayoutChildren*/, SubtreeLayoutScope&);
+    virtual bool updateLogicalWidthAndColumnWidth() OVERRIDE;
+
+    // These functions optionally update LayoutState's layoutDelta, which is used to ensure they're repainted correctly when moved
+    enum ApplyLayoutDeltaMode { ApplyLayoutDelta, DoNotApplyLayoutDelta };
+    void setLogicalLeftForChild(RenderBox* child, LayoutUnit logicalLeft, ApplyLayoutDeltaMode = DoNotApplyLayoutDelta);
+    void setLogicalTopForChild(RenderBox* child, LayoutUnit logicalTop, ApplyLayoutDeltaMode = DoNotApplyLayoutDelta);
+    void determineLogicalLeftPositionForChild(RenderBox* child, ApplyLayoutDeltaMode = DoNotApplyLayoutDelta);
 
 private:
     bool layoutBlockFlow(bool relayoutChildren, LayoutUnit& pageLogicalHeight, SubtreeLayoutScope&);
@@ -282,8 +301,10 @@ private:
 
     virtual RootInlineBox* createRootInlineBox(); // Subclassed by SVG
 
+    void createMultiColumnFlowThreadIfNeeded();
+
     void updateLogicalWidthForAlignment(const ETextAlign&, const RootInlineBox*, BidiRun* trailingSpaceRun, float& logicalLeft, float& totalLogicalWidth, float& availableLogicalWidth, int expansionOpportunityCount);
-    virtual void checkForPaginationLogicalHeightChange(LayoutUnit& pageLogicalHeight, bool& pageLogicalHeightChanged, bool& hasSpecifiedPageLogicalHeight);
+    void checkForPaginationLogicalHeightChange(LayoutUnit& pageLogicalHeight, bool& pageLogicalHeightChanged, bool& hasSpecifiedPageLogicalHeight);
     bool shouldRelayoutForPagination(LayoutUnit& pageLogicalHeight, LayoutUnit layoutOverflowLogicalBottom) const;
     void setColumnCountAndHeight(unsigned count, LayoutUnit pageLogicalHeight);
 
@@ -334,6 +355,7 @@ public:
     public:
         RenderBlockFlowRareData(const RenderBlockFlow* block)
             : m_margins(positiveMarginBeforeDefault(block), negativeMarginBeforeDefault(block), positiveMarginAfterDefault(block), negativeMarginAfterDefault(block))
+            , m_multiColumnFlowThread(0)
             , m_discardMarginBefore(false)
             , m_discardMarginAfter(false)
         {
@@ -357,6 +379,8 @@ public:
         }
 
         MarginValues m_margins;
+
+        RenderMultiColumnFlowThread* m_multiColumnFlowThread;
 
         bool m_discardMarginBefore : 1;
         bool m_discardMarginAfter : 1;

@@ -50,16 +50,19 @@ inline Worker::Worker(ExecutionContext* context)
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<Worker> Worker::create(ExecutionContext* context, const String& url, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Worker> Worker::create(ExecutionContext* context, const String& url, ExceptionState& exceptionState)
 {
     ASSERT(isMainThread());
     Document* document = toDocument(context);
     UseCounter::count(context, UseCounter::WorkerStart);
-    ASSERT(document->page());
+    if (!document->page()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The context provided is invalid.");
+        return nullptr;
+    }
     WorkerGlobalScopeProxyProvider* proxyProvider = WorkerGlobalScopeProxyProvider::from(*document->page());
     ASSERT(proxyProvider);
 
-    RefPtr<Worker> worker = adoptRef(new Worker(context));
+    RefPtrWillBeRawPtr<Worker> worker = adoptRefWillBeRefCountedGarbageCollected(new Worker(context));
 
     worker->suspendIfNeeded();
 
@@ -100,7 +103,8 @@ void Worker::postMessage(PassRefPtr<SerializedScriptValue> message, const Messag
 
 void Worker::terminate()
 {
-    m_contextProxy->terminateWorkerGlobalScope();
+    if (m_contextProxy)
+        m_contextProxy->terminateWorkerGlobalScope();
 }
 
 void Worker::stop()
@@ -132,6 +136,11 @@ void Worker::notifyFinished()
     m_scriptLoader = nullptr;
 
     unsetPendingActivity(this);
+}
+
+void Worker::trace(Visitor* visitor)
+{
+    AbstractWorker::trace(visitor);
 }
 
 } // namespace WebCore

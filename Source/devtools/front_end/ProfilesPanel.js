@@ -267,13 +267,13 @@ WebInspector.ProfileHeader = function(profileType, title)
 /**
  * @constructor
  * @param {?string} subtitle
- * @param {boolean} wait
+ * @param {boolean|undefined} wait
  */
 WebInspector.ProfileHeader.StatusUpdate = function(subtitle, wait)
 {
     /** @type {?string} */
     this.subtitle = subtitle;
-    /** @type {boolean} */
+    /** @type {boolean|undefined} */
     this.wait = wait;
 }
 
@@ -297,7 +297,7 @@ WebInspector.ProfileHeader.prototype = {
      */
     updateStatus: function(subtitle, wait)
     {
-        this.dispatchEventToListeners(WebInspector.ProfileHeader.Events.UpdateStatus, new WebInspector.ProfileHeader.StatusUpdate(subtitle, !!wait));
+        this.dispatchEventToListeners(WebInspector.ProfileHeader.Events.UpdateStatus, new WebInspector.ProfileHeader.StatusUpdate(subtitle, wait));
     },
 
     /**
@@ -385,7 +385,7 @@ WebInspector.ProfilesPanel = function()
 
     this._searchableView = new WebInspector.SearchableView(this);
 
-    var mainView = new WebInspector.View();
+    var mainView = new WebInspector.VBox();
     this._searchableView.show(mainView.element);
     mainView.show(this.mainElement());
 
@@ -453,7 +453,7 @@ WebInspector.ProfileTypeRegistry = function() {
     this._addProfileType(this.trackingHeapSnapshotProfileType);
     HeapProfilerAgent.enable();
 
-    if (!WebInspector.isWorkerFrontend() && WebInspector.experimentsSettings.canvasInspection.isEnabled()) {
+    if (Capabilities.isMainFrontend && WebInspector.experimentsSettings.canvasInspection.isEnabled()) {
         this.canvasProfileType = new WebInspector.CanvasProfileType();
         this._addProfileType(this.canvasProfileType);
     }
@@ -496,14 +496,6 @@ WebInspector.ProfilesPanel.prototype = {
         this.element.appendChild(this._fileSelectorElement);
     },
 
-    /**
-     * @return {!WebInspector.ProfileLauncherView}
-     */
-    _createLauncherView: function()
-    {
-        return new WebInspector.ProfileLauncherView(this);
-    },
-
     _findProfileTypeByExtension: function(fileName)
     {
         var types = WebInspector.ProfileTypeRegistry.instance.profileTypes();
@@ -530,7 +522,7 @@ WebInspector.ProfilesPanel.prototype = {
         function didChangeInterval(error)
         {
             if (error)
-                WebInspector.showErrorMessage(error)
+                WebInspector.console.showErrorMessage(error)
         }
     },
 
@@ -551,12 +543,12 @@ WebInspector.ProfilesPanel.prototype = {
                     continue;
                 extensions.push(extension);
             }
-            WebInspector.log(WebInspector.UIString("Can't load file. Only files with extensions '%s' can be loaded.", extensions.join("', '")));
+            WebInspector.console.log(WebInspector.UIString("Can't load file. Only files with extensions '%s' can be loaded.", extensions.join("', '")));
             return;
         }
 
         if (!!profileType.profileBeingRecorded()) {
-            WebInspector.log(WebInspector.UIString("Can't load profile when other profile is recording."));
+            WebInspector.console.log(WebInspector.UIString("Can't load profile when other profile is recording."));
             return;
         }
 
@@ -793,9 +785,9 @@ WebInspector.ProfilesPanel.prototype = {
 
     /**
      * @param {!HeapProfilerAgent.HeapSnapshotObjectId} snapshotObjectId
-     * @param {string} viewName
+     * @param {string} perspectiveName
      */
-    showObject: function(snapshotObjectId, viewName)
+    showObject: function(snapshotObjectId, perspectiveName)
     {
         var heapProfiles = WebInspector.ProfileTypeRegistry.instance.heapSnapshotProfileType.getProfiles();
         for (var i = 0; i < heapProfiles.length; i++) {
@@ -804,13 +796,7 @@ WebInspector.ProfilesPanel.prototype = {
             if (profile.maxJSObjectId >= snapshotObjectId) {
                 this.showProfile(profile);
                 var view = this._viewForProfile(profile);
-                view.changeView(viewName, function() {
-                    function didHighlightObject(found) {
-                        if (!found)
-                            WebInspector.log("Cannot find corresponding heap snapshot node", WebInspector.ConsoleMessage.MessageLevel.Error, true);
-                    }
-                    view.dataGrid.highlightObjectByHeapSnapshotId(snapshotObjectId, didHighlightObject.bind(this));
-                });
+                view.highlightLiveObject(perspectiveName, snapshotObjectId);
                 break;
             }
         }
@@ -1118,7 +1104,7 @@ WebInspector.ProfilesPanel.ContextMenuProvider.prototype = {
      */
     appendApplicableItems: function(event, contextMenu, target)
     {
-        WebInspector.panel("profiles").appendApplicableItems(event, contextMenu, target);
+        WebInspector.inspectorView.panel("profiles").appendApplicableItems(event, contextMenu, target);
     }
 }
 
@@ -1161,7 +1147,8 @@ WebInspector.ProfileSidebarTreeElement.prototype = {
         var statusUpdate = event.data;
         if (statusUpdate.subtitle !== null)
             this.subtitle = statusUpdate.subtitle;
-        this.wait = !!statusUpdate.wait;
+        if (typeof statusUpdate.wait === "boolean")
+            this.wait = statusUpdate.wait;
         this.refreshTitles();
     },
 
@@ -1270,5 +1257,6 @@ importScript("ProfileLauncherView.js");
 importScript("TopDownProfileDataGridTree.js");
 importScript("CanvasProfileView.js");
 importScript("CanvasReplayStateView.js");
+importScript("PieChart.js");
 
 WebInspector.ProfileTypeRegistry.instance = new WebInspector.ProfileTypeRegistry();

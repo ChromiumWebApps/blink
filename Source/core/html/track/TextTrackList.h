@@ -29,6 +29,7 @@
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
+#include "core/html/HTMLMediaElement.h"
 #include "platform/Timer.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -37,9 +38,7 @@
 namespace WebCore {
 
 class GenericEventQueue;
-class HTMLMediaElement;
 class TextTrack;
-class TextTrackList;
 
 class TextTrackList FINAL : public RefCounted<TextTrackList>, public ScriptWrappable, public EventTargetWithInlineData {
     REFCOUNTED_EVENT_TARGET(TextTrackList);
@@ -68,10 +67,11 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(change);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(removetrack);
 
-    void clearOwner() { m_owner = 0; }
-    Node* owner() const;
+    void clearOwner();
+    HTMLMediaElement* owner() const;
 
     void scheduleChangeEvent();
+    void removeAllInbandTracks();
 
 private:
     explicit TextTrackList(HTMLMediaElement*);

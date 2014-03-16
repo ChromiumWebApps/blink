@@ -43,7 +43,6 @@ namespace WebCore {
 class MIDIAccess;
 
 class MIDIPort : public RefCountedWillBeRefCountedGarbageCollected<MIDIPort>, public ScriptWrappable, public EventTargetWithInlineData {
-    DECLARE_GC_INFO;
     DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<MIDIPort>);
 public:
     enum MIDIPortTypeCode {
@@ -61,7 +60,7 @@ public:
 
     MIDIAccess* midiAccess() const { return m_access; }
 
-    void trace(Visitor*);
+    virtual void trace(Visitor*);
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(disconnect);
 

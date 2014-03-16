@@ -32,12 +32,12 @@
 #include "core/html/imports/HTMLImportLoader.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/ResourceFetcher.h"
-#include "core/frame/ContentSecurityPolicyResponseHeaders.h"
+#include "core/dom/StyleEngine.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/imports/HTMLImport.h"
 #include "core/html/imports/HTMLImportLoaderClient.h"
 #include "core/loader/DocumentWriter.h"
+#include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 
 
 namespace WebCore {
@@ -93,7 +93,6 @@ HTMLImportLoader::State HTMLImportLoader::startWritingAndParsing(const ResourceR
     DocumentInit init = DocumentInit(response.url(), 0, m_import->master()->contextDocument(), m_import)
         .withRegistrationContext(m_import->master()->registrationContext());
     m_importedDocument = HTMLDocument::create(init);
-    m_importedDocument->initContentSecurityPolicy(ContentSecurityPolicyResponseHeaders(response));
     m_writer = DocumentWriter::create(m_importedDocument.get(), response.mimeType(), response.textEncodingName());
 
     return StateLoading;
@@ -106,7 +105,12 @@ HTMLImportLoader::State HTMLImportLoader::finishWriting()
 
 HTMLImportLoader::State HTMLImportLoader::finishParsing()
 {
-    return StateReady;
+    return StateParsed;
+}
+
+HTMLImportLoader::State HTMLImportLoader::finishLoading()
+{
+    return StateLoaded;
 }
 
 void HTMLImportLoader::setState(State state)
@@ -116,19 +120,32 @@ void HTMLImportLoader::setState(State state)
 
     m_state = state;
 
-    if (m_state == StateReady || m_state == StateError || m_state == StateWritten) {
+    if (m_state == StateParsed || m_state == StateError || m_state == StateWritten) {
         if (RefPtr<DocumentWriter> writer = m_writer.release())
             writer->end();
     }
 
     // Since DocumentWriter::end() can let setState() reenter, we shouldn't refer to m_state here.
-    if (state == StateReady || state == StateError)
-        didFinish();
+    if (state == StateLoaded || state == StateError)
+        didFinishLoading();
 }
 
 void HTMLImportLoader::didFinishParsing()
 {
     setState(finishParsing());
+    if (!hasPendingResources())
+        setState(finishLoading());
+}
+
+void HTMLImportLoader::didRemoveAllPendingStylesheet()
+{
+    if (m_state == StateParsed)
+        setState(finishLoading());
+}
+
+bool HTMLImportLoader::hasPendingResources() const
+{
+    return m_importedDocument && m_importedDocument->styleEngine()->hasPendingSheets();
 }
 
 Document* HTMLImportLoader::importedDocument() const
@@ -138,7 +155,7 @@ Document* HTMLImportLoader::importedDocument() const
     return m_importedDocument.get();
 }
 
-void HTMLImportLoader::didFinish()
+void HTMLImportLoader::didFinishLoading()
 {
     for (size_t i = 0; i < m_clients.size(); ++i)
         m_clients[i]->didFinishLoading();

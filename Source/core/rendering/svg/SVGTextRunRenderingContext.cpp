@@ -73,12 +73,12 @@ static inline RenderSVGResource* activePaintingResourceFromRun(const TextRun& ru
     return 0;
 }
 
-float SVGTextRunRenderingContext::floatWidthUsingSVGFont(const Font& font, const TextRun& run, int& charsConsumed, String& glyphName) const
+float SVGTextRunRenderingContext::floatWidthUsingSVGFont(const Font& font, const TextRun& run, int& charsConsumed, Glyph& glyphId) const
 {
     WidthIterator it(&font, run);
     GlyphBuffer glyphBuffer;
     charsConsumed += it.advance(run.length(), &glyphBuffer);
-    glyphName = it.lastGlyphName();
+    glyphId = !glyphBuffer.isEmpty() ? glyphBuffer.glyphAt(0) : 0;
     return it.runWidthSoFar();
 }
 
@@ -126,7 +126,7 @@ void SVGTextRunRenderingContext::drawSVGGlyphs(GraphicsContext* context, const T
         if (!glyph)
             continue;
 
-        float advance = glyphBuffer.advanceAt(from + i);
+        float advance = glyphBuffer.advanceAt(from + i).width();
         SVGGlyph svgGlyph = fontElement->svgGlyphForGlyph(glyph);
         ASSERT(!svgGlyph.isPartOfLigature);
         ASSERT(svgGlyph.tableEntry == glyph);
@@ -198,7 +198,7 @@ GlyphData SVGTextRunRenderingContext::glyphDataForCharacter(const Font& font, co
             RenderObject* parentRenderObject = renderObject->isText() ? renderObject->parent() : renderObject;
             ASSERT(parentRenderObject);
             if (Element* parentRenderObjectElement = toElement(parentRenderObject->node())) {
-                if (parentRenderObjectElement->hasTagName(SVGNames::altGlyphTag))
+                if (isSVGAltGlyphElement(*parentRenderObjectElement))
                     glyphData.fontData = primaryFont;
             }
         }

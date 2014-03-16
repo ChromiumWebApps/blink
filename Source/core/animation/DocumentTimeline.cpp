@@ -35,6 +35,8 @@
 #include "core/animation/AnimationClock.h"
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
+#include "core/page/Page.h"
+#include "platform/TraceEvent.h"
 
 namespace WebCore {
 
@@ -51,7 +53,6 @@ PassRefPtr<DocumentTimeline> DocumentTimeline::create(Document* document, PassOw
 DocumentTimeline::DocumentTimeline(Document* document, PassOwnPtr<PlatformTiming> timing)
     : m_zeroTime(nullValue())
     , m_document(document)
-    , m_eventDistpachTimer(this, &DocumentTimeline::eventDispatchTimerFired)
 {
     if (!timing)
         m_timing = adoptPtr(new DocumentTimelineTiming(this));
@@ -93,17 +94,22 @@ void DocumentTimeline::serviceAnimations()
     TRACE_EVENT0("webkit", "DocumentTimeline::serviceAnimations");
 
     m_timing->cancelWake();
+    m_hasOutdatedPlayer = false;
 
     double timeToNextEffect = std::numeric_limits<double>::infinity();
-    Vector<Player*> playersToRemove;
-    for (HashSet<RefPtr<Player> >::iterator it = m_playersNeedingUpdate.begin(); it != m_playersNeedingUpdate.end(); ++it) {
-        Player* player = it->get();
-        if (!player->update())
-            playersToRemove.append(player);
-        timeToNextEffect = std::min(timeToNextEffect, player->timeToEffectChange());
+    Vector<Player*> players;
+    for (HashSet<RefPtr<Player> >::iterator it = m_playersNeedingUpdate.begin(); it != m_playersNeedingUpdate.end(); ++it)
+        players.append(it->get());
+
+    std::sort(players.begin(), players.end(), Player::hasLowerPriority);
+
+    for (size_t i = 0; i < players.size(); ++i) {
+        Player* player = players[i];
+        if (player->update())
+            timeToNextEffect = std::min(timeToNextEffect, player->timeToEffectChange());
+        else
+            m_playersNeedingUpdate.remove(player);
     }
-    for (size_t i = 0; i < playersToRemove.size(); ++i)
-        m_playersNeedingUpdate.remove(playersToRemove[i]);
 
     ASSERT(!m_playersNeedingUpdate.isEmpty() || timeToNextEffect == std::numeric_limits<double>::infinity());
     if (timeToNextEffect < s_minimumDelay)
@@ -111,7 +117,7 @@ void DocumentTimeline::serviceAnimations()
     else if (timeToNextEffect != std::numeric_limits<double>::infinity())
         m_timing->wakeAfter(timeToNextEffect - s_minimumDelay);
 
-    m_hasOutdatedPlayer = false;
+    ASSERT(!m_hasOutdatedPlayer);
 }
 
 void DocumentTimeline::setZeroTime(double zeroTime)
@@ -124,7 +130,7 @@ void DocumentTimeline::setZeroTime(double zeroTime)
 
 void DocumentTimeline::DocumentTimelineTiming::wakeAfter(double duration)
 {
-    m_timer.startOneShot(duration);
+    m_timer.startOneShot(duration, FROM_HERE);
 }
 
 void DocumentTimeline::DocumentTimelineTiming::cancelWake()
@@ -156,28 +162,8 @@ void DocumentTimeline::setOutdatedPlayer(Player* player)
 {
     m_playersNeedingUpdate.add(player);
     m_hasOutdatedPlayer = true;
-    if (m_document && m_document->view() && !m_document->view()->isServicingAnimations())
+    if (m_document && m_document->page() && !m_document->page()->animator().isServicingAnimations())
         m_timing->serviceOnNextFrame();
-}
-
-void DocumentTimeline::dispatchEvents()
-{
-    Vector<EventToDispatch> events = m_events;
-    m_events.clear();
-    for (size_t i = 0; i < events.size(); i++)
-        events[i].target->dispatchEvent(events[i].event.release());
-}
-
-void DocumentTimeline::dispatchEventsAsync()
-{
-    if (m_events.isEmpty() || m_eventDistpachTimer.isActive())
-        return;
-    m_eventDistpachTimer.startOneShot(0);
-}
-
-void DocumentTimeline::eventDispatchTimerFired(Timer<DocumentTimeline>*)
-{
-    dispatchEvents();
 }
 
 size_t DocumentTimeline::numberOfActiveAnimationsForTesting() const

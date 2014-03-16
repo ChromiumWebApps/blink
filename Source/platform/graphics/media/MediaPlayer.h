@@ -92,19 +92,13 @@ public:
     // the movie size has changed
     virtual void mediaPlayerSizeChanged() = 0;
 
-    enum MediaKeyErrorCode { UnknownError = 1, ClientError, ServiceError, OutputError, HardwareChangeError, DomainError };
-    virtual void mediaPlayerKeyAdded(const String& /* keySystem */, const String& /* sessionId */) = 0;
-    virtual void mediaPlayerKeyError(const String& /* keySystem */, const String& /* sessionId */, MediaKeyErrorCode, unsigned short /* systemCode */) = 0;
-    virtual void mediaPlayerKeyMessage(const String& /* keySystem */, const String& /* sessionId */, const unsigned char* /* message */, unsigned /* messageLength */, const KURL& /* defaultURL */) = 0;
-    virtual bool mediaPlayerKeyNeeded(const String& /* contentType */, const unsigned char* /* initData */, unsigned /* initDataLength */) = 0;
-
     virtual CORSMode mediaPlayerCORSMode() const = 0;
 
     virtual void mediaPlayerSetWebLayer(blink::WebLayer*) = 0;
     virtual void mediaPlayerSetOpaque(bool) = 0;
 
-    virtual void mediaPlayerDidAddTrack(blink::WebInbandTextTrack*) = 0;
-    virtual void mediaPlayerDidRemoveTrack(blink::WebInbandTextTrack*) = 0;
+    virtual void mediaPlayerDidAddTextTrack(blink::WebInbandTextTrack*) = 0;
+    virtual void mediaPlayerDidRemoveTextTrack(blink::WebInbandTextTrack*) = 0;
 
     virtual void mediaPlayerMediaSourceOpened(blink::WebMediaSource*) = 0;
 };
@@ -148,9 +142,6 @@ public:
 
     virtual bool paused() const = 0;
 
-    virtual void setVolume(double) = 0;
-    virtual void setMuted(bool) = 0;
-
     virtual void setPoster(const KURL&) = 0;
 
     enum NetworkState { Empty, Idle, Loading, Loaded, FormatError, NetworkError, DecodeError };
@@ -191,12 +182,7 @@ public:
 #if ENABLE(WEB_AUDIO)
     virtual AudioSourceProvider* audioSourceProvider() = 0;
 #endif
-
-    enum MediaKeyException { NoError, InvalidPlayerState, KeySystemNotSupported, InvalidAccess };
-    virtual MediaKeyException addKey(const String&, const unsigned char*, unsigned, const unsigned char*, unsigned, const String&) = 0;
-    virtual MediaKeyException generateKeyRequest(const String&, const unsigned char*, unsigned) = 0;
-    virtual MediaKeyException cancelKeyRequest(const String&, const String&) = 0;
-    virtual void setContentDecryptionModule(blink::WebContentDecryptionModule*) = 0;
+    virtual blink::WebMediaPlayer* webMediaPlayer() const = 0;
 };
 
 }

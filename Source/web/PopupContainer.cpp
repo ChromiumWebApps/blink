@@ -37,10 +37,10 @@
 #include "WebViewClient.h"
 #include "WebViewImpl.h"
 #include "core/dom/Document.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
-#include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformKeyboardEvent.h"
@@ -472,6 +472,8 @@ void PopupContainer::popupOpened(const IntRect& bounds)
         return;
 
     WebWidget* webwidget = webView->client()->createPopupMenu(WebPopupTypeSelect);
+    if (!webwidget)
+        return;
     // We only notify when the WebView has to handle the popup, as when
     // the popup is handled externally, the fact that a popup is showing is
     // transparent to the WebView.

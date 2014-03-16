@@ -35,14 +35,15 @@
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "platform/Logging.h"
+#include "core/html/HTMLTableElement.h"
 #include "core/rendering/InlineIterator.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderBlock.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderText.h"
+#include "platform/Logging.h"
 #include "wtf/text/CString.h"
 #include "wtf/unicode/CharacterNames.h"
 
@@ -210,14 +211,14 @@ Position Position::parentAnchoredEquivalent() const
     // FIXME: This should only be necessary for legacy positions, but is also needed for positions before and after Tables
     if (m_offset <= 0 && (m_anchorType != PositionIsAfterAnchor && m_anchorType != PositionIsAfterChildren)) {
         if (m_anchorNode->parentNode() && (editingIgnoresContent(m_anchorNode.get()) || isRenderedTableElement(m_anchorNode.get())))
-            return positionInParentBeforeNode(m_anchorNode.get());
+            return positionInParentBeforeNode(*m_anchorNode);
         return Position(m_anchorNode.get(), 0, PositionIsOffsetInAnchor);
     }
     if (!m_anchorNode->offsetInCharacters()
-        && (m_anchorType == PositionIsAfterAnchor || m_anchorType == PositionIsAfterChildren || static_cast<unsigned>(m_offset) == m_anchorNode->childNodeCount())
+        && (m_anchorType == PositionIsAfterAnchor || m_anchorType == PositionIsAfterChildren || static_cast<unsigned>(m_offset) == m_anchorNode->countChildren())
         && (editingIgnoresContent(m_anchorNode.get()) || isRenderedTableElement(m_anchorNode.get()))
         && containerNode()) {
-        return positionInParentAfterNode(m_anchorNode.get());
+        return positionInParentAfterNode(*m_anchorNode);
     }
 
     return Position(containerNode(), computeOffsetInContainerNode(), PositionIsOffsetInAnchor);
@@ -234,7 +235,7 @@ Node* Position::computeNodeBeforePosition() const
     case PositionIsAfterChildren:
         return m_anchorNode->lastChild();
     case PositionIsOffsetInAnchor:
-        return m_anchorNode->childNode(m_offset - 1); // -1 converts to childNode((unsigned)-1) and returns null.
+        return m_anchorNode->traverseToChildAt(m_offset - 1); // -1 converts to traverseToChildAt((unsigned)-1) and returns null.
     case PositionIsBeforeAnchor:
         return m_anchorNode->previousSibling();
     case PositionIsAfterAnchor:
@@ -255,7 +256,7 @@ Node* Position::computeNodeAfterPosition() const
     case PositionIsAfterChildren:
         return 0;
     case PositionIsOffsetInAnchor:
-        return m_anchorNode->childNode(m_offset);
+        return m_anchorNode->traverseToChildAt(m_offset);
     case PositionIsBeforeAnchor:
         return m_anchorNode.get();
     case PositionIsAfterAnchor:
@@ -303,7 +304,7 @@ Position Position::previous(PositionMoveType moveType) const
     ASSERT(offset >= 0);
 
     if (offset > 0) {
-        if (Node* child = node->childNode(offset - 1))
+        if (Node* child = node->traverseToChildAt(offset - 1))
             return lastPositionInOrAfterNode(child);
 
         // There are two reasons child might be 0:
@@ -338,10 +339,10 @@ Position Position::next(PositionMoveType moveType) const
     // FIXME: Negative offsets shouldn't be allowed. We should catch this earlier.
     ASSERT(offset >= 0);
 
-    if (Node* child = node->childNode(offset))
+    if (Node* child = node->traverseToChildAt(offset))
         return firstPositionInOrBeforeNode(child);
 
-    if (!node->hasChildNodes() && offset < lastOffsetForEditing(node)) {
+    if (!node->hasChildren() && offset < lastOffsetForEditing(node)) {
         // There are two reasons child might be 0:
         //   1) The node is node like a text node that is not an element, and therefore has no children.
         //      Going forward one character at a time is correct.
@@ -544,8 +545,13 @@ static bool endsOfNodeAreVisuallyDistinctPositions(Node* node)
         return true;
 
     // Don't include inline tables.
-    if (node->hasTagName(tableTag))
+    if (isHTMLTableElement(*node))
         return false;
+
+    // A Marquee elements are moving so we should assume their ends are always
+    // visibily distinct.
+    if (isHTMLMarqueeElement(*node))
+        return true;
 
     // There is a VisiblePosition inside an empty inline-block container.
     return node->renderer()->isReplaced() && canHaveChildrenForEditing(node) && toRenderBox(node->renderer())->height() != 0 && !node->firstChild();
@@ -734,7 +740,7 @@ Position Position::downstream(EditingBoundaryCrossingRule rule) const
 
         // stop before going above the body, up into the head
         // return the last visible streamer position
-        if (currentNode->hasTagName(bodyTag) && currentPos.atEndOfNode())
+        if (isHTMLBodyElement(*currentNode) && currentPos.atEndOfNode())
             break;
 
         // Do not move to a visually distinct position.
@@ -890,17 +896,17 @@ bool Position::isCandidate() const
     if (isRenderedTableElement(deprecatedNode()) || editingIgnoresContent(deprecatedNode()))
         return (atFirstEditingPositionForNode() || atLastEditingPositionForNode()) && !nodeIsUserSelectNone(deprecatedNode()->parentNode());
 
-    if (m_anchorNode->hasTagName(htmlTag))
+    if (isHTMLHtmlElement(*m_anchorNode))
         return false;
 
     if (renderer->isRenderBlockFlow()) {
-        if (toRenderBlock(renderer)->logicalHeight() || m_anchorNode->hasTagName(bodyTag)) {
+        if (toRenderBlock(renderer)->logicalHeight() || isHTMLBodyElement(*m_anchorNode)) {
             if (!Position::hasRenderedNonAnonymousDescendantsWithHeight(renderer))
                 return atFirstEditingPositionForNode() && !Position::nodeIsUserSelectNone(deprecatedNode());
             return m_anchorNode->rendererIsEditable() && !Position::nodeIsUserSelectNone(deprecatedNode()) && atEditingBoundary();
         }
     } else {
-        Frame* frame = m_anchorNode->document().frame();
+        LocalFrame* frame = m_anchorNode->document().frame();
         bool caretBrowsing = frame->settings() && frame->settings()->caretBrowsingEnabled();
         return (caretBrowsing || m_anchorNode->rendererIsEditable()) && !Position::nodeIsUserSelectNone(deprecatedNode()) && atEditingBoundary();
     }
@@ -975,7 +981,7 @@ bool Position::rendersInDifferentPosition(const Position &pos) const
         return false;
 
     if (deprecatedNode() == pos.deprecatedNode()) {
-        if (deprecatedNode()->hasTagName(brTag))
+        if (isHTMLBRElement(*deprecatedNode()))
             return false;
 
         if (m_offset == pos.deprecatedEditingOffset())
@@ -987,10 +993,10 @@ bool Position::rendersInDifferentPosition(const Position &pos) const
         }
     }
 
-    if (deprecatedNode()->hasTagName(brTag) && pos.isCandidate())
+    if (isHTMLBRElement(*deprecatedNode()) && pos.isCandidate())
         return true;
 
-    if (pos.deprecatedNode()->hasTagName(brTag) && isCandidate())
+    if (isHTMLBRElement(*pos.deprecatedNode()) && isCandidate())
         return true;
 
     if (deprecatedNode()->enclosingBlockFlowElement() != pos.deprecatedNode()->enclosingBlockFlowElement())
@@ -1050,7 +1056,7 @@ Position Position::leadingWhitespacePosition(EAffinity affinity, bool considerNo
     if (isNull())
         return Position();
 
-    if (upstream().deprecatedNode()->hasTagName(brTag))
+    if (isHTMLBRElement(*upstream().deprecatedNode()))
         return Position();
 
     Position prev = previousCharacterPosition(affinity);

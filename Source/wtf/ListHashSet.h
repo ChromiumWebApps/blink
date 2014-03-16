@@ -73,6 +73,7 @@ namespace WTF {
 
     public:
         typedef ValueArg ValueType;
+        typedef typename HashTraits<ValueType>::PeekInType ValuePeekInType;
 
         typedef ListHashSetIterator<ValueType, inlineCapacity, HashArg> iterator;
         typedef ListHashSetConstIterator<ValueType, inlineCapacity, HashArg> const_iterator;
@@ -120,9 +121,9 @@ namespace WTF {
         const ValueType& last() const;
         void removeLast();
 
-        iterator find(const ValueType&);
-        const_iterator find(const ValueType&) const;
-        bool contains(const ValueType&) const;
+        iterator find(ValuePeekInType);
+        const_iterator find(ValuePeekInType) const;
+        bool contains(ValuePeekInType) const;
 
         // An alternate version of find() that finds the object by hashing and comparing
         // with some other type, to avoid the cost of type conversion.
@@ -133,26 +134,26 @@ namespace WTF {
 
         // The return value of add is a pair of a pointer to the stored value,
         // and a bool that is true if an new entry was added.
-        AddResult add(const ValueType&);
+        AddResult add(ValuePeekInType);
 
         // Same as add() except that the return value is an
         // iterator. Useful in cases where it's needed to have the
         // same return value as find() and where it's not possible to
         // use a pointer to the storedValue.
-        iterator addReturnIterator(const ValueType&);
+        iterator addReturnIterator(ValuePeekInType);
 
         // Add the value to the end of the collection. If the value was already in
         // the list, it is moved to the end.
-        AddResult appendOrMoveToLast(const ValueType&);
+        AddResult appendOrMoveToLast(ValuePeekInType);
 
         // Add the value to the beginning of the collection. If the value was already in
         // the list, it is moved to the beginning.
-        AddResult prependOrMoveToFirst(const ValueType&);
+        AddResult prependOrMoveToFirst(ValuePeekInType);
 
-        AddResult insertBefore(const ValueType& beforeValue, const ValueType& newValue);
-        AddResult insertBefore(iterator, const ValueType&);
+        AddResult insertBefore(ValuePeekInType beforeValue, ValuePeekInType newValue);
+        AddResult insertBefore(iterator, ValuePeekInType);
 
-        void remove(const ValueType&);
+        void remove(ValuePeekInType);
         void remove(iterator);
         void clear();
 
@@ -250,7 +251,18 @@ namespace WTF {
     template<typename ValueArg, size_t inlineCapacity> struct ListHashSetNode {
         typedef ListHashSetNodeAllocator<ValueArg, inlineCapacity> NodeAllocator;
 
-        ListHashSetNode(ValueArg value)
+        ListHashSetNode(const ValueArg& value)
+            : m_value(value)
+            , m_prev(0)
+            , m_next(0)
+#ifndef NDEBUG
+            , m_isAllocated(true)
+#endif
+        {
+        }
+
+        template <typename U>
+        ListHashSetNode(const U& value)
             : m_value(value)
             , m_prev(0)
             , m_next(0)
@@ -684,7 +696,7 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    inline typename ListHashSet<T, inlineCapacity, U>::iterator ListHashSet<T, inlineCapacity, U>::find(const ValueType& value)
+    inline typename ListHashSet<T, inlineCapacity, U>::iterator ListHashSet<T, inlineCapacity, U>::find(ValuePeekInType value)
     {
         ImplTypeIterator it = m_impl.template find<BaseTranslator>(value);
         if (it == m_impl.end())
@@ -693,7 +705,7 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    inline typename ListHashSet<T, inlineCapacity, U>::const_iterator ListHashSet<T, inlineCapacity, U>::find(const ValueType& value) const
+    inline typename ListHashSet<T, inlineCapacity, U>::const_iterator ListHashSet<T, inlineCapacity, U>::find(ValuePeekInType value) const
     {
         ImplTypeConstIterator it = m_impl.template find<BaseTranslator>(value);
         if (it == m_impl.end())
@@ -735,13 +747,13 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    inline bool ListHashSet<T, inlineCapacity, U>::contains(const ValueType& value) const
+    inline bool ListHashSet<T, inlineCapacity, U>::contains(ValuePeekInType value) const
     {
         return m_impl.template contains<BaseTranslator>(value);
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::add(const ValueType &value)
+    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::add(ValuePeekInType value)
     {
         createAllocatorIfNeeded();
         typename ImplType::AddResult result = m_impl.template add<BaseTranslator>(value, m_allocator.get());
@@ -751,12 +763,12 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    typename ListHashSet<T, inlineCapacity, U>::iterator ListHashSet<T, inlineCapacity, U>::addReturnIterator(const ValueType &value)
+    typename ListHashSet<T, inlineCapacity, U>::iterator ListHashSet<T, inlineCapacity, U>::addReturnIterator(ValuePeekInType value)
     {
         return makeIterator(add(value).storedValue);
     }
     template<typename T, size_t inlineCapacity, typename U>
-    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::appendOrMoveToLast(const ValueType &value)
+    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::appendOrMoveToLast(ValuePeekInType value)
     {
         createAllocatorIfNeeded();
         typename ImplType::AddResult result = m_impl.template add<BaseTranslator>(value, m_allocator.get());
@@ -768,7 +780,7 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::prependOrMoveToFirst(const ValueType &value)
+    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::prependOrMoveToFirst(ValuePeekInType value)
     {
         createAllocatorIfNeeded();
         typename ImplType::AddResult result = m_impl.template add<BaseTranslator>(value, m_allocator.get());
@@ -780,7 +792,7 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::insertBefore(iterator it, const ValueType& newValue)
+    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::insertBefore(iterator it, ValuePeekInType newValue)
     {
         createAllocatorIfNeeded();
         typename ImplType::AddResult result = m_impl.template add<BaseTranslator>(newValue, m_allocator.get());
@@ -790,7 +802,7 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::insertBefore(const ValueType& beforeValue, const ValueType& newValue)
+    typename ListHashSet<T, inlineCapacity, U>::AddResult ListHashSet<T, inlineCapacity, U>::insertBefore(ValuePeekInType beforeValue, ValuePeekInType newValue)
     {
         createAllocatorIfNeeded();
         return insertBefore(find(beforeValue), newValue);
@@ -806,7 +818,7 @@ namespace WTF {
     }
 
     template<typename T, size_t inlineCapacity, typename U>
-    inline void ListHashSet<T, inlineCapacity, U>::remove(const ValueType& value)
+    inline void ListHashSet<T, inlineCapacity, U>::remove(ValuePeekInType value)
     {
         remove(find(value));
     }

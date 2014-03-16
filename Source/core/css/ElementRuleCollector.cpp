@@ -72,7 +72,7 @@ PassRefPtr<StyleRuleList> ElementRuleCollector::matchedStyleRuleList()
     return m_styleRuleList.release();
 }
 
-PassRefPtr<CSSRuleList> ElementRuleCollector::matchedCSSRuleList()
+PassRefPtrWillBeRawPtr<CSSRuleList> ElementRuleCollector::matchedCSSRuleList()
 {
     ASSERT(m_mode == SelectorChecker::CollectingCSSRules);
     return m_cssRuleList.release();
@@ -218,7 +218,11 @@ void ElementRuleCollector::appendCSSOMWrapperForRule(CSSStyleSheet* parentStyleS
     // |parentStyleSheet| is 0 if and only if the |rule| is coming from User Agent. In this case,
     // it is safe to create CSSOM wrappers without parentStyleSheets as they will be used only
     // by inspector which will not try to edit them.
-    RefPtr<CSSRule> cssRule = parentStyleSheet ? findStyleRule(parentStyleSheet, rule) : rule->createCSSOMWrapper();
+    RefPtrWillBeRawPtr<CSSRule> cssRule;
+    if (parentStyleSheet)
+        cssRule = findStyleRule(parentStyleSheet, rule);
+    else
+        cssRule = rule->createCSSOMWrapper();
     ASSERT(!parentStyleSheet || cssRule);
     ensureRuleList()->rules().append(cssRule);
 }
@@ -249,7 +253,7 @@ void ElementRuleCollector::sortAndTransferMatchedRules()
         const RuleData* ruleData = matchedRules[i].ruleData();
         if (m_style && ruleData->containsUncommonAttributeSelector())
             m_style->setUnique();
-        m_result.addMatchedProperties(ruleData->rule()->properties(), ruleData->rule(), ruleData->linkMatchType(), ruleData->propertyWhitelistType(m_matchingUARules));
+        m_result.addMatchedProperties(&ruleData->rule()->properties(), ruleData->rule(), ruleData->linkMatchType(), ruleData->propertyWhitelistType(m_matchingUARules));
     }
 }
 
@@ -303,8 +307,8 @@ void ElementRuleCollector::collectRuleIfMatches(const RuleData& ruleData, Select
     SelectorChecker::MatchResult result;
     if (ruleMatches(ruleData, matchRequest.scope, behaviorAtBoundary, &result)) {
         // If the rule has no properties to apply, then ignore it in the non-debug mode.
-        const StylePropertySet* properties = rule->properties();
-        if (!properties || (properties->isEmpty() && !matchRequest.includeEmptyRules))
+        const StylePropertySet& properties = rule->properties();
+        if (properties.isEmpty() && !matchRequest.includeEmptyRules)
             return;
         // FIXME: Exposing the non-standard getMatchedCSSRules API to web is the only reason this is needed.
         if (m_sameOriginOnly && !ruleData.hasDocumentSecurityOrigin())
@@ -330,24 +334,6 @@ void ElementRuleCollector::collectRuleIfMatches(const RuleData& ruleData, Select
             return;
         }
     }
-}
-
-void ElementRuleCollector::collectMatchingRulesForList(const RuleData* rules, SelectorChecker::BehaviorAtBoundary behaviorAtBoundary, CascadeScope cascadeScope, CascadeOrder cascadeOrder, const MatchRequest& matchRequest, RuleRange& ruleRange)
-{
-    if (!rules)
-        return;
-    while (!rules->isLastInArray())
-        collectRuleIfMatches(*rules++, behaviorAtBoundary, cascadeScope, cascadeOrder, matchRequest, ruleRange);
-    collectRuleIfMatches(*rules, behaviorAtBoundary, cascadeScope, cascadeOrder, matchRequest, ruleRange);
-}
-
-void ElementRuleCollector::collectMatchingRulesForList(const Vector<RuleData>* rules, SelectorChecker::BehaviorAtBoundary behaviorAtBoundary, CascadeScope cascadeScope, CascadeOrder cascadeOrder, const MatchRequest& matchRequest, RuleRange& ruleRange)
-{
-    if (!rules)
-        return;
-    unsigned size = rules->size();
-    for (unsigned i = 0; i < size; ++i)
-        collectRuleIfMatches(rules->at(i), behaviorAtBoundary, cascadeScope, cascadeOrder, matchRequest, ruleRange);
 }
 
 static inline bool compareRules(const MatchedRule& matchedRule1, const MatchedRule& matchedRule2)

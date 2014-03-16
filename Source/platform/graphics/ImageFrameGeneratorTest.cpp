@@ -115,7 +115,9 @@ protected:
     PassOwnPtr<ScaledImageFragment> decode(size_t index)
     {
         ImageDecoder* decoder = 0;
-        return m_generator->decode(index, &decoder);
+        OwnPtr<ScaledImageFragment> fragment = m_generator->decode(index, &decoder);
+        delete decoder;
+        return fragment.release();
     }
 
     RefPtr<SharedBuffer> m_data;
@@ -214,7 +216,7 @@ TEST_F(ImageFrameGeneratorTest, incompleteDecodeBecomesCompleteMultiThreaded)
     EXPECT_EQ(1, ImageDecodingStore::instance()->imageCacheEntries());
     EXPECT_EQ(1, ImageDecodingStore::instance()->decoderCacheEntries());
 
-    // Frame can now be decoded completely.
+    // LocalFrame can now be decoded completely.
     setFrameStatus(ImageFrame::FrameComplete);
     addNewData();
     OwnPtr<blink::WebThread> thread = adoptPtr(blink::Platform::current()->createThread("DecodeThread"));

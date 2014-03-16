@@ -27,7 +27,7 @@
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Navigator.h"
 #include "core/page/Page.h"
 #include "modules/mediastream/MediaDeviceInfoCallback.h"
@@ -60,8 +60,7 @@ void NavigatorMediaStream::webkitGetUserMedia(Navigator& navigator, const Dictio
 
     RefPtr<UserMediaRequest> request = UserMediaRequest::create(navigator.frame()->document(), userMedia, options, successCallback, errorCallback, exceptionState);
     if (!request) {
-        if (!exceptionState.hadException())
-            exceptionState.throwDOMException(NotSupportedError, "Failed to request user media.");
+        ASSERT(exceptionState.hadException());
         return;
     }
 

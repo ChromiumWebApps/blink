@@ -17,6 +17,7 @@
 
 ApplicationCache status=stable
 AuthorShadowDOMForAnyElement
+BatteryStatus status=test
 BeforeLoad status=test
 
 // Enable bleeding-edge code to make Blink draw content faster.
@@ -34,7 +35,7 @@ CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
 CSSShapes status=experimental
 CSSStickyPosition status=experimental
-CSSTouchAction status=experimental
+CSSTouchAction status=stable
 CSSTouchActionDelay status=test
 CSSViewport status=experimental
 CSSWillChange status=experimental
@@ -52,10 +53,10 @@ EncryptedMediaAnyVersion status=stable
 ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
 ExperimentalWebSocket status=test
+FileAPIBlobClose status=experimental
 FileConstructor status=experimental
 FileSystem status=stable
-FontLoadEvents status=experimental
-Fullscreen status=stable
+FontLoadEvents status=stable
 FastTextAutosizing
 Gamepad status=stable
 HTMLImports status=test
@@ -77,13 +78,8 @@ OrientationEvent
 // Only enabled on Android, and for certain layout tests on Linux.
 OverlayFullscreenVideo
 PagePopup status=stable
-PartialLayout status=experimental
 PathOpsSVGClipping
 PeerConnection depends_on=MediaStream, status=stable
-// Implementation of this feature varies by platform for now.
-// Bug to track removal once completed everywhere:
-//   http://crbug.com/308649
-PointerEventsMaxTouchPoints status=experimental
 Quota status=stable
 QuotaPromise status=experimental
 OverlayScrollbars
@@ -94,7 +90,7 @@ RegionBasedColumns status=experimental
 RepaintAfterLayout
 
 RequestAutocomplete status=test
-ScreenOrientation status=test
+ScreenOrientation status=experimental
 ScriptedSpeech status=stable
 
 // Implements documentElement.scrollTop/Left and bodyElement.scrollTop/Left
@@ -103,7 +99,7 @@ ScrollTopLeftInterop status=experimental
 
 ServiceWorker status=experimental
 SessionStorage status=stable
-ShadowDOM status=experimental
+ShadowDOM status=stable
 SharedWorker status=stable
 SpeechInput status=stable
 SpeechSynthesis status=stable
@@ -111,11 +107,11 @@ Srcset status=stable
 Stream status=experimental
 StyleScoped status=experimental
 SubpixelFontScaling status=experimental
-SVGPaintOrder status=experimental
+SVGPaintOrder status=stable
 
 // Enable optimizations to recalculate style on the fewest possible number of
 // elements when updating classes, ids or attributes of DOM elements.
-TargetedStyleRecalc
+TargetedStyleRecalc status=experimental
 
 // Many websites disable mouse support when touch APIs are available.  We'd
 // like to enable this always but can't until more websites fix this bug.
@@ -133,5 +129,5 @@ WebGLDraftExtensions status=experimental
 WebMIDI status=test
 WebKitMediaSource status=stable
 WebVTTRegions depends_on=VideoTrack, status=experimental
-WOFF2 status=experimental
+WOFF2 status=stable
 XSLT status=stable

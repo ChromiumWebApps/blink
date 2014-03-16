@@ -60,6 +60,14 @@ WebInspector.FormatterScriptMapping.prototype = {
     },
 
     /**
+     * @return {boolean}
+     */
+    isIdentity: function()
+    {
+        return false;
+    },
+
+    /**
      * @param {!WebInspector.UISourceCode} uiSourceCode
      * @return {!Array.<!WebInspector.Script>}
      */
@@ -118,7 +126,7 @@ WebInspector.FormatterScriptMapping.prototype = {
             if (!formatData)
                 callback(null);
             else
-                callback(formattedUISourceCode, formatData.mapping());
+                callback(formattedUISourceCode, formatData.mapping);
             return;
         }
 
@@ -289,7 +297,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
      */
     _updateButton: function(uiSourceCode)
     {
-        this._button.element.enableStyleClass("hidden", !this._isFormatableScript(uiSourceCode));
+        this._button.element.classList.toggle("hidden", !this._isFormatableScript(uiSourceCode));
     },
 
     /**
@@ -308,6 +316,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
         this._button = new WebInspector.StatusBarButton(WebInspector.UIString("Pretty print"), "sources-toggle-pretty-print-status-bar-item");
         this._button.toggled = false;
         this._button.addEventListener("click", this._toggleFormatScriptSource, this);
+        this._updateButton(null);
 
         return this._button.element;
     },

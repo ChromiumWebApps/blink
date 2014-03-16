@@ -43,8 +43,7 @@ namespace WebCore {
 
 class Key;
 
-class KeyPair : public RefCountedWillBeGarbageCollectedFinalized<KeyPair>,  public ScriptWrappable {
-    DECLARE_GC_INFO;
+class KeyPair : public RefCountedWillBeGarbageCollectedFinalized<KeyPair>, public ScriptWrappable {
 public:
     static PassRefPtrWillBeRawPtr<KeyPair> create(const blink::WebCryptoKey& publicKey, const blink::WebCryptoKey& privateKey);
 

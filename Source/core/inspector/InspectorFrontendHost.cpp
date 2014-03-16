@@ -34,7 +34,7 @@
 #include "bindings/v8/ScriptState.h"
 #include "core/clipboard/Pasteboard.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/InspectorController.h"
 #include "core/inspector/InspectorFrontendClient.h"
@@ -160,16 +160,33 @@ void InspectorFrontendHost::copyText(const String& text)
     Pasteboard::generalPasteboard()->writePlainText(text, Pasteboard::CannotSmartReplace);
 }
 
+static String escapeUnicodeNonCharacters(const String& str)
+{
+    StringBuilder dst;
+    for (unsigned i = 0; i < str.length(); ++i) {
+        UChar c = str[i];
+        if (c >= 0xD800) {
+            unsigned symbol = static_cast<unsigned>(c);
+            String symbolCode = String::format("\\u%04X", symbol);
+            dst.append(symbolCode);
+        } else {
+            dst.append(c);
+        }
+
+    }
+    return dst.toString();
+}
+
 void InspectorFrontendHost::sendMessageToBackend(const String& message)
 {
     if (m_client)
-        m_client->sendMessageToBackend(message);
+        m_client->sendMessageToBackend(escapeUnicodeNonCharacters(message));
 }
 
 void InspectorFrontendHost::sendMessageToEmbedder(const String& message)
 {
     if (m_client)
-        m_client->sendMessageToEmbedder(message);
+        m_client->sendMessageToEmbedder(escapeUnicodeNonCharacters(message));
 }
 
 void InspectorFrontendHost::showContextMenu(Event* event, const Vector<ContextMenuItem>& items)

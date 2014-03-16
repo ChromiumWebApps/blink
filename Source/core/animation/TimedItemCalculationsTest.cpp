@@ -184,18 +184,18 @@ TEST(AnimationTimedItemCalculationsTest, TransformedTime)
     EXPECT_EQ(12, calculateTransformedTime(1, 20, 12, timing));
 
     // PlaybackDirectionForwards with timing function
-    timing.timingFunction = StepsTimingFunction::create(4, false /* stepAtStart */);
+    timing.timingFunction = StepsTimingFunction::create(4, StepsTimingFunction::StepAtEnd);
     EXPECT_EQ(10, calculateTransformedTime(0, 20, 12, timing));
     EXPECT_EQ(10, calculateTransformedTime(1, 20, 12, timing));
 
     // PlaybackDirectionReverse
-    timing.timingFunction = nullptr;
+    timing.timingFunction = Timing::defaults().timingFunction;
     timing.direction = Timing::PlaybackDirectionReverse;
     EXPECT_EQ(8, calculateTransformedTime(0, 20, 12, timing));
     EXPECT_EQ(8, calculateTransformedTime(1, 20, 12, timing));
 
     // PlaybackDirectionReverse with timing function
-    timing.timingFunction = StepsTimingFunction::create(4, false /* stepAtStart */);
+    timing.timingFunction = StepsTimingFunction::create(4, StepsTimingFunction::StepAtEnd);
     EXPECT_EQ(5, calculateTransformedTime(0, 20, 12, timing));
     EXPECT_EQ(5, calculateTransformedTime(1, 20, 12, timing));
 

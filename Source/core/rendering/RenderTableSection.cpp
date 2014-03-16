@@ -289,7 +289,7 @@ void RenderTableSection::populateSpanningRowsHeightFromCell(RenderTableCell* cel
 
         spanningRowsHeight.rowHeight[row] = m_rowPos[actualRow + 1] - m_rowPos[actualRow] - borderSpacingForRow(actualRow);
         if (!spanningRowsHeight.rowHeight[row])
-            spanningRowsHeight.rowWithOnlySpanningCells |= rowHasOnlySpanningCells(actualRow);
+            spanningRowsHeight.isAnyRowWithOnlySpanningCells |= rowHasOnlySpanningCells(actualRow);
 
         spanningRowsHeight.totalRowsHeight += spanningRowsHeight.rowHeight[row];
         spanningRowsHeight.spanningCellHeightIgnoringBorderSpacing -= borderSpacingForRow(actualRow);
@@ -542,14 +542,31 @@ void RenderTableSection::distributeRowSpanHeightToRows(SpanningRenderTableCells&
 
         populateSpanningRowsHeightFromCell(cell, spanningRowsHeight);
 
-        if (spanningRowsHeight.rowWithOnlySpanningCells)
+        // Here we are handling only row(s) who have only rowspanning cells and do not have any empty cell.
+        if (spanningRowsHeight.isAnyRowWithOnlySpanningCells)
             updateRowsHeightHavingOnlySpanningCells(cell, spanningRowsHeight);
 
-        if (!spanningRowsHeight.totalRowsHeight || spanningRowsHeight.spanningCellHeightIgnoringBorderSpacing <= spanningRowsHeight.totalRowsHeight) {
+        // This code handle row(s) that have rowspanning cell(s) and at least one empty cell.
+        // Such rows are not handled below and end up having a height of 0. That would mean
+        // content overlapping if one of their cells has any content. To avoid the problem, we
+        // add all the remaining spanning cells' height to the last spanned row.
+        // This means that we could grow a row past its 'height' or break percentage spreading
+        // however this is better than overlapping content.
+        // FIXME: Is there a better algorithm?
+        if (!spanningRowsHeight.totalRowsHeight) {
+            if (spanningRowsHeight.spanningCellHeightIgnoringBorderSpacing)
+                m_rowPos[spanningCellEndIndex] += spanningRowsHeight.spanningCellHeightIgnoringBorderSpacing + borderSpacingForRow(spanningCellEndIndex - 1);
+
+            extraHeightToPropagate = m_rowPos[spanningCellEndIndex] - originalBeforePosition;
+            continue;
+        }
+
+        if (spanningRowsHeight.spanningCellHeightIgnoringBorderSpacing <= spanningRowsHeight.totalRowsHeight) {
             extraHeightToPropagate = m_rowPos[rowIndex + rowSpan] - originalBeforePosition;
             continue;
         }
 
+        // Below we are handling only row(s) who have at least one visible cell without rowspan value.
         int totalPercent = 0;
         int totalAutoRowsHeight = 0;
         int totalRemainingRowsHeight = spanningRowsHeight.totalRowsHeight;
@@ -619,7 +636,7 @@ int RenderTableSection::calcRowLogicalHeight()
 
     RenderTableCell* cell;
 
-    LayoutStateMaintainer statePusher(this);
+    LayoutStateMaintainer statePusher(*this);
 
     m_rowPos.resize(m_grid.size() + 1);
 
@@ -675,7 +692,7 @@ int RenderTableSection::calcRowLogicalHeight()
                     if (!statePusher.didPush()) {
                         // Technically, we should also push state for the row, but since
                         // rows don't push a coordinate transform, that's not necessary.
-                        statePusher.push(this, locationOffset());
+                        statePusher.push(*this, locationOffset());
                     }
                     cell->clearIntrinsicPadding();
                     cell->clearOverrideSize();
@@ -716,7 +733,7 @@ void RenderTableSection::layout()
     // can be called in a loop (e.g during parsing). Doing it now ensures we have a stable-enough structure.
     m_grid.shrinkToFit();
 
-    LayoutStateMaintainer statePusher(this, locationOffset());
+    LayoutStateMaintainer statePusher(*this, locationOffset());
 
     const Vector<int>& columnPos = table()->columnPositions();
 
@@ -745,8 +762,11 @@ void RenderTableSection::layout()
             cell->setCellLogicalWidth(tableLayoutLogicalWidth, layouter);
         }
 
-        if (RenderTableRow* rowRenderer = m_grid[r].rowRenderer)
+        if (RenderTableRow* rowRenderer = m_grid[r].rowRenderer) {
+            if (!rowRenderer->needsLayout())
+                rowRenderer->markForPaginationRelayoutIfNeeded(layouter);
             rowRenderer->layoutIfNeeded();
+        }
     }
 
     statePusher.pop();
@@ -871,7 +891,7 @@ void RenderTableSection::layoutRows()
     int vspacing = table()->vBorderSpacing();
     unsigned nEffCols = table()->numEffCols();
 
-    LayoutStateMaintainer statePusher(this, locationOffset());
+    LayoutStateMaintainer statePusher(*this, locationOffset());
 
     for (unsigned r = 0; r < totalRows; r++) {
         // Set the row's x/y position and width/height.
@@ -956,8 +976,8 @@ void RenderTableSection::layoutRows()
 
             setLogicalPositionForCell(cell, c);
 
-            if (!cell->needsLayout() && view()->layoutState()->pageLogicalHeight() && view()->layoutState()->pageLogicalOffset(cell, cell->logicalTop()) != cell->pageLogicalOffset())
-                layouter.setChildNeedsLayout(cell);
+            if (!cell->needsLayout())
+                cell->markForPaginationRelayoutIfNeeded(layouter);
 
             cell->layoutIfNeeded();
 
@@ -1183,7 +1203,7 @@ void RenderTableSection::paint(PaintInfo& paintInfo, const LayoutPoint& paintOff
 {
     ANNOTATE_GRAPHICS_CONTEXT(paintInfo, this);
 
-    ASSERT_WITH_SECURITY_IMPLICATION(!needsLayout());
+    ASSERT(!needsLayout());
     // avoid crashing on bugs that cause us to paint with dirty layout
     if (needsLayout())
         return;

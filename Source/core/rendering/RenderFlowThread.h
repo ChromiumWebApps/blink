@@ -123,7 +123,7 @@ public:
     void collectLayerFragments(LayerFragments&, const LayoutRect& layerBoundingBox, const LayoutRect& dirtyRect);
     LayoutRect fragmentsBoundingBox(const LayoutRect& layerBoundingBox);
 
-    void pushFlowThreadLayoutState(const RenderObject*);
+    void pushFlowThreadLayoutState(const RenderObject&);
     void popFlowThreadLayoutState();
     LayoutUnit offsetFromLogicalTopOfFirstRegion(const RenderBlock*) const;
 
@@ -220,10 +220,6 @@ protected:
     bool m_regionsInvalidated : 1;
     bool m_regionsHaveUniformLogicalHeight : 1;
     bool m_pageLogicalSizeChanged : 1;
-
-private:
-    virtual bool supportsPartialLayout() const OVERRIDE FINAL { return false; }
-
 };
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderFlowThread, isRenderFlowThread());

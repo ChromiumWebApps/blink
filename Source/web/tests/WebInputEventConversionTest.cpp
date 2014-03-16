@@ -44,8 +44,8 @@
 #include "core/dom/Touch.h"
 #include "core/events/TouchEvent.h"
 #include "core/dom/TouchList.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 
 using namespace blink;
 using namespace WebCore;
@@ -222,12 +222,19 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
         webTouchEvent.type = WebInputEvent::TouchMove;
         webTouchEvent.touchesLength = 1;
         webTouchEvent.touches[0].state = WebTouchPoint::StateMoved;
-        webTouchEvent.touches[0].screenPosition.x = 10;
-        webTouchEvent.touches[0].screenPosition.y = 10;
-        webTouchEvent.touches[0].position.x = 10;
-        webTouchEvent.touches[0].position.y = 10;
-        webTouchEvent.touches[0].radiusX = 10;
-        webTouchEvent.touches[0].radiusY = 10;
+        webTouchEvent.touches[0].screenPosition.x = 10.6f;
+        webTouchEvent.touches[0].screenPosition.y = 10.4f;
+        webTouchEvent.touches[0].position.x = 10.6f;
+        webTouchEvent.touches[0].position.y = 10.4f;
+        webTouchEvent.touches[0].radiusX = 10.6f;
+        webTouchEvent.touches[0].radiusY = 10.4f;
+
+        EXPECT_FLOAT_EQ(10.6f, webTouchEvent.touches[0].screenPosition.x);
+        EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].screenPosition.y);
+        EXPECT_FLOAT_EQ(10.6f, webTouchEvent.touches[0].position.x);
+        EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].position.y);
+        EXPECT_FLOAT_EQ(10.6f, webTouchEvent.touches[0].radiusX);
+        EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].radiusY);
 
         PlatformTouchEventBuilder platformTouchBuilder(view, webTouchEvent);
         EXPECT_EQ(10, platformTouchBuilder.touchPoints()[0].screenPos().x());
@@ -274,8 +281,8 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     }
 
     {
-        RefPtr<Touch> touch = Touch::create(webViewImpl->page()->mainFrame(), document.get(), 0, 10, 10, 10, 10, 10, 10, 0, 0);
-        RefPtr<TouchList> touchList = TouchList::create();
+        RefPtrWillBeRawPtr<Touch> touch = Touch::create(webViewImpl->page()->mainFrame(), document.get(), 0, 10, 10, 10, 10, 10, 10, 0, 0);
+        RefPtrWillBeRawPtr<TouchList> touchList = TouchList::create();
         touchList->append(touch);
         RefPtr<TouchEvent> touchEvent = TouchEvent::create(touchList.get(), touchList.get(), touchList.get(), WebCore::EventTypeNames::touchmove, domWindow, 10, 10, 10, 10, false, false, false, false);
 

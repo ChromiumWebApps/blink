@@ -29,10 +29,11 @@
 
 #include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/NodeTraversal.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/dom/RawDataDocumentParser.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/ThreadLocalEventNames.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLHtmlElement.h"
@@ -41,7 +42,6 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "core/frame/Frame.h"
 #include "platform/KeyboardCodes.h"
 
 namespace WebCore {
@@ -129,18 +129,6 @@ PassRefPtr<DocumentParser> MediaDocument::createParser()
     return MediaDocumentParser::create(this);
 }
 
-static inline HTMLVideoElement* descendentVideoElement(Node* root)
-{
-    ASSERT(root);
-
-    for (Node* node = root; node; node = NodeTraversal::next(*node, root)) {
-        if (node->hasTagName(videoTag))
-            return toHTMLVideoElement(node);
-    }
-
-    return 0;
-}
-
 void MediaDocument::defaultEventHandler(Event* event)
 {
     Node* targetNode = event->target()->toNode();
@@ -148,7 +136,7 @@ void MediaDocument::defaultEventHandler(Event* event)
         return;
 
     if (event->type() == EventTypeNames::keydown && event->isKeyboardEvent()) {
-        HTMLVideoElement* video = descendentVideoElement(targetNode);
+        HTMLVideoElement* video = Traversal<HTMLVideoElement>::firstWithin(*targetNode);
         if (!video)
             return;
 

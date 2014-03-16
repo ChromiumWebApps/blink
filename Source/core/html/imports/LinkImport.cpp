@@ -58,7 +58,7 @@ LinkImport::~LinkImport()
 
 Document* LinkImport::importedDocument() const
 {
-    if (!m_child)
+    if (!m_child || !m_owner || !m_owner->inDocument())
         return 0;
     return m_child->importedDocument();
 }
@@ -101,14 +101,9 @@ void LinkImport::clear()
     }
 }
 
-void LinkImport::ownerRemoved()
-{
-    clear();
-}
-
 void LinkImport::didFinish()
 {
-    if (!m_owner)
+    if (!m_owner || !m_owner->inDocument())
         return;
     // Because didFinish() is called from import's own scheduler in HTMLImportsController,
     // we don't need to scheduleEvent() here.
@@ -122,9 +117,9 @@ void LinkImport::importChildWasDestroyed(HTMLImportChild* child)
     clear();
 }
 
-bool LinkImport::isCreatedByParser() const
+bool LinkImport::isSync() const
 {
-    return m_owner && m_owner->isCreatedByParser();
+    return m_owner && m_owner->isCreatedByParser() && !m_owner->async();
 }
 
 HTMLLinkElement* LinkImport::link()

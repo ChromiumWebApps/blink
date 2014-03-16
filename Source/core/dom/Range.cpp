@@ -120,15 +120,15 @@ void Range::setDocument(Document& document)
     ASSERT(m_ownerDocument);
     m_ownerDocument->detachRange(this);
     m_ownerDocument = &document;
-    m_start.setToStartOfNode(&document);
-    m_end.setToStartOfNode(&document);
+    m_start.setToStartOfNode(document);
+    m_end.setToStartOfNode(document);
     m_ownerDocument->attachRange(this);
 }
 
 Node* Range::startContainer(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -138,7 +138,7 @@ Node* Range::startContainer(ExceptionState& exceptionState) const
 int Range::startOffset(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -148,7 +148,7 @@ int Range::startOffset(ExceptionState& exceptionState) const
 Node* Range::endContainer(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -158,7 +158,7 @@ Node* Range::endContainer(ExceptionState& exceptionState) const
 int Range::endOffset(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -168,7 +168,7 @@ int Range::endOffset(ExceptionState& exceptionState) const
 Node* Range::commonAncestorContainer(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -189,7 +189,7 @@ Node* Range::commonAncestorContainer(Node* containerA, Node* containerB)
 bool Range::collapsed(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -211,7 +211,7 @@ static inline bool checkForDifferentRootContainer(const RangeBoundaryPoint& star
 void Range::setStart(PassRefPtr<Node> refNode, int offset, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -239,7 +239,7 @@ void Range::setStart(PassRefPtr<Node> refNode, int offset, ExceptionState& excep
 void Range::setEnd(PassRefPtr<Node> refNode, int offset, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -279,7 +279,7 @@ void Range::setEnd(const Position& end, ExceptionState& exceptionState)
 void Range::collapse(bool toStart, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -292,7 +292,7 @@ void Range::collapse(bool toStart, ExceptionState& exceptionState)
 bool Range::isPointInRange(Node* refNode, int offset, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return false;
     }
 
@@ -320,7 +320,7 @@ short Range::comparePoint(Node* refNode, int offset, ExceptionState& exceptionSt
     // refNode node and an offset within the node is before, same as, or after the range respectively.
 
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -408,7 +408,7 @@ Range::CompareResults Range::compareNode(Node* refNode, ExceptionState& exceptio
 short Range::compareBoundaryPoints(CompareHow how, const Range* sourceRange, ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return 0;
     }
 
@@ -575,7 +575,7 @@ bool Range::intersectsNode(Node* refNode, ExceptionState& exceptionState)
 
     // Throw exception if the range is already detached.
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return false;
     }
     if (!refNode) {
@@ -658,7 +658,7 @@ static inline unsigned lengthOfContentsInNode(Node* node)
     case Node::ATTRIBUTE_NODE:
     case Node::DOCUMENT_NODE:
     case Node::DOCUMENT_FRAGMENT_NODE:
-        return toContainerNode(node)->childNodeCount();
+        return toContainerNode(node)->countChildren();
     case Node::DOCUMENT_TYPE_NODE:
         return 0;
     }
@@ -901,7 +901,10 @@ PassRefPtr<Node> Range::processAncestorsAndTheirSiblings(ActionType action, Node
             Node* child = it->get();
             switch (action) {
             case DELETE_CONTENTS:
-                ancestor->removeChild(child, exceptionState);
+                // Prior call of ancestor->removeChild() may cause a tree change due to DOMSubtreeModified event.
+                // Therefore, we need to make sure |ancestor| is still |child|'s parent.
+                if (ancestor == child->parentNode())
+                    ancestor->removeChild(child, exceptionState);
                 break;
             case EXTRACT_CONTENTS: // will remove child from ancestor
                 if (direction == ProcessContentsForward)
@@ -935,7 +938,7 @@ PassRefPtr<DocumentFragment> Range::extractContents(ExceptionState& exceptionSta
 PassRefPtr<DocumentFragment> Range::cloneContents(ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return nullptr;
     }
 
@@ -947,7 +950,7 @@ void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionSta
     RefPtr<Node> newNode = prpNewNode;
 
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -1043,7 +1046,7 @@ void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionSta
         }
 
         container = m_start.container();
-        container->insertBefore(newNode.release(), container->childNode(m_start.offset()), exceptionState);
+        container->insertBefore(newNode.release(), container->traverseToChildAt(m_start.offset()), exceptionState);
         if (exceptionState.hadException())
             return;
 
@@ -1057,7 +1060,7 @@ void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionSta
 String Range::toString(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return String();
     }
 
@@ -1097,7 +1100,7 @@ String Range::text() const
 PassRefPtr<DocumentFragment> Range::createContextualFragment(const String& markup, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return nullptr;
     }
 
@@ -1119,7 +1122,7 @@ void Range::detach(ExceptionState& exceptionState)
 {
     // Check first to see if we've already detached:
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -1151,7 +1154,7 @@ Node* Range::checkNodeWOffset(Node* n, int offset, ExceptionState& exceptionStat
         case Node::ELEMENT_NODE: {
             if (!offset)
                 return 0;
-            Node* childBefore = n->childNode(offset - 1);
+            Node* childBefore = n->traverseToChildAt(offset - 1);
             if (!childBefore)
                 exceptionState.throwDOMException(IndexSizeError, "There is no child at offset " + String::number(offset) + ".");
             return childBefore;
@@ -1164,7 +1167,7 @@ Node* Range::checkNodeWOffset(Node* n, int offset, ExceptionState& exceptionStat
 void Range::checkNodeBA(Node* n, ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -1220,7 +1223,7 @@ void Range::checkNodeBA(Node* n, ExceptionState& exceptionState) const
 PassRefPtr<Range> Range::cloneRange(ExceptionState& exceptionState) const
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return nullptr;
     }
 
@@ -1257,7 +1260,7 @@ void Range::setEndAfter(Node* refNode, ExceptionState& exceptionState)
 void Range::selectNode(Node* refNode, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -1316,7 +1319,7 @@ void Range::selectNode(Node* refNode, ExceptionState& exceptionState)
 void Range::selectNodeContents(Node* refNode, ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -1347,8 +1350,8 @@ void Range::selectNodeContents(Node* refNode, ExceptionState& exceptionState)
     if (m_ownerDocument != refNode->document())
         setDocument(refNode->document());
 
-    m_start.setToStartOfNode(refNode);
-    m_end.setToEndOfNode(refNode);
+    m_start.setToStartOfNode(*refNode);
+    m_end.setToEndOfNode(*refNode);
 }
 
 void Range::surroundContents(PassRefPtr<Node> passNewParent, ExceptionState& exceptionState)
@@ -1356,7 +1359,7 @@ void Range::surroundContents(PassRefPtr<Node> passNewParent, ExceptionState& exc
     RefPtr<Node> newParent = passNewParent;
 
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
 
@@ -1450,9 +1453,11 @@ void Range::setStartBefore(Node* refNode, ExceptionState& exceptionState)
 void Range::checkDeleteExtract(ExceptionState& exceptionState)
 {
     if (!m_start.container()) {
-        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detatch()' has been invoked on this object?");
+        exceptionState.throwDOMException(InvalidStateError, "The range has no container. Perhaps 'detach()' has been invoked on this object?");
         return;
     }
+
+    ASSERT(boundaryPointsValid());
 
     if (!commonAncestorContainer(exceptionState) || exceptionState.hadException())
         return;
@@ -1472,7 +1477,7 @@ Node* Range::firstNode() const
         return 0;
     if (m_start.container()->offsetInCharacters())
         return m_start.container();
-    if (Node* child = m_start.container()->childNode(m_start.offset()))
+    if (Node* child = m_start.container()->traverseToChildAt(m_start.offset()))
         return child;
     if (!m_start.offset())
         return m_start.container();
@@ -1490,7 +1495,7 @@ Node* Range::pastLastNode() const
         return 0;
     if (m_end.container()->offsetInCharacters())
         return NodeTraversal::nextSkippingChildren(*m_end.container());
-    if (Node* child = m_end.container()->childNode(m_end.offset()))
+    if (Node* child = m_end.container()->traverseToChildAt(m_end.offset()))
         return child;
     return NodeTraversal::nextSkippingChildren(*m_end.container());
 }
@@ -1619,7 +1624,7 @@ int Range::maxStartOffset() const
     if (!m_start.container())
         return 0;
     if (!m_start.container()->offsetInCharacters())
-        return m_start.container()->childNodeCount();
+        return m_start.container()->countChildren();
     return m_start.container()->maxCharacterOffset();
 }
 
@@ -1628,7 +1633,7 @@ int Range::maxEndOffset() const
     if (!m_end.container())
         return 0;
     if (!m_end.container()->offsetInCharacters())
-        return m_end.container()->childNodeCount();
+        return m_end.container()->countChildren();
     return m_end.container()->maxCharacterOffset();
 }
 
@@ -1649,9 +1654,9 @@ void Range::nodeChildrenChanged(ContainerNode* container)
     boundaryNodeChildrenChanged(m_end, container);
 }
 
-static inline void boundaryNodeChildrenWillBeRemoved(RangeBoundaryPoint& boundary, ContainerNode* container)
+static inline void boundaryNodeChildrenWillBeRemoved(RangeBoundaryPoint& boundary, ContainerNode& container)
 {
-    for (Node* nodeToBeRemoved = container->firstChild(); nodeToBeRemoved; nodeToBeRemoved = nodeToBeRemoved->nextSibling()) {
+    for (Node* nodeToBeRemoved = container.firstChild(); nodeToBeRemoved; nodeToBeRemoved = nodeToBeRemoved->nextSibling()) {
         if (boundary.childBefore() == nodeToBeRemoved) {
             boundary.setToStartOfNode(container);
             return;
@@ -1666,10 +1671,9 @@ static inline void boundaryNodeChildrenWillBeRemoved(RangeBoundaryPoint& boundar
     }
 }
 
-void Range::nodeChildrenWillBeRemoved(ContainerNode* container)
+void Range::nodeChildrenWillBeRemoved(ContainerNode& container)
 {
-    ASSERT(container);
-    ASSERT(container->document() == m_ownerDocument);
+    ASSERT(container.document() == m_ownerDocument);
     boundaryNodeChildrenWillBeRemoved(m_start, container);
     boundaryNodeChildrenWillBeRemoved(m_end, container);
 }
@@ -1741,46 +1745,45 @@ void Range::didRemoveText(Node* text, unsigned offset, unsigned length)
     boundaryTextRemoved(m_end, text, offset, length);
 }
 
-static inline void boundaryTextNodesMerged(RangeBoundaryPoint& boundary, NodeWithIndex& oldNode, unsigned offset)
+static inline void boundaryTextNodesMerged(RangeBoundaryPoint& boundary, const NodeWithIndex& oldNode, unsigned offset)
 {
     if (boundary.container() == oldNode.node())
-        boundary.set(oldNode.node()->previousSibling(), boundary.offset() + offset, 0);
-    else if (boundary.container() == oldNode.node()->parentNode() && boundary.offset() == oldNode.index())
-        boundary.set(oldNode.node()->previousSibling(), offset, 0);
+        boundary.set(oldNode.node().previousSibling(), boundary.offset() + offset, 0);
+    else if (boundary.container() == oldNode.node().parentNode() && boundary.offset() == oldNode.index())
+        boundary.set(oldNode.node().previousSibling(), offset, 0);
 }
 
-void Range::didMergeTextNodes(NodeWithIndex& oldNode, unsigned offset)
+void Range::didMergeTextNodes(const NodeWithIndex& oldNode, unsigned offset)
 {
-    ASSERT(oldNode.node());
-    ASSERT(oldNode.node()->document() == m_ownerDocument);
-    ASSERT(oldNode.node()->parentNode());
-    ASSERT(oldNode.node()->isTextNode());
-    ASSERT(oldNode.node()->previousSibling());
-    ASSERT(oldNode.node()->previousSibling()->isTextNode());
+    ASSERT(oldNode.node().document() == m_ownerDocument);
+    ASSERT(oldNode.node().parentNode());
+    ASSERT(oldNode.node().isTextNode());
+    ASSERT(oldNode.node().previousSibling());
+    ASSERT(oldNode.node().previousSibling()->isTextNode());
     boundaryTextNodesMerged(m_start, oldNode, offset);
     boundaryTextNodesMerged(m_end, oldNode, offset);
 }
 
-static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary, Text* oldNode)
+static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary, Text& oldNode)
 {
-    if (boundary.container() != oldNode)
-        return;
+    Node* boundaryContainer = boundary.container();
     unsigned boundaryOffset = boundary.offset();
-    if (boundaryOffset <= oldNode->length())
-        return;
-    boundary.set(oldNode->nextSibling(), boundaryOffset - oldNode->length(), 0);
+    if (boundary.childBefore() == &oldNode)
+        boundary.set(boundaryContainer, boundaryOffset + 1, oldNode.nextSibling());
+    else if (boundary.container() == &oldNode && boundaryOffset > oldNode.length())
+        boundary.set(oldNode.nextSibling(), boundaryOffset - oldNode.length(), 0);
 }
 
-void Range::didSplitTextNode(Text* oldNode)
+void Range::didSplitTextNode(Text& oldNode)
 {
-    ASSERT(oldNode);
-    ASSERT(oldNode->document() == m_ownerDocument);
-    ASSERT(oldNode->parentNode());
-    ASSERT(oldNode->isTextNode());
-    ASSERT(oldNode->nextSibling());
-    ASSERT(oldNode->nextSibling()->isTextNode());
+    ASSERT(oldNode.document() == m_ownerDocument);
+    ASSERT(oldNode.parentNode());
+    ASSERT(oldNode.isTextNode());
+    ASSERT(oldNode.nextSibling());
+    ASSERT(oldNode.nextSibling()->isTextNode());
     boundaryTextNodeSplit(m_start, oldNode);
     boundaryTextNodeSplit(m_end, oldNode);
+    ASSERT(boundaryPointsValid());
 }
 
 void Range::expand(const String& unit, ExceptionState& exceptionState)

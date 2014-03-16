@@ -309,15 +309,15 @@ void WebPageSerializerImpl::openTagToString(Element* element,
         for (unsigned i = 0; i < numAttrs; i++) {
             result.append(' ');
             // Add attribute pair
-            const Attribute *attribute = element->attributeItem(i);
-            result.append(attribute->name().toString());
+            const Attribute& attribute = element->attributeItem(i);
+            result.append(attribute.name().toString());
             result.appendLiteral("=\"");
-            if (!attribute->value().isEmpty()) {
-                const String& attrValue = attribute->value();
+            if (!attribute.value().isEmpty()) {
+                const String& attrValue = attribute.value();
 
                 // Check whether we need to replace some resource links
                 // with local resource paths.
-                const QualifiedName& attrName = attribute->name();
+                const QualifiedName& attrName = attribute.name();
                 if (elementHasLegalLinkAttribute(element, attrName)) {
                     // For links start with "javascript:", we do not change it.
                     if (attrValue.startsWith("javascript:", false))
@@ -352,7 +352,7 @@ void WebPageSerializerImpl::openTagToString(Element* element,
     // Do post action for open tag.
     String addedContents = postActionAfterSerializeOpenTag(element, param);
     // Complete the open tag for element when it has child/children.
-    if (element->hasChildNodes() || param->haveAddedContentsBeforeEnd)
+    if (element->hasChildren() || param->haveAddedContentsBeforeEnd)
         result.append('>');
     // Append the added contents generate in  post action of open tag.
     result.append(addedContents);
@@ -371,7 +371,7 @@ void WebPageSerializerImpl::endTagToString(Element* element,
     if (needSkip)
         return;
     // Write end tag when element has child/children.
-    if (element->hasChildNodes() || param->haveAddedContentsBeforeEnd) {
+    if (element->hasChildren() || param->haveAddedContentsBeforeEnd) {
         result.appendLiteral("</");
         result.append(element->nodeName().lower());
         result.append('>');

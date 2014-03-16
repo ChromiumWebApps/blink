@@ -256,7 +256,7 @@ RootInlineBox* RenderBlockFlow::constructLine(BidiRunList<BidiRun>& bidiRuns, co
         if (!box)
             continue;
 
-        if (!rootHasSelectedChildren && box->renderer()->selectionState() != RenderObject::SelectionNone)
+        if (!rootHasSelectedChildren && box->renderer().selectionState() != RenderObject::SelectionNone)
             rootHasSelectedChildren = true;
 
         // If we have no parent box yet, or if the run is not simply a sibling,
@@ -293,7 +293,7 @@ RootInlineBox* RenderBlockFlow::constructLine(BidiRunList<BidiRun>& bidiRuns, co
     // Set the m_selectedChildren flag on the root inline box if one of the leaf inline box
     // from the bidi runs walk above has a selection state.
     if (rootHasSelectedChildren)
-        lastLineBox()->root()->setHasSelectedChildren(true);
+        lastLineBox()->root().setHasSelectedChildren(true);
 
     // Set bits on our inline flow boxes that indicate which sides should
     // paint borders/margins/padding.  This knowledge will ultimately be used when
@@ -536,7 +536,7 @@ static inline void computeExpansionForJustifiedText(BidiRun* firstRun, BidiRun* 
 void RenderBlockFlow::updateLogicalWidthForAlignment(const ETextAlign& textAlign, const RootInlineBox* rootInlineBox, BidiRun* trailingSpaceRun, float& logicalLeft, float& totalLogicalWidth, float& availableLogicalWidth, int expansionOpportunityCount)
 {
     TextDirection direction;
-    if (rootInlineBox && rootInlineBox->renderer()->style()->unicodeBidi() == Plaintext)
+    if (rootInlineBox && rootInlineBox->renderer().style()->unicodeBidi() == Plaintext)
         direction = rootInlineBox->direction();
     else
         direction = style()->direction();
@@ -586,10 +586,10 @@ void RenderBlockFlow::updateLogicalWidthForAlignment(const ETextAlign& textAlign
 static void updateLogicalInlinePositions(RenderBlockFlow* block, float& lineLogicalLeft, float& lineLogicalRight, float& availableLogicalWidth, bool firstLine, IndentTextOrNot shouldIndentText, LayoutUnit boxLogicalHeight)
 {
     LayoutUnit lineLogicalHeight = block->minLineHeightForReplacedRenderer(firstLine, boxLogicalHeight);
-    lineLogicalLeft = block->logicalLeftOffsetForLine(block->logicalHeight(), shouldIndentText == IndentText, lineLogicalHeight);
+    lineLogicalLeft = block->logicalLeftOffsetForLine(block->logicalHeight(), shouldIndentText == IndentText, lineLogicalHeight).toFloat();
     // FIXME: This shouldn't be pixel snapped once multicolumn layout has been updated to correctly carry over subpixel values.
     // https://bugs.webkit.org/show_bug.cgi?id=105461
-    lineLogicalRight = block->pixelSnappedLogicalRightOffsetForLine(block->logicalHeight(), shouldIndentText == IndentText, lineLogicalHeight);
+    lineLogicalRight = block->pixelSnappedLogicalRightOffsetForLine(block->logicalHeight(), shouldIndentText == IndentText, lineLogicalHeight).toFloat();
     availableLogicalWidth = lineLogicalRight - lineLogicalLeft;
 }
 
@@ -657,7 +657,7 @@ BidiRun* RenderBlockFlow::computeInlineDirectionPositionsForSegment(RootInlineBo
     WordMeasurements& wordMeasurements)
 {
     bool needsWordSpacing = false;
-    float totalLogicalWidth = lineBox->getFlowSpacingLogicalWidth();
+    float totalLogicalWidth = lineBox->getFlowSpacingLogicalWidth().toFloat();
     unsigned expansionOpportunityCount = 0;
     bool isAfterExpansion = true;
     Vector<unsigned, 16> expansionOpportunities;
@@ -701,7 +701,7 @@ BidiRun* RenderBlockFlow::computeInlineDirectionPositionsForSegment(RootInlineBo
                 RenderBox* renderBox = toRenderBox(r->m_object);
                 if (renderBox->isRubyRun())
                     setMarginsForRubyRun(r, toRenderRubyRun(renderBox), previousObject, lineInfo);
-                r->m_box->setLogicalWidth(logicalWidthForChild(renderBox));
+                r->m_box->setLogicalWidth(logicalWidthForChild(renderBox).toFloat());
                 totalLogicalWidth += marginStartForChild(renderBox) + marginEndForChild(renderBox);
             }
         }
@@ -736,7 +736,7 @@ void RenderBlockFlow::computeBlockDirectionPositionsForLine(RootInlineBox* lineB
         // Align positioned boxes with the top of the line box.  This is
         // a reasonable approximation of an appropriate y position.
         if (r->m_object->isOutOfFlowPositioned())
-            r->m_box->setLogicalTop(logicalHeight());
+            r->m_box->setLogicalTop(logicalHeight().toFloat());
 
         // Position is used to properly position both replaced elements and
         // to update the static normal flow x/y of positioned elements.
@@ -977,9 +977,9 @@ void RenderBlockFlow::layoutRunsAndFloats(LineLayoutState& layoutState)
         // adjust the height accordingly.
         // A line break can be either the first or the last object on a line, depending on its direction.
         if (InlineBox* lastLeafChild = lastRootBox()->lastLeafChild()) {
-            RenderObject* lastObject = lastLeafChild->renderer();
+            RenderObject* lastObject = &lastLeafChild->renderer();
             if (!lastObject->isBR())
-                lastObject = lastRootBox()->firstLeafChild()->renderer();
+                lastObject = &lastRootBox()->firstLeafChild()->renderer();
             if (lastObject->isBR()) {
                 EClear clear = lastObject->style()->clear();
                 if (clear != CNONE)
@@ -1033,7 +1033,7 @@ static inline void pushShapeContentOverflowBelowTheContentBox(RenderBlockFlow* b
     LayoutUnit shapeLogicalBottom = shapeInsideInfo->shapeLogicalBottom();
     LayoutUnit shapeContainingBlockHeight = shapeInsideInfo->shapeContainingBlockHeight();
 
-    bool isOverflowPositionedAlready = (shapeContainingBlockHeight - shapeInsideInfo->owner()->borderAndPaddingAfter() + lineHeight) <= lineTop;
+    bool isOverflowPositionedAlready = (shapeContainingBlockHeight - shapeInsideInfo->owner().borderAndPaddingAfter() + lineHeight) <= lineTop;
 
     // If the last line overlaps with the shape, we don't need the segments anymore
     if (lineTop < shapeLogicalBottom && shapeLogicalBottom < logicalLineBottom)
@@ -1041,7 +1041,7 @@ static inline void pushShapeContentOverflowBelowTheContentBox(RenderBlockFlow* b
     if (logicalLineBottom <= shapeLogicalBottom || !shapeContainingBlockHeight || isOverflowPositionedAlready)
         return;
 
-    LayoutUnit newLogicalHeight = block->logicalHeight() + (shapeContainingBlockHeight - (lineTop + shapeInsideInfo->owner()->borderAndPaddingAfter()));
+    LayoutUnit newLogicalHeight = block->logicalHeight() + (shapeContainingBlockHeight - (lineTop + shapeInsideInfo->owner().borderAndPaddingAfter()));
     block->setLogicalHeight(newLogicalHeight);
 }
 
@@ -1186,17 +1186,17 @@ void RenderBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState, I
     LayoutSize logicalOffsetFromShapeContainer;
     ShapeInsideInfo* shapeInsideInfo = layoutShapeInsideInfo();
     if (shapeInsideInfo) {
-        ASSERT(shapeInsideInfo->owner() == this || allowsShapeInsideInfoSharing(shapeInsideInfo->owner()));
+        ASSERT(&shapeInsideInfo->owner() == this || allowsShapeInsideInfoSharing(&shapeInsideInfo->owner()));
         if (shapeInsideInfo != this->shapeInsideInfo()) {
             // FIXME Bug 100284: If subsequent LayoutStates are pushed, we will have to add
             // their offsets from the original shape-inside container.
-            logicalOffsetFromShapeContainer = logicalOffsetFromShapeAncestorContainer(shapeInsideInfo->owner());
+            logicalOffsetFromShapeContainer = logicalOffsetFromShapeAncestorContainer(&shapeInsideInfo->owner());
         }
         // Begin layout at the logical top of our shape inside.
         if (logicalHeight() + logicalOffsetFromShapeContainer.height() < shapeInsideInfo->shapeLogicalTop()) {
             LayoutUnit logicalHeight = shapeInsideInfo->shapeLogicalTop() - logicalOffsetFromShapeContainer.height();
             if (layoutState.flowThread())
-                logicalHeight -= shapeInsideInfo->owner()->borderAndPaddingBefore();
+                logicalHeight -= shapeInsideInfo->owner().borderAndPaddingBefore();
             setLogicalHeight(logicalHeight);
         }
     }
@@ -1283,7 +1283,7 @@ void RenderBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState, I
                     adjustLinePositionForPagination(lineBox, adjustment, layoutState.flowThread());
                     if (adjustment) {
                         LayoutUnit oldLineWidth = availableLogicalWidthForLine(oldLogicalHeight, layoutState.lineInfo().isFirstLine());
-                        lineBox->adjustBlockDirectionPosition(adjustment);
+                        lineBox->adjustBlockDirectionPosition(adjustment.toFloat());
                         if (layoutState.usesRepaintBounds())
                             layoutState.updateRepaintRangeFromBox(lineBox);
 
@@ -1412,7 +1412,7 @@ void RenderBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState)
                 }
                 if (delta) {
                     layoutState.updateRepaintRangeFromBox(line, delta);
-                    line->adjustBlockDirectionPosition(delta);
+                    line->adjustBlockDirectionPosition(delta.toFloat());
                 }
                 if (Vector<RenderBox*>* cleanLineFloats = line->floatsPtr()) {
                     Vector<RenderBox*>::iterator end = cleanLineFloats->end();
@@ -1439,7 +1439,7 @@ void RenderBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState)
         if (layoutState.checkForFloatsFromLastLine()) {
             LayoutUnit bottomVisualOverflow = lastRootBox()->logicalBottomVisualOverflow();
             LayoutUnit bottomLayoutOverflow = lastRootBox()->logicalBottomLayoutOverflow();
-            TrailingFloatsRootInlineBox* trailingFloatsLineBox = new TrailingFloatsRootInlineBox(this);
+            TrailingFloatsRootInlineBox* trailingFloatsLineBox = new TrailingFloatsRootInlineBox(*this);
             m_lineBoxes.appendLineBox(trailingFloatsLineBox);
             trailingFloatsLineBox->setConstructed();
             GlyphOverflowAndFallbackFontsMap textBoxDataMap;
@@ -1485,6 +1485,434 @@ void RenderBlockFlow::repaintDirtyFloats(Vector<FloatWithRect>& floats)
             }
         }
     }
+}
+
+struct InlineMinMaxIterator {
+/* InlineMinMaxIterator is a class that will iterate over all render objects that contribute to
+   inline min/max width calculations.  Note the following about the way it walks:
+   (1) Positioned content is skipped (since it does not contribute to min/max width of a block)
+   (2) We do not drill into the children of floats or replaced elements, since you can't break
+       in the middle of such an element.
+   (3) Inline flows (e.g., <a>, <span>, <i>) are walked twice, since each side can have
+       distinct borders/margin/padding that contribute to the min/max width.
+*/
+    RenderObject* parent;
+    RenderObject* current;
+    bool endOfInline;
+
+    InlineMinMaxIterator(RenderObject* p, bool end = false)
+        : parent(p), current(p), endOfInline(end)
+    {
+
+    }
+
+    RenderObject* next();
+};
+
+RenderObject* InlineMinMaxIterator::next()
+{
+    RenderObject* result = 0;
+    bool oldEndOfInline = endOfInline;
+    endOfInline = false;
+    while (current || current == parent) {
+        if (!oldEndOfInline && (current == parent || (!current->isFloating() && !current->isReplaced() && !current->isOutOfFlowPositioned())))
+            result = current->firstChild();
+
+        if (!result) {
+            // We hit the end of our inline. (It was empty, e.g., <span></span>.)
+            if (!oldEndOfInline && current->isRenderInline()) {
+                result = current;
+                endOfInline = true;
+                break;
+            }
+
+            while (current && current != parent) {
+                result = current->nextSibling();
+                if (result)
+                    break;
+                current = current->parent();
+                if (current && current != parent && current->isRenderInline()) {
+                    result = current;
+                    endOfInline = true;
+                    break;
+                }
+            }
+        }
+
+        if (!result)
+            break;
+
+        if (!result->isOutOfFlowPositioned() && (result->isText() || result->isFloating() || result->isReplaced() || result->isRenderInline()))
+            break;
+
+        current = result;
+        result = 0;
+    }
+
+    // Update our position.
+    current = result;
+    return current;
+}
+
+static LayoutUnit getBPMWidth(LayoutUnit childValue, Length cssUnit)
+{
+    if (cssUnit.type() != Auto)
+        return (cssUnit.isFixed() ? static_cast<LayoutUnit>(cssUnit.value()) : childValue);
+    return 0;
+}
+
+static LayoutUnit getBorderPaddingMargin(RenderBoxModelObject* child, bool endOfInline)
+{
+    RenderStyle* childStyle = child->style();
+    if (endOfInline) {
+        return getBPMWidth(child->marginEnd(), childStyle->marginEnd()) +
+            getBPMWidth(child->paddingEnd(), childStyle->paddingEnd()) +
+            child->borderEnd();
+    }
+    return getBPMWidth(child->marginStart(), childStyle->marginStart()) +
+        getBPMWidth(child->paddingStart(), childStyle->paddingStart()) +
+        child->borderStart();
+}
+
+static inline void stripTrailingSpace(float& inlineMax, float& inlineMin, RenderObject* trailingSpaceChild)
+{
+    if (trailingSpaceChild && trailingSpaceChild->isText()) {
+        // Collapse away the trailing space at the end of a block.
+        RenderText* t = toRenderText(trailingSpaceChild);
+        const UChar space = ' ';
+        const Font& font = t->style()->font(); // FIXME: This ignores first-line.
+        float spaceWidth = font.width(RenderBlockFlow::constructTextRun(t, font, &space, 1, t->style(), LTR));
+        inlineMax -= spaceWidth + font.fontDescription().wordSpacing();
+        if (inlineMin > inlineMax)
+            inlineMin = inlineMax;
+    }
+}
+
+static inline void updatePreferredWidth(LayoutUnit& preferredWidth, float& result)
+{
+    LayoutUnit snappedResult = LayoutUnit::fromFloatCeil(result);
+    preferredWidth = max(snappedResult, preferredWidth);
+}
+
+// When converting between floating point and LayoutUnits we risk losing precision
+// with each conversion. When this occurs while accumulating our preferred widths,
+// we can wind up with a line width that's larger than our maxPreferredWidth due to
+// pure float accumulation.
+static inline LayoutUnit adjustFloatForSubPixelLayout(float value)
+{
+    return LayoutUnit::fromFloatCeil(value);
+}
+
+// FIXME: This function should be broken into something less monolithic.
+// FIXME: The main loop here is very similar to LineBreaker::nextSegmentBreak. They can probably reuse code.
+void RenderBlockFlow::computeInlinePreferredLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth)
+{
+    float inlineMax = 0;
+    float inlineMin = 0;
+
+    RenderStyle* styleToUse = style();
+    RenderBlock* containingBlock = this->containingBlock();
+    LayoutUnit cw = containingBlock ? containingBlock->contentLogicalWidth() : LayoutUnit();
+
+    // If we are at the start of a line, we want to ignore all white-space.
+    // Also strip spaces if we previously had text that ended in a trailing space.
+    bool stripFrontSpaces = true;
+    RenderObject* trailingSpaceChild = 0;
+
+    // Firefox and Opera will allow a table cell to grow to fit an image inside it under
+    // very specific cirucumstances (in order to match common WinIE renderings).
+    // Not supporting the quirk has caused us to mis-render some real sites. (See Bugzilla 10517.)
+    bool allowImagesToBreak = !document().inQuirksMode() || !isTableCell() || !styleToUse->logicalWidth().isIntrinsicOrAuto();
+
+    bool autoWrap, oldAutoWrap;
+    autoWrap = oldAutoWrap = styleToUse->autoWrap();
+
+    InlineMinMaxIterator childIterator(this);
+
+    // Only gets added to the max preffered width once.
+    bool addedTextIndent = false;
+    // Signals the text indent was more negative than the min preferred width
+    bool hasRemainingNegativeTextIndent = false;
+
+    LayoutUnit textIndent = minimumValueForLength(styleToUse->textIndent(), cw);
+    RenderObject* prevFloat = 0;
+    bool isPrevChildInlineFlow = false;
+    bool shouldBreakLineAfterText = false;
+    while (RenderObject* child = childIterator.next()) {
+        autoWrap = child->isReplaced() ? child->parent()->style()->autoWrap() :
+            child->style()->autoWrap();
+
+        if (!child->isBR()) {
+            // Step One: determine whether or not we need to go ahead and
+            // terminate our current line. Each discrete chunk can become
+            // the new min-width, if it is the widest chunk seen so far, and
+            // it can also become the max-width.
+
+            // Children fall into three categories:
+            // (1) An inline flow object. These objects always have a min/max of 0,
+            // and are included in the iteration solely so that their margins can
+            // be added in.
+            //
+            // (2) An inline non-text non-flow object, e.g., an inline replaced element.
+            // These objects can always be on a line by themselves, so in this situation
+            // we need to go ahead and break the current line, and then add in our own
+            // margins and min/max width on its own line, and then terminate the line.
+            //
+            // (3) A text object. Text runs can have breakable characters at the start,
+            // the middle or the end. They may also lose whitespace off the front if
+            // we're already ignoring whitespace. In order to compute accurate min-width
+            // information, we need three pieces of information.
+            // (a) the min-width of the first non-breakable run. Should be 0 if the text string
+            // starts with whitespace.
+            // (b) the min-width of the last non-breakable run. Should be 0 if the text string
+            // ends with whitespace.
+            // (c) the min/max width of the string (trimmed for whitespace).
+            //
+            // If the text string starts with whitespace, then we need to go ahead and
+            // terminate our current line (unless we're already in a whitespace stripping
+            // mode.
+            //
+            // If the text string has a breakable character in the middle, but didn't start
+            // with whitespace, then we add the width of the first non-breakable run and
+            // then end the current line. We then need to use the intermediate min/max width
+            // values (if any of them are larger than our current min/max). We then look at
+            // the width of the last non-breakable run and use that to start a new line
+            // (unless we end in whitespace).
+            RenderStyle* childStyle = child->style();
+            float childMin = 0;
+            float childMax = 0;
+
+            if (!child->isText()) {
+                // Case (1) and (2). Inline replaced and inline flow elements.
+                if (child->isRenderInline()) {
+                    // Add in padding/border/margin from the appropriate side of
+                    // the element.
+                    float bpm = getBorderPaddingMargin(toRenderInline(child), childIterator.endOfInline).toFloat();
+                    childMin += bpm;
+                    childMax += bpm;
+
+                    inlineMin += childMin;
+                    inlineMax += childMax;
+
+                    child->clearPreferredLogicalWidthsDirty();
+                } else {
+                    // Inline replaced elts add in their margins to their min/max values.
+                    LayoutUnit margins = 0;
+                    Length startMargin = childStyle->marginStart();
+                    Length endMargin = childStyle->marginEnd();
+                    if (startMargin.isFixed())
+                        margins += adjustFloatForSubPixelLayout(startMargin.value());
+                    if (endMargin.isFixed())
+                        margins += adjustFloatForSubPixelLayout(endMargin.value());
+                    childMin += margins.ceilToFloat();
+                    childMax += margins.ceilToFloat();
+                }
+            }
+
+            if (!child->isRenderInline() && !child->isText()) {
+                // Case (2). Inline replaced elements and floats.
+                // Go ahead and terminate the current line as far as
+                // minwidth is concerned.
+                LayoutUnit childMinPreferredLogicalWidth, childMaxPreferredLogicalWidth;
+                if (child->isBox() && child->isHorizontalWritingMode() != isHorizontalWritingMode()) {
+                    RenderBox* childBox = toRenderBox(child);
+                    LogicalExtentComputedValues computedValues;
+                    childBox->computeLogicalHeight(childBox->borderAndPaddingLogicalHeight(), 0, computedValues);
+                    childMinPreferredLogicalWidth = childMaxPreferredLogicalWidth = computedValues.m_extent;
+                } else {
+                    childMinPreferredLogicalWidth = child->minPreferredLogicalWidth();
+                    childMaxPreferredLogicalWidth = child->maxPreferredLogicalWidth();
+                }
+                childMin += childMinPreferredLogicalWidth.ceilToFloat();
+                childMax += childMaxPreferredLogicalWidth.ceilToFloat();
+
+                bool clearPreviousFloat;
+                if (child->isFloating()) {
+                    clearPreviousFloat = (prevFloat
+                        && ((prevFloat->style()->floating() == LeftFloat && (childStyle->clear() & CLEFT))
+                            || (prevFloat->style()->floating() == RightFloat && (childStyle->clear() & CRIGHT))));
+                    prevFloat = child;
+                } else {
+                    clearPreviousFloat = false;
+                }
+
+                bool canBreakReplacedElement = !child->isImage() || allowImagesToBreak;
+                if ((canBreakReplacedElement && (autoWrap || oldAutoWrap) && (!isPrevChildInlineFlow || shouldBreakLineAfterText)) || clearPreviousFloat) {
+                    updatePreferredWidth(minLogicalWidth, inlineMin);
+                    inlineMin = 0;
+                }
+
+                // If we're supposed to clear the previous float, then terminate maxwidth as well.
+                if (clearPreviousFloat) {
+                    updatePreferredWidth(maxLogicalWidth, inlineMax);
+                    inlineMax = 0;
+                }
+
+                // Add in text-indent. This is added in only once.
+                if (!addedTextIndent && !child->isFloating()) {
+                    float ceiledTextIndent = textIndent.ceilToFloat();
+                    childMin += ceiledTextIndent;
+                    childMax += ceiledTextIndent;
+
+                    if (childMin < 0)
+                        textIndent = adjustFloatForSubPixelLayout(childMin);
+                    else
+                        addedTextIndent = true;
+                }
+
+                // Add our width to the max.
+                inlineMax += max<float>(0, childMax);
+
+                if (!autoWrap || !canBreakReplacedElement || (isPrevChildInlineFlow && !shouldBreakLineAfterText)) {
+                    if (child->isFloating())
+                        updatePreferredWidth(minLogicalWidth, childMin);
+                    else
+                        inlineMin += childMin;
+                } else {
+                    // Now check our line.
+                    updatePreferredWidth(minLogicalWidth, childMin);
+
+                    // Now start a new line.
+                    inlineMin = 0;
+                }
+
+                if (autoWrap && canBreakReplacedElement && isPrevChildInlineFlow) {
+                    updatePreferredWidth(minLogicalWidth, inlineMin);
+                    inlineMin = 0;
+                }
+
+                // We are no longer stripping whitespace at the start of
+                // a line.
+                if (!child->isFloating()) {
+                    stripFrontSpaces = false;
+                    trailingSpaceChild = 0;
+                }
+            } else if (child->isText()) {
+                // Case (3). Text.
+                RenderText* t = toRenderText(child);
+
+                if (t->isWordBreak()) {
+                    updatePreferredWidth(minLogicalWidth, inlineMin);
+                    inlineMin = 0;
+                    continue;
+                }
+
+                if (t->style()->hasTextCombine() && t->isCombineText())
+                    toRenderCombineText(t)->combineText();
+
+                // Determine if we have a breakable character. Pass in
+                // whether or not we should ignore any spaces at the front
+                // of the string. If those are going to be stripped out,
+                // then they shouldn't be considered in the breakable char
+                // check.
+                bool hasBreakableChar, hasBreak;
+                float firstLineMinWidth, lastLineMinWidth;
+                bool hasBreakableStart, hasBreakableEnd;
+                float firstLineMaxWidth, lastLineMaxWidth;
+                t->trimmedPrefWidths(inlineMax,
+                    firstLineMinWidth, hasBreakableStart, lastLineMinWidth, hasBreakableEnd,
+                    hasBreakableChar, hasBreak, firstLineMaxWidth, lastLineMaxWidth,
+                    childMin, childMax, stripFrontSpaces, styleToUse->direction());
+
+                // This text object will not be rendered, but it may still provide a breaking opportunity.
+                if (!hasBreak && !childMax) {
+                    if (autoWrap && (hasBreakableStart || hasBreakableEnd)) {
+                        updatePreferredWidth(minLogicalWidth, inlineMin);
+                        inlineMin = 0;
+                    }
+                    continue;
+                }
+
+                if (stripFrontSpaces)
+                    trailingSpaceChild = child;
+                else
+                    trailingSpaceChild = 0;
+
+                // Add in text-indent. This is added in only once.
+                float ti = 0;
+                if (!addedTextIndent || hasRemainingNegativeTextIndent) {
+                    ti = textIndent.ceilToFloat();
+                    childMin += ti;
+                    firstLineMinWidth += ti;
+
+                    // It the text indent negative and larger than the child minimum, we re-use the remainder
+                    // in future minimum calculations, but using the negative value again on the maximum
+                    // will lead to under-counting the max pref width.
+                    if (!addedTextIndent) {
+                        childMax += ti;
+                        firstLineMaxWidth += ti;
+                        addedTextIndent = true;
+                    }
+
+                    if (childMin < 0) {
+                        textIndent = childMin;
+                        hasRemainingNegativeTextIndent = true;
+                    }
+                }
+
+                // If we have no breakable characters at all,
+                // then this is the easy case. We add ourselves to the current
+                // min and max and continue.
+                if (!hasBreakableChar) {
+                    inlineMin += childMin;
+                } else {
+                    if (hasBreakableStart) {
+                        updatePreferredWidth(minLogicalWidth, inlineMin);
+                    } else {
+                        inlineMin += firstLineMinWidth;
+                        updatePreferredWidth(minLogicalWidth, inlineMin);
+                        childMin -= ti;
+                    }
+
+                    inlineMin = childMin;
+
+                    if (hasBreakableEnd) {
+                        updatePreferredWidth(minLogicalWidth, inlineMin);
+                        inlineMin = 0;
+                        shouldBreakLineAfterText = false;
+                    } else {
+                        updatePreferredWidth(minLogicalWidth, inlineMin);
+                        inlineMin = lastLineMinWidth;
+                        shouldBreakLineAfterText = true;
+                    }
+                }
+
+                if (hasBreak) {
+                    inlineMax += firstLineMaxWidth;
+                    updatePreferredWidth(maxLogicalWidth, inlineMax);
+                    updatePreferredWidth(maxLogicalWidth, childMax);
+                    inlineMax = lastLineMaxWidth;
+                    addedTextIndent = true;
+                } else {
+                    inlineMax += max<float>(0, childMax);
+                }
+            }
+
+            // Ignore spaces after a list marker.
+            if (child->isListMarker())
+                stripFrontSpaces = true;
+        } else {
+            updatePreferredWidth(minLogicalWidth, inlineMin);
+            updatePreferredWidth(maxLogicalWidth, inlineMax);
+            inlineMin = inlineMax = 0;
+            stripFrontSpaces = true;
+            trailingSpaceChild = 0;
+            addedTextIndent = true;
+        }
+
+        if (!child->isText() && child->isRenderInline())
+            isPrevChildInlineFlow = true;
+        else
+            isPrevChildInlineFlow = false;
+
+        oldAutoWrap = autoWrap;
+    }
+
+    if (styleToUse->collapseWhiteSpace())
+        stripTrailingSpace(inlineMax, inlineMin, trailingSpaceChild);
+
+    updatePreferredWidth(minLogicalWidth, inlineMin);
+    updatePreferredWidth(maxLogicalWidth, inlineMax);
 }
 
 void RenderBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& repaintLogicalTop, LayoutUnit& repaintLogicalBottom, LayoutUnit afterEdge)
@@ -1639,7 +2067,7 @@ RootInlineBox* RenderBlockFlow::determineStartPosition(LineLayoutState& layoutSt
                     }
 
                     layoutState.updateRepaintRangeFromBox(curr, paginationDelta);
-                    curr->adjustBlockDirectionPosition(paginationDelta);
+                    curr->adjustBlockDirectionPosition(paginationDelta.toFloat());
                 }
             }
 
@@ -1892,7 +2320,7 @@ void RenderBlockFlow::deleteEllipsisLineBoxes()
             curr->clearTruncation();
 
             // Shift the line back where it belongs if we cannot accomodate an ellipsis.
-            float logicalLeft = pixelSnappedLogicalLeftOffsetForLine(curr->lineTop(), firstLine);
+            float logicalLeft = pixelSnappedLogicalLeftOffsetForLine(curr->lineTop(), firstLine).toFloat();
             float availableLogicalWidth = logicalRightOffsetForLine(curr->lineTop(), false) - logicalLeft;
             float totalLogicalWidth = curr->logicalWidth();
             updateLogicalWidthForAlignment(textAlign, curr, 0, logicalLeft, totalLogicalWidth, availableLogicalWidth, 0);
@@ -1941,10 +2369,10 @@ void RenderBlockFlow::checkLinesForTextOverflow()
             LayoutUnit width = firstLine ? firstLineEllipsisWidth : ellipsisWidth;
             LayoutUnit blockEdge = ltr ? blockRightEdge : blockLeftEdge;
             if (curr->lineCanAccommodateEllipsis(ltr, blockEdge, lineBoxEdge, width)) {
-                float totalLogicalWidth = curr->placeEllipsis(ellipsisStr, ltr, blockLeftEdge, blockRightEdge, width);
+                float totalLogicalWidth = curr->placeEllipsis(ellipsisStr, ltr, blockLeftEdge, blockRightEdge, width.toFloat());
 
                 float logicalLeft = 0; // We are only intersted in the delta from the base position.
-                float snappedLogicalLeft = pixelSnappedLogicalLeftOffsetForLine(curr->lineTop(), firstLine);
+                float snappedLogicalLeft = pixelSnappedLogicalLeftOffsetForLine(curr->lineTop(), firstLine).toFloat();
                 float availableLogicalWidth = pixelSnappedLogicalRightOffsetForLine(curr->lineTop(), firstLine) - snappedLogicalLeft;
                 updateLogicalWidthForAlignment(textAlign, curr, 0, logicalLeft, totalLogicalWidth, availableLogicalWidth, 0);
                 if (ltr)
@@ -2019,7 +2447,7 @@ LayoutUnit RenderBlockFlow::startAlignedOffsetForLine(LayoutUnit position, bool 
 
     // updateLogicalWidthForAlignment() handles the direction of the block so no need to consider it here
     float totalLogicalWidth = 0;
-    float logicalLeft = logicalLeftOffsetForLine(logicalHeight(), false);
+    float logicalLeft = logicalLeftOffsetForLine(logicalHeight(), false).toFloat();
     float availableLogicalWidth = logicalRightOffsetForLine(logicalHeight(), false) - logicalLeft;
     updateLogicalWidthForAlignment(textAlign, 0, 0, logicalLeft, totalLogicalWidth, availableLogicalWidth, 0);
 

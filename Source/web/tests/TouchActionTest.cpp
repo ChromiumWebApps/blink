@@ -44,8 +44,8 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/page/EventHandler.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderTreeAsText.h"
@@ -169,7 +169,7 @@ WebView* TouchActionTest::setupTest(std::string file, TouchActionTrackingWebView
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + file, true, 0, &client);
 
     // Set size to enable hit testing, and avoid line wrapping for consistency with browser.
-    webView->resize(WebSize(700, 1000));
+    webView->resize(WebSize(800, 1200));
 
     // Scroll to verify the code properly transforms windows to client co-ords.
     const int kScrollOffset = 100;
@@ -235,7 +235,7 @@ void TouchActionTest::runTestOnTree(WebCore::ContainerNode* root, WebView* webVi
             contextStream << "=" << clientPoint.x() << "," << clientPoint.y() << ").";
             std::string failureContextPos = contextStream.str();
 
-            WebCore::Frame* frame = root->document().frame();
+            WebCore::LocalFrame* frame = root->document().frame();
             WebCore::FrameView* frameView = frame->view();
             WebCore::IntRect visibleRect = frameView->windowClipRect();
             ASSERT_TRUE(visibleRect.contains(clientPoint)) << failureContextPos
@@ -272,6 +272,8 @@ void TouchActionTest::runTestOnTree(WebCore::ContainerNode* root, WebView* webVi
                         EXPECT_EQ(WebTouchActionPanY, client.lastTouchAction()) << failureContextPos;
                     } else if (expectedAction == "pan-x-y") {
                         EXPECT_EQ((WebTouchActionPanX | WebTouchActionPanY), client.lastTouchAction()) << failureContextPos;
+                    } else if (expectedAction == "manipulation") {
+                        EXPECT_EQ((WebTouchActionPanX | WebTouchActionPanY | WebTouchActionPinchZoom), client.lastTouchAction()) << failureContextPos;
                     } else {
                         FAIL() << "Unrecognized expected-action \"" << expectedAction.ascii().data()
                             << "\" " << failureContextPos;

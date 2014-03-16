@@ -126,7 +126,7 @@ WebInspector.UISourceCodeFrame.prototype = {
     _didEditContent: function(error)
     {
         if (error) {
-            WebInspector.log(error, WebInspector.ConsoleMessage.MessageLevel.Error, true);
+            WebInspector.console.log(error, WebInspector.ConsoleMessage.MessageLevel.Error, true);
             return;
         }
     },
@@ -157,7 +157,7 @@ WebInspector.UISourceCodeFrame.prototype = {
 
     _updateStyle: function()
     {
-        this.element.enableStyleClass("source-frame-unsaved-committed-changes", this._uiSourceCode.hasUnsavedCommittedChanges());
+        this.element.classList.toggle("source-frame-unsaved-committed-changes", this._uiSourceCode.hasUnsavedCommittedChanges());
     },
 
     onUISourceCodeContentChanged: function()

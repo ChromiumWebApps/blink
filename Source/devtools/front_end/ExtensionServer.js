@@ -232,8 +232,8 @@ WebInspector.ExtensionServer.prototype = {
 
     _onShowPanel: function(message)
     {
-        // Note: WebInspector.showPanel already sanitizes input.
-        WebInspector.showPanel(message.id);
+        // Note: WebInspector.inspectorView.showPanel already sanitizes input.
+        WebInspector.inspectorView.showPanel(message.id);
     },
 
     _onCreateStatusBarButton: function(message, port)
@@ -258,7 +258,7 @@ WebInspector.ExtensionServer.prototype = {
 
     _onCreateSidebarPane: function(message)
     {
-        var panel = WebInspector.panel(message.panel);
+        var panel = WebInspector.inspectorView.panel(message.panel);
         if (!panel)
             return this._status.E_NOTFOUND(message.panel);
         if (!panel.addExtensionSidebarPane)
@@ -416,7 +416,7 @@ WebInspector.ExtensionServer.prototype = {
         if (!level)
             return this._status.E_BADARG("message.severity", message.severity);
 
-        var consoleMessage = WebInspector.ConsoleMessage.create(
+        var consoleMessage = new WebInspector.ConsoleMessage(
             WebInspector.ConsoleMessage.MessageSource.JS,
             level,
             message.text,
@@ -447,7 +447,7 @@ WebInspector.ExtensionServer.prototype = {
         }
         var result = {
             severity: convertLevel(message.level),
-            text: message.text,
+            text: message.messageText,
         };
         if (message.url)
             result.url = message.url;
@@ -579,11 +579,11 @@ WebInspector.ExtensionServer.prototype = {
     _onAddAuditCategory: function(message, port)
     {
         var category = new WebInspector.ExtensionAuditCategory(port._extensionOrigin, message.id, message.displayName, message.resultCount);
-        if (WebInspector.panel("audits").getCategory(category.id))
+        if (WebInspector.inspectorView.panel("audits").getCategory(category.id))
             return this._status.E_EXISTS(category.id);
         this._clientObjects[message.id] = category;
         // FIXME: register module manager extension instead of waking up audits module.
-        WebInspector.panel("audits").addCategory(category);
+        WebInspector.inspectorView.panel("audits").addCategory(category);
     },
 
     _onAddAuditResult: function(message)

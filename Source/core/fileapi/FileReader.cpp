@@ -75,12 +75,15 @@ public:
     ThrottlingController() : m_maxRunningReaders(kMaxOutstandingRequestsPerThread) { }
     ~ThrottlingController() { }
 
+    enum FinishReaderType { DoNotRunPendingReaders, RunPendingReaders };
+
     void pushReader(FileReader* reader)
     {
         reader->setPendingActivity(reader);
         if (m_pendingReaders.isEmpty()
             && m_runningReaders.size() < m_maxRunningReaders) {
             reader->executePendingRead();
+            ASSERT(!m_runningReaders.contains(reader));
             m_runningReaders.add(reader);
             return;
         }
@@ -88,23 +91,28 @@ public:
         executeReaders();
     }
 
-    void removeReader(FileReader* reader)
+    FinishReaderType removeReader(FileReader* reader)
     {
         HashSet<FileReader*>::const_iterator hashIter = m_runningReaders.find(reader);
         if (hashIter != m_runningReaders.end()) {
             m_runningReaders.remove(hashIter);
-            reader->unsetPendingActivity(reader);
-            executeReaders();
-            return;
+            return RunPendingReaders;
         }
         Deque<FileReader*>::const_iterator dequeEnd = m_pendingReaders.end();
         for (Deque<FileReader*>::const_iterator it = m_pendingReaders.begin(); it != dequeEnd; ++it) {
             if (*it == reader) {
                 m_pendingReaders.remove(it);
-                reader->unsetPendingActivity(reader);
-                return;
+                break;
             }
         }
+        return DoNotRunPendingReaders;
+    }
+
+    void finishReader(FileReader* reader, FinishReaderType nextStep)
+    {
+        reader->unsetPendingActivity(reader);
+        if (nextStep == RunPendingReaders)
+            executeReaders();
     }
 
 private:
@@ -124,9 +132,9 @@ private:
     HashSet<FileReader*> m_runningReaders;
 };
 
-PassRefPtr<FileReader> FileReader::create(ExecutionContext* context)
+PassRefPtrWillBeRawPtr<FileReader> FileReader::create(ExecutionContext* context)
 {
-    RefPtr<FileReader> fileReader(adoptRef(new FileReader(context)));
+    RefPtrWillBeRawPtr<FileReader> fileReader(adoptRefWillBeRefCountedGarbageCollected(new FileReader(context)));
     fileReader->suspendIfNeeded();
     return fileReader.release();
 }
@@ -154,7 +162,7 @@ const AtomicString& FileReader::interfaceName() const
 void FileReader::stop()
 {
     if (m_loadingState == LoadingStateLoading || m_loadingState == LoadingStatePending)
-        throttlingController()->removeReader(this);
+        throttlingController()->finishReader(this, throttlingController()->removeReader(this));
     terminate();
 }
 
@@ -220,7 +228,16 @@ void FileReader::readInternal(Blob* blob, FileReaderLoader::ReadType type, Excep
         return;
     }
 
-    m_blob = blob;
+    if (blob->hasBeenClosed()) {
+        exceptionState.throwDOMException(InvalidStateError, String(blob->isFile() ? "File" : "Blob") + " has been closed.");
+        return;
+    }
+
+    // "Snapshot" the Blob data rather than the Blob itself as ongoing
+    // read operations should not be affected if close() is called on
+    // the Blob being read.
+    m_blobDataHandle = blob->blobDataHandle();
+    m_blobType = blob->type();
     m_readType = type;
     m_state = LOADING;
     m_loadingState = LoadingStatePending;
@@ -235,8 +252,9 @@ void FileReader::executePendingRead()
 
     m_loader = adoptPtr(new FileReaderLoader(m_readType, this));
     m_loader->setEncoding(m_encoding);
-    m_loader->setDataType(m_blob->type());
-    m_loader->start(executionContext(), m_blob->blobDataHandle());
+    m_loader->setDataType(m_blobType);
+    m_loader->start(executionContext(), m_blobDataHandle);
+    m_blobDataHandle = nullptr;
 }
 
 static void delayedAbort(ExecutionContext*, FileReader* reader)
@@ -267,12 +285,15 @@ void FileReader::doAbort()
 
     m_error = FileError::create(FileError::ABORT_ERR);
 
+    // Unregister the reader.
+    ThrottlingController::FinishReaderType finalStep = throttlingController()->removeReader(this);
+
     fireEvent(EventTypeNames::error);
     fireEvent(EventTypeNames::abort);
     fireEvent(EventTypeNames::loadend);
 
     // All possible events have fired and we're done, no more pending activity.
-    throttlingController()->removeReader(this);
+    throttlingController()->finishReader(this, finalStep);
 }
 
 void FileReader::terminate()
@@ -318,11 +339,14 @@ void FileReader::didFinishLoading()
     ASSERT(m_state != DONE);
     m_state = DONE;
 
+    // Unregister the reader.
+    ThrottlingController::FinishReaderType finalStep = throttlingController()->removeReader(this);
+
     fireEvent(EventTypeNames::load);
     fireEvent(EventTypeNames::loadend);
 
     // All possible events have fired and we're done, no more pending activity.
-    throttlingController()->removeReader(this);
+    throttlingController()->finishReader(this, finalStep);
 }
 
 void FileReader::didFail(FileError::ErrorCode errorCode)
@@ -336,11 +360,15 @@ void FileReader::didFail(FileError::ErrorCode errorCode)
     m_state = DONE;
 
     m_error = FileError::create(static_cast<FileError::ErrorCode>(errorCode));
+
+    // Unregister the reader.
+    ThrottlingController::FinishReaderType finalStep = throttlingController()->removeReader(this);
+
     fireEvent(EventTypeNames::error);
     fireEvent(EventTypeNames::loadend);
 
     // All possible events have fired and we're done, no more pending activity.
-    throttlingController()->removeReader(this);
+    throttlingController()->finishReader(this, finalStep);
 }
 
 void FileReader::fireEvent(const AtomicString& type)
@@ -374,6 +402,11 @@ String FileReader::stringResult()
     if (!m_loader || m_error)
         return String();
     return m_loader->stringResult();
+}
+
+void FileReader::trace(Visitor* visitor)
+{
+    visitor->trace(m_error);
 }
 
 } // namespace WebCore

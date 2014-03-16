@@ -44,7 +44,8 @@ namespace WebCore {
 class V8TestSpecialOperationsCustom {
 public:
     static bool hasInstance(v8::Handle<v8::Value>, v8::Isolate*);
-    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*, WrapperWorldType);
+    static v8::Handle<v8::Object> findInstanceInPrototypeChain(v8::Handle<v8::Value>, v8::Isolate*);
+    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
     static TestSpecialOperationsCustom* toNative(v8::Handle<v8::Object> object)
     {
         return fromInternalPointer(object->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex));
@@ -111,7 +112,7 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, TestSpecialOperat
 template<typename CallbackInfo>
 inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, TestSpecialOperationsCustom* impl)
 {
-    ASSERT(worldType(callbackInfo.GetIsolate()) == MainWorld);
+    ASSERT(DOMWrapperWorld::current(callbackInfo.GetIsolate())->isMainWorld());
     if (UNLIKELY(!impl)) {
         v8SetReturnValueNull(callbackInfo);
         return;

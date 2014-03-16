@@ -32,6 +32,7 @@
 #define DOMFileSystemSync_h
 
 #include "bindings/v8/ScriptWrappable.h"
+#include "heap/Handle.h"
 #include "modules/filesystem/DOMFileSystemBase.h"
 
 namespace WebCore {
@@ -44,21 +45,21 @@ class ExceptionState;
 
 class DOMFileSystemSync FINAL : public DOMFileSystemBase, public ScriptWrappable {
 public:
-    static PassRefPtr<DOMFileSystemSync> create(ExecutionContext* context, const String& name, FileSystemType type, const KURL& rootURL)
+    static PassRefPtrWillBeRawPtr<DOMFileSystemSync> create(ExecutionContext* context, const String& name, FileSystemType type, const KURL& rootURL)
     {
-        return adoptRef(new DOMFileSystemSync(context, name, type, rootURL));
+        return adoptRefWillBeRefCountedGarbageCollected(new DOMFileSystemSync(context, name, type, rootURL));
     }
 
-    static PassRefPtr<DOMFileSystemSync> create(DOMFileSystemBase*);
+    static PassRefPtrWillBeRawPtr<DOMFileSystemSync> create(DOMFileSystemBase*);
 
     virtual ~DOMFileSystemSync();
 
-    virtual void reportError(PassOwnPtr<ErrorCallback>, PassRefPtr<FileError>) OVERRIDE;
+    virtual void reportError(PassOwnPtr<ErrorCallback>, PassRefPtrWillBeRawPtr<FileError>) OVERRIDE;
 
-    PassRefPtr<DirectoryEntrySync> root();
+    PassRefPtrWillBeRawPtr<DirectoryEntrySync> root();
 
-    PassRefPtr<File> createFile(const FileEntrySync*, ExceptionState&);
-    PassRefPtr<FileWriterSync> createWriter(const FileEntrySync*, ExceptionState&);
+    PassRefPtrWillBeRawPtr<File> createFile(const FileEntrySync*, ExceptionState&);
+    PassRefPtrWillBeRawPtr<FileWriterSync> createWriter(const FileEntrySync*, ExceptionState&);
 
 private:
     DOMFileSystemSync(ExecutionContext*, const String& name, FileSystemType, const KURL& rootURL);

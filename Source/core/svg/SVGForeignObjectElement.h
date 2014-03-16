@@ -53,11 +53,7 @@ private:
     RefPtr<SVGAnimatedLength> m_y;
     RefPtr<SVGAnimatedLength> m_width;
     RefPtr<SVGAnimatedLength> m_height;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGForeignObjectElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGForeignObjectElement, hasTagName(SVGNames::foreignObjectTag));
 
 } // namespace WebCore
 

@@ -69,7 +69,7 @@ PassRefPtr<MouseEvent> MouseEvent::create(const AtomicString& type, bool canBubb
     int detail, int screenX, int screenY, int pageX, int pageY,
     int movementX, int movementY,
     bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, unsigned short button,
-    PassRefPtr<EventTarget> relatedTarget, PassRefPtr<Clipboard> clipboard, bool isSimulated)
+    PassRefPtr<EventTarget> relatedTarget, PassRefPtrWillBeRawPtr<Clipboard> clipboard, bool isSimulated)
 {
     return adoptRef(new MouseEvent(type, canBubble, cancelable, view,
         detail, screenX, screenY, pageX, pageY,
@@ -85,11 +85,11 @@ MouseEvent::MouseEvent()
 }
 
 MouseEvent::MouseEvent(const AtomicString& eventType, bool canBubble, bool cancelable, PassRefPtr<AbstractView> view,
-                       int detail, int screenX, int screenY, int pageX, int pageY,
-                       int movementX, int movementY,
-                       bool ctrlKey, bool altKey, bool shiftKey, bool metaKey,
-                       unsigned short button, PassRefPtr<EventTarget> relatedTarget,
-                       PassRefPtr<Clipboard> clipboard, bool isSimulated)
+    int detail, int screenX, int screenY, int pageX, int pageY,
+    int movementX, int movementY,
+    bool ctrlKey, bool altKey, bool shiftKey, bool metaKey,
+    unsigned short button, PassRefPtr<EventTarget> relatedTarget,
+    PassRefPtrWillBeRawPtr<Clipboard> clipboard, bool isSimulated)
     : MouseRelatedEvent(eventType, canBubble, cancelable, view, detail, IntPoint(screenX, screenY),
                         IntPoint(pageX, pageY),
                         IntPoint(movementX, movementY),
@@ -190,6 +190,12 @@ Node* MouseEvent::fromElement() const
     return target() ? target()->toNode() : 0;
 }
 
+void MouseEvent::trace(Visitor* visitor)
+{
+    visitor->trace(m_clipboard);
+    MouseRelatedEvent::trace(visitor);
+}
+
 PassRefPtr<SimulatedMouseEvent> SimulatedMouseEvent::create(const AtomicString& eventType, PassRefPtr<AbstractView> view, PassRefPtr<Event> underlyingEvent)
 {
     return adoptRef(new SimulatedMouseEvent(eventType, view, underlyingEvent));
@@ -217,6 +223,11 @@ SimulatedMouseEvent::SimulatedMouseEvent(const AtomicString& eventType, PassRefP
         m_screenLocation = mouseEvent->screenLocation();
         initCoordinates(mouseEvent->clientLocation());
     }
+}
+
+void SimulatedMouseEvent::trace(Visitor* visitor)
+{
+    MouseEvent::trace(visitor);
 }
 
 PassRefPtr<MouseEventDispatchMediator> MouseEventDispatchMediator::create(PassRefPtr<MouseEvent> mouseEvent, MouseEventType mouseEventType)

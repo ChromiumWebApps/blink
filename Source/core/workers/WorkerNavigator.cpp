@@ -45,4 +45,11 @@ String WorkerNavigator::userAgent() const
     return m_userAgent;
 }
 
+void WorkerNavigator::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    HeapSupplementable<WorkerNavigator>::trace(visitor);
+#endif
+}
+
 } // namespace WebCore

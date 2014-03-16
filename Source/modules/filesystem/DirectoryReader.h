@@ -32,6 +32,7 @@
 #define DirectoryReader_h
 
 #include "bindings/v8/ScriptWrappable.h"
+#include "heap/Handle.h"
 #include "modules/filesystem/DOMFileSystem.h"
 #include "modules/filesystem/DirectoryReaderBase.h"
 #include "wtf/PassRefPtr.h"
@@ -46,17 +47,34 @@ class ErrorCallback;
 
 class DirectoryReader : public DirectoryReaderBase, public ScriptWrappable {
 public:
-    static PassRefPtr<DirectoryReader> create(PassRefPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
+    static PassRefPtrWillBeRawPtr<DirectoryReader> create(PassRefPtrWillBeRawPtr<DOMFileSystemBase> fileSystem, const String& fullPath)
     {
-        return adoptRef(new DirectoryReader(fileSystem, fullPath));
+        return adoptRefWillBeNoop(new DirectoryReader(fileSystem, fullPath));
     }
+
+    virtual ~DirectoryReader();
 
     void readEntries(PassOwnPtr<EntriesCallback>, PassOwnPtr<ErrorCallback> = nullptr);
 
     DOMFileSystem* filesystem() const { return static_cast<DOMFileSystem*>(m_fileSystem.get()); }
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
-    DirectoryReader(PassRefPtr<DOMFileSystemBase>, const String& fullPath);
+    class EntriesCallbackHelper;
+    class ErrorCallbackHelper;
+
+    DirectoryReader(PassRefPtrWillBeRawPtr<DOMFileSystemBase>, const String& fullPath);
+
+    void addEntries(const WillBeHeapVector<RefPtrWillBeMember<Entry> >& entries);
+
+    void onError(FileError*);
+
+    bool m_isReading;
+    WillBeHeapVector<RefPtrWillBeMember<Entry> > m_entries;
+    RefPtrWillBeMember<FileError> m_error;
+    OwnPtr<EntriesCallback> m_entriesCallback;
+    OwnPtr<ErrorCallback> m_errorCallback;
 };
 
 }

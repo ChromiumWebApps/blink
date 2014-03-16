@@ -43,7 +43,6 @@ class ResourceClient;
 class ResourcePtrBase;
 class ResourceFetcher;
 class InspectorResource;
-class PurgeableBuffer;
 class ResourceLoader;
 class SecurityOrigin;
 class SharedBuffer;
@@ -180,11 +179,10 @@ public:
 
     void setCacheLiveResourcePriority(CacheLiveResourcePriority);
     unsigned cacheLiveResourcePriority() const { return m_cacheLiveResourcePriority; }
-    bool inLiveDecodedResourcesList() { return m_inLiveDecodedResourcesList; }
 
     void clearLoader();
 
-    SharedBuffer* resourceBuffer() const { ASSERT(!m_purgeableData); return m_data.get(); }
+    SharedBuffer* resourceBuffer() const { return m_data.get(); }
     void setResourceBuffer(PassRefPtr<SharedBuffer>);
 
     virtual void willSendRequest(ResourceRequest&, const ResourceResponse&);
@@ -245,6 +243,7 @@ public:
 
     virtual bool canReuse(const ResourceRequest&) const { return true; }
 
+    // Used by the MemoryCache to reduce the memory consumption of the entry.
     void prune();
 
     static const char* resourceTypeToString(Type, const FetchInitiatorInfo&);
@@ -297,6 +296,7 @@ protected:
         static ResourceCallback* callbackHandler();
         void schedule(Resource*);
         void cancel(Resource*);
+        bool isScheduled(Resource*) const;
     private:
         ResourceCallback();
         void timerFired(Timer<ResourceCallback>*);
@@ -331,7 +331,6 @@ protected:
     double m_responseTimestamp;
 
     RefPtr<SharedBuffer> m_data;
-    OwnPtr<PurgeableBuffer> m_purgeableData;
     Timer<Resource> m_cancelTimer;
 
 private:
@@ -365,7 +364,6 @@ private:
 
     unsigned m_preloadResult : 2; // PreloadResult
     unsigned m_cacheLiveResourcePriority : 2; // CacheLiveResourcePriority
-    unsigned m_inLiveDecodedResourcesList : 1;
     unsigned m_requestedFromNetworkingLayer : 1;
 
     unsigned m_inCache : 1;
@@ -382,14 +380,7 @@ private:
 
 #ifndef NDEBUG
     bool m_deleted;
-    unsigned m_lruIndex;
 #endif
-
-    Resource* m_nextInAllResourcesList;
-    Resource* m_prevInAllResourcesList;
-
-    Resource* m_nextInLiveResourcesList;
-    Resource* m_prevInLiveResourcesList;
 
     // If this field is non-null we are using the resource as a proxy for checking whether an existing resource is still up to date
     // using HTTP If-Modified-Since/If-None-Match headers. If the response is 304 all clients of this resource are moved

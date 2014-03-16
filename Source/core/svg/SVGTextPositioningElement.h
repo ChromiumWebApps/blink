@@ -51,8 +51,6 @@ protected:
     RefPtr<SVGAnimatedLengthList> m_dx;
     RefPtr<SVGAnimatedLengthList> m_dy;
     RefPtr<SVGAnimatedNumberList> m_rotate;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGTextPositioningElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
 
 inline bool isSVGTextPositioningElement(const Node& node)
@@ -60,7 +58,7 @@ inline bool isSVGTextPositioningElement(const Node& node)
     return node.isSVGElement() && toSVGElement(node).isTextPositioning();
 }
 
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGTextPositioningElement);
+DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(SVGTextPositioningElement);
 
 } // namespace WebCore
 

@@ -31,12 +31,12 @@
 /**
  * @constructor
  * @extends {WebInspector.Object}
- * @param {boolean} canInspectWorkers
+ * @param {boolean} isMainFrontend
  */
-WebInspector.WorkerManager = function(canInspectWorkers)
+WebInspector.WorkerManager = function(isMainFrontend)
 {
     this._reset();
-    if (canInspectWorkers) {
+    if (isMainFrontend) {
         WorkerAgent.enable();
         InspectorBackend.registerWorkerDispatcher(new WebInspector.WorkerDispatcher(this));
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
@@ -171,15 +171,29 @@ WebInspector.workerManager;
 /**
  * @constructor
  * @extends {InspectorBackendClass.Connection}
- * @param {number} workerId
+ * @param {string} workerId
  */
-WebInspector.WorkerConnection = function(workerId)
+WebInspector.WorkerConnection = function(workerId, onConnectionReady)
 {
     InspectorBackendClass.Connection.call(this);
     this._workerId = workerId;
+    window.addEventListener("message", this._processMessage.bind(this), true);
+    onConnectionReady(this);
 }
 
 WebInspector.WorkerConnection.prototype = {
+
+    /**
+     * @param {?Event} event
+     */
+    _processMessage: function(event)
+    {
+        if (!event)
+            return;
+
+        var message = event.data;
+        this.dispatch(message);
+    },
 
     /**
      * @param {!Object} messageObject

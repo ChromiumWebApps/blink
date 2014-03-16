@@ -49,6 +49,7 @@ WebInspector.DOMNode = function(domAgent, doc, isInShadowTree, payload) {
     this._nodeValue = payload.nodeValue;
     this._pseudoType = payload.pseudoType;
     this._shadowRootType = payload.shadowRootType;
+    this._frameId = payload.frameId || null;
 
     this._shadowRoots = [];
 
@@ -115,11 +116,17 @@ WebInspector.DOMNode = function(domAgent, doc, isInShadowTree, payload) {
     }
 }
 
+/**
+ * @enum {string}
+ */
 WebInspector.DOMNode.PseudoElementNames = {
     Before: "before",
     After: "after"
 }
 
+/**
+ * @enum {string}
+ */
 WebInspector.DOMNode.ShadowRootTypes = {
     UserAgent: "user-agent",
     Author: "author"
@@ -228,6 +235,28 @@ WebInspector.DOMNode.prototype = {
     isInShadowTree: function()
     {
         return this._isInShadowTree;
+    },
+
+    /**
+     * @return {?WebInspector.DOMNode}
+     */
+    ancestorUserAgentShadowRoot: function()
+    {
+        if (!this._isInShadowTree)
+            return null;
+
+        var current = this;
+        while (!current.isShadowRoot())
+            current = current.parentNode;
+        return current.shadowRootType() === WebInspector.DOMNode.ShadowRootTypes.UserAgent ? current : null;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isShadowRoot: function()
+    {
+        return !!this._shadowRootType;
     },
 
     /**
@@ -472,6 +501,17 @@ WebInspector.DOMNode.prototype = {
     isDescendant: function(descendant)
     {
         return descendant !== null && descendant.isAncestor(this);
+    },
+
+    /**
+     * @return {?PageAgent.FrameId}
+     */
+    frameId: function()
+    {
+        var node = this;
+        while (!node._frameId && node.parentNode)
+            node = node.parentNode;
+        return node._frameId;
     },
 
     /**
@@ -777,7 +817,6 @@ WebInspector.DOMAgent.Events = {
     ChildNodeCountUpdated: "ChildNodeCountUpdated",
     UndoRedoRequested: "UndoRedoRequested",
     UndoRedoCompleted: "UndoRedoCompleted",
-    InspectNodeRequested: "InspectNodeRequested"
 }
 
 WebInspector.DOMAgent.prototype = {
@@ -847,12 +886,12 @@ WebInspector.DOMAgent.prototype = {
     },
 
     /**
-     * @param {number} backendNodeId
-     * @param {function(?number)=} callback
+     * @param {!Array.<number>} backendNodeIds
+     * @param {function(?Array.<number>)=} callback
      */
-    pushNodeByBackendIdToFrontend: function(backendNodeId, callback)
+    pushNodesByBackendIdsToFrontend: function(backendNodeIds, callback)
     {
-        this._dispatchWhenDocumentAvailable(DOMAgent.pushNodeByBackendIdToFrontend.bind(DOMAgent, backendNodeId), callback);
+        this._dispatchWhenDocumentAvailable(DOMAgent.pushNodesByBackendIdsToFrontend.bind(DOMAgent, backendNodeIds), callback);
     },
 
     /**
@@ -1161,9 +1200,7 @@ WebInspector.DOMAgent.prototype = {
      */
     inspectElement: function(nodeId)
     {
-        var node = this._idToDOMNode[nodeId];
-        if (node)
-            this.dispatchEventToListeners(WebInspector.DOMAgent.Events.InspectNodeRequested, nodeId);
+        WebInspector.Revealer.reveal(this.nodeForId(nodeId));
     },
 
     /**
@@ -1171,7 +1208,7 @@ WebInspector.DOMAgent.prototype = {
      */
     _inspectNodeRequested: function(nodeId)
     {
-        this.dispatchEventToListeners(WebInspector.DOMAgent.Events.InspectNodeRequested, nodeId);
+        this.inspectElement(nodeId);
     },
 
     /**

@@ -49,7 +49,7 @@ namespace WebCore {
 class DOMWrapperWorld;
 class ExecutionContext;
 class Event;
-class Frame;
+class LocalFrame;
 class HTMLDocument;
 class HTMLPlugInElement;
 class KURL;
@@ -73,7 +73,7 @@ public:
         DoNotExecuteScriptWhenScriptsDisabled
     };
 
-    ScriptController(Frame*);
+    ScriptController(LocalFrame*);
     ~ScriptController();
 
     bool initializeMainWorld();
@@ -99,8 +99,8 @@ public:
     // Returns true if argument is a JavaScript URL.
     bool executeScriptIfJavaScriptURL(const KURL&);
 
-    v8::Local<v8::Value> callFunction(v8::Handle<v8::Function>, v8::Handle<v8::Object>, int argc, v8::Handle<v8::Value> argv[]);
-    static v8::Local<v8::Value> callFunction(ExecutionContext*, v8::Handle<v8::Function>, v8::Handle<v8::Object> receiver, int argc, v8::Handle<v8::Value> info[], v8::Isolate*);
+    v8::Local<v8::Value> callFunction(v8::Handle<v8::Function>, v8::Handle<v8::Value>, int argc, v8::Handle<v8::Value> argv[]);
+    static v8::Local<v8::Value> callFunction(ExecutionContext*, v8::Handle<v8::Function>, v8::Handle<v8::Value> receiver, int argc, v8::Handle<v8::Value> info[], v8::Isolate*);
 
     // Returns true if the current world is isolated, and has its own Content
     // Security Policy. In this case, the policy of the main world should be
@@ -108,14 +108,14 @@ public:
     bool shouldBypassMainWorldContentSecurityPolicy();
 
     // Creates a property of the global object of a frame.
-    void bindToWindowObject(Frame*, const String& key, NPObject*);
+    void bindToWindowObject(LocalFrame*, const String& key, NPObject*);
 
     PassRefPtr<SharedPersistent<v8::Object> > createPluginWrapper(Widget*);
 
     void enableEval();
     void disableEval(const String& errorMessage);
 
-    static bool canAccessFromCurrentOrigin(Frame*);
+    static bool canAccessFromCurrentOrigin(LocalFrame*);
 
     static void setCaptureCallStackForUncaughtExceptions(bool);
     void collectIsolatedContexts(Vector<std::pair<ScriptState*, SecurityOrigin*> >&);
@@ -135,7 +135,6 @@ public:
     void cleanupScriptObjectsForPlugin(Widget*);
 
     void clearForClose();
-    void clearForOutOfMemory();
 
     NPObject* createScriptObjectForPluginElement(HTMLPlugInElement*);
     NPObject* windowScriptNPObject();
@@ -156,9 +155,8 @@ private:
     typedef HashMap<Widget*, NPObject*> PluginObjectMap;
 
     ScriptValue evaluateScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus, ExecuteScriptPolicy);
-    void clearForClose(bool destroyGlobal);
 
-    Frame* m_frame;
+    LocalFrame* m_frame;
     const String* m_sourceURL;
     v8::Isolate* m_isolate;
 

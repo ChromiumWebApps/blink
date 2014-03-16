@@ -32,6 +32,7 @@
 #define DataTransferItem_h
 
 #include "bindings/v8/ScriptWrappable.h"
+#include "heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
@@ -45,25 +46,27 @@ class File;
 class StringCallback;
 class ExecutionContext;
 
-class DataTransferItem : public RefCounted<DataTransferItem>, public ScriptWrappable {
+class DataTransferItem : public RefCountedWillBeGarbageCollectedFinalized<DataTransferItem>, public ScriptWrappable {
 public:
-    static PassRefPtr<DataTransferItem> create(PassRefPtr<Clipboard>, PassRefPtr<DataObjectItem>);
+    static PassRefPtrWillBeRawPtr<DataTransferItem> create(PassRefPtrWillBeRawPtr<Clipboard>, PassRefPtrWillBeRawPtr<DataObjectItem>);
     ~DataTransferItem();
 
     String kind() const;
     String type() const;
 
     void getAsString(ExecutionContext*, PassOwnPtr<StringCallback>) const;
-    PassRefPtr<Blob> getAsFile() const;
+    PassRefPtrWillBeRawPtr<Blob> getAsFile() const;
 
     Clipboard* clipboard() { return m_clipboard.get(); }
     DataObjectItem* dataObjectItem() { return m_item.get(); }
 
-private:
-    DataTransferItem(PassRefPtr<Clipboard>, PassRefPtr<DataObjectItem>);
+    void trace(Visitor*);
 
-    RefPtr<Clipboard> m_clipboard;
-    RefPtr<DataObjectItem> m_item;
+private:
+    DataTransferItem(PassRefPtrWillBeRawPtr<Clipboard>, PassRefPtrWillBeRawPtr<DataObjectItem>);
+
+    RefPtrWillBeMember<Clipboard> m_clipboard;
+    RefPtrWillBeMember<DataObjectItem> m_item;
 };
 
 } // namespace WebCore

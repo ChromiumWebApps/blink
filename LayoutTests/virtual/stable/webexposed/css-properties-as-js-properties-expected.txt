@@ -6,6 +6,7 @@ alignSelf
 alignmentBaseline
 background
 backgroundAttachment
+backgroundBlendMode
 backgroundClip
 backgroundColor
 backgroundImage
@@ -154,6 +155,7 @@ page
 pageBreakAfter
 pageBreakBefore
 pageBreakInside
+paintOrder
 parentRule
 pointerEvents
 position
@@ -197,6 +199,7 @@ textUnderlineMode
 textUnderlineStyle
 textUnderlineWidth
 top
+touchAction
 transition
 transitionDelay
 transitionDuration

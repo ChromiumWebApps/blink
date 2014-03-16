@@ -57,14 +57,13 @@ enum CalculationCategory {
 };
 
 class CSSCalcExpressionNode : public RefCountedWillBeGarbageCollected<CSSCalcExpressionNode> {
-    DECLARE_GC_INFO;
+    DECLARE_EMPTY_VIRTUAL_DESTRUCTOR_WILL_BE_REMOVED(CSSCalcExpressionNode);
 public:
     enum Type {
         CssCalcPrimitiveValue = 1,
         CssCalcBinaryOperation
     };
 
-    virtual ~CSSCalcExpressionNode() = 0;
     virtual bool isZero() const = 0;
     virtual PassOwnPtr<CalcExpressionNode> toCalcValue(const CSSToLengthConversionData&) const = 0;
     virtual double doubleValue() const = 0;
@@ -94,7 +93,7 @@ class CSSCalcValue : public CSSValue {
 public:
     static PassRefPtrWillBeRawPtr<CSSCalcValue> create(CSSParserString name, CSSParserValueList*, ValueRange);
     static PassRefPtrWillBeRawPtr<CSSCalcValue> create(PassRefPtrWillBeRawPtr<CSSCalcExpressionNode>, ValueRange = ValueRangeAll);
-    static PassRefPtrWillBeRawPtr<CSSCalcValue> create(const CalculationValue* value, float zoom) { return adoptRefCountedWillBeRefCountedGarbageCollected(new CSSCalcValue(value, zoom)); }
+    static PassRefPtrWillBeRawPtr<CSSCalcValue> create(const CalculationValue* value, float zoom) { return adoptRefWillBeRefCountedGarbageCollected(new CSSCalcValue(value, zoom)); }
 
     static PassRefPtrWillBeRawPtr<CSSCalcExpressionNode> createExpressionNode(PassRefPtrWillBeRawPtr<CSSPrimitiveValue>, bool isInteger = false);
     static PassRefPtrWillBeRawPtr<CSSCalcExpressionNode> createExpressionNode(PassRefPtrWillBeRawPtr<CSSCalcExpressionNode>, PassRefPtrWillBeRawPtr<CSSCalcExpressionNode>, CalcOperator);

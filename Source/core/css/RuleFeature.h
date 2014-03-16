@@ -30,6 +30,7 @@
 namespace WebCore {
 
 class Document;
+class Node;
 class ShadowRoot;
 class StyleRule;
 class CSSSelector;
@@ -88,6 +89,9 @@ public:
 
     void computeStyleInvalidation(Document&);
 
+    // Clears all style invalidation state for the passed node.
+    void clearStyleInvalidation(Node*);
+
     int hasIdsInSelectors() const
     {
         return m_metadata.idsInRules.size() > 0;
@@ -102,8 +106,8 @@ public:
 
 private:
     typedef HashMap<AtomicString, RefPtr<DescendantInvalidationSet> > InvalidationSetMap;
-    typedef Vector<DescendantInvalidationSet*> InvalidationList;
-    typedef HashMap<Element*, InvalidationList*> PendingInvalidationMap;
+    typedef Vector<RefPtr<DescendantInvalidationSet> > InvalidationList;
+    typedef HashMap<Element*, OwnPtr<InvalidationList> > PendingInvalidationMap;
     struct FeatureMetadata {
         FeatureMetadata()
             : usesFirstLineRules(false)
@@ -120,21 +124,19 @@ private:
         HashSet<AtomicString> attrsInRules;
     };
 
-    // These return true if setNeedsStyleRecalc() should be run on the Element, as a fallback.
-    bool computeInvalidationSetsForClassChange(const SpaceSplitString& changedClasses, Element*);
-    bool computeInvalidationSetsForClassChange(const SpaceSplitString& oldClasses, const SpaceSplitString& newClasses, Element*);
-
-    enum SelectorFeatureCollectionMode {
-        ProcessClasses,
-        DontProcessClasses
+    enum InvalidationSetMode {
+        AddFeatures,
+        UseLocalStyleChange,
+        UseSubtreeStyleChange
     };
 
-    void collectFeaturesFromSelector(const CSSSelector&, FeatureMetadata&, SelectorFeatureCollectionMode processClasses);
-    void collectFeaturesFromSelectorList(const CSSSelectorList*, FeatureMetadata&, SelectorFeatureCollectionMode processClasses);
+    static InvalidationSetMode supportsClassDescendantInvalidation(const CSSSelector&);
 
-    bool classInvalidationRequiresSubtreeRecalc(const AtomicString& className);
+    void collectFeaturesFromSelector(const CSSSelector&, FeatureMetadata&, InvalidationSetMode);
+    void collectFeaturesFromSelectorList(const CSSSelectorList*, FeatureMetadata&, InvalidationSetMode);
+
     DescendantInvalidationSet& ensureClassInvalidationSet(const AtomicString& className);
-    bool updateClassInvalidationSets(const CSSSelector&);
+    InvalidationSetMode updateClassInvalidationSets(const CSSSelector&);
 
     void addClassToInvalidationSet(const AtomicString& className, Element*);
 

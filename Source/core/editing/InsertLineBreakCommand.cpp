@@ -34,8 +34,8 @@
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLElement.h"
-#include "core/frame/Frame.h"
 #include "core/rendering/RenderObject.h"
 
 namespace WebCore {
@@ -90,7 +90,7 @@ void InsertLineBreakCommand::doApply()
     // FIXME: Need to merge text nodes when inserting just after or before text.
 
     if (isEndOfParagraph(caret) && !lineBreakExistsAtVisiblePosition(caret)) {
-        bool needExtraLineBreak = !pos.deprecatedNode()->hasTagName(hrTag) && !pos.deprecatedNode()->hasTagName(tableTag);
+        bool needExtraLineBreak = !isHTMLHRElement(*pos.deprecatedNode()) && !isHTMLTableElement(*pos.deprecatedNode());
 
         insertNodeAt(nodeToInsert.get(), pos);
 
@@ -103,15 +103,15 @@ void InsertLineBreakCommand::doApply()
         insertNodeAt(nodeToInsert.get(), pos);
 
         // Insert an extra br or '\n' if the just inserted one collapsed.
-        if (!isStartOfParagraph(positionBeforeNode(nodeToInsert.get())))
+        if (!isStartOfParagraph(VisiblePosition(positionBeforeNode(nodeToInsert.get()))))
             insertNodeBefore(nodeToInsert->cloneNode(false).get(), nodeToInsert.get());
 
-        setEndingSelection(VisibleSelection(positionInParentAfterNode(nodeToInsert.get()), DOWNSTREAM, endingSelection().isDirectional()));
+        setEndingSelection(VisibleSelection(positionInParentAfterNode(*nodeToInsert), DOWNSTREAM, endingSelection().isDirectional()));
     // If we're inserting after all of the rendered text in a text node, or into a non-text node,
     // a simple insertion is sufficient.
     } else if (pos.deprecatedEditingOffset() >= caretMaxOffset(pos.deprecatedNode()) || !pos.deprecatedNode()->isTextNode()) {
         insertNodeAt(nodeToInsert.get(), pos);
-        setEndingSelection(VisibleSelection(positionInParentAfterNode(nodeToInsert.get()), DOWNSTREAM, endingSelection().isDirectional()));
+        setEndingSelection(VisibleSelection(positionInParentAfterNode(*nodeToInsert), DOWNSTREAM, endingSelection().isDirectional()));
     } else if (pos.deprecatedNode()->isTextNode()) {
         // Split a text node
         Text* textNode = toText(pos.deprecatedNode());
@@ -122,7 +122,7 @@ void InsertLineBreakCommand::doApply()
         // Handle whitespace that occurs after the split
         document().updateLayoutIgnorePendingStylesheets();
         if (!endingPosition.isRenderedCharacter()) {
-            Position positionBeforeTextNode(positionInParentBeforeNode(textNode));
+            Position positionBeforeTextNode(positionInParentBeforeNode(*textNode));
             // Clear out all whitespace and insert one non-breaking space
             deleteInsignificantTextDownstream(endingPosition);
             ASSERT(!textNode->renderer() || textNode->renderer()->style()->collapseWhiteSpace());

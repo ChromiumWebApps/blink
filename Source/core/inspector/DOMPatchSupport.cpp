@@ -31,7 +31,6 @@
 #include "config.h"
 #include "core/inspector/DOMPatchSupport.h"
 
-#include "HTMLNames.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Attribute.h"
@@ -40,7 +39,9 @@
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Node.h"
 #include "core/dom/XMLDocument.h"
+#include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLDocument.h"
+#include "core/html/HTMLHeadElement.h"
 #include "core/html/parser/HTMLDocumentParser.h"
 #include "core/inspector/DOMEditor.h"
 #include "core/inspector/InspectorHistory.h"
@@ -55,10 +56,6 @@
 using namespace std;
 
 namespace WebCore {
-
-using HTMLNames::bodyTag;
-using HTMLNames::headTag;
-using HTMLNames::htmlTag;
 
 struct DOMPatchSupport::Digest {
     explicit Digest(Node* node) : m_node(node) { }
@@ -123,12 +120,20 @@ Node* DOMPatchSupport::patchNode(Node* node, const String& markup, ExceptionStat
     }
 
     Node* previousSibling = node->previousSibling();
-    // FIXME: This code should use one of createFragment* in markup.h
     RefPtr<DocumentFragment> fragment = DocumentFragment::create(m_document);
+    Node* targetNode = node->parentElementOrShadowRoot() ? node->parentElementOrShadowRoot() : m_document.documentElement();
+
+    // Use the document BODY as the context element when editing immediate shadow root children,
+    // as it provides an equivalent parsing context.
+    if (targetNode->isShadowRoot())
+        targetNode = m_document.body();
+    Element* targetElement = toElement(targetNode);
+
+    // FIXME: This code should use one of createFragment* in markup.h
     if (m_document.isHTMLDocument())
-        fragment->parseHTML(markup, node->parentElement() ? node->parentElement() : m_document.documentElement());
+        fragment->parseHTML(markup, targetElement);
     else
-        fragment->parseXML(markup, node->parentElement() ? node->parentElement() : m_document.documentElement());
+        fragment->parseXML(markup, targetElement);
 
     // Compose the old list.
     ContainerNode* parentNode = node->parentNode();
@@ -142,9 +147,9 @@ Node* DOMPatchSupport::patchNode(Node* node, const String& markup, ExceptionStat
     for (Node* child = parentNode->firstChild(); child != node; child = child->nextSibling())
         newList.append(createDigest(child, 0));
     for (Node* child = fragment->firstChild(); child; child = child->nextSibling()) {
-        if (child->hasTagName(headTag) && !child->firstChild() && markupCopy.find("</head>") == kNotFound)
+        if (isHTMLHeadElement(*child) && !child->firstChild() && markupCopy.find("</head>") == kNotFound)
             continue; // HTML5 parser inserts empty <head> tag whenever it parses <body>
-        if (child->hasTagName(bodyTag) && !child->firstChild() && markupCopy.find("</body>") == kNotFound)
+        if (isHTMLBodyElement(*child) && !child->firstChild() && markupCopy.find("</body>") == kNotFound)
             continue; // HTML5 parser inserts empty <body> tag whenever it parses </head>
         newList.append(createDigest(child, &m_unusedNodesMap));
     }
@@ -185,8 +190,8 @@ bool DOMPatchSupport::innerPatchNode(Digest* oldDigest, Digest* newDigest, Excep
         // FIXME: Create a function in Element for removing all properties. Take in account whether did/willModifyAttribute are important.
         if (oldElement->hasAttributesWithoutUpdate()) {
             while (oldElement->attributeCount()) {
-                const Attribute* attribute = oldElement->attributeItem(0);
-                if (!m_domEditor->removeAttribute(oldElement, attribute->localName(), exceptionState))
+                const Attribute& attribute = oldElement->attributeItem(0);
+                if (!m_domEditor->removeAttribute(oldElement, attribute.localName(), exceptionState))
                     return false;
             }
         }
@@ -195,8 +200,8 @@ bool DOMPatchSupport::innerPatchNode(Digest* oldDigest, Digest* newDigest, Excep
         if (newElement->hasAttributesWithoutUpdate()) {
             size_t numAttrs = newElement->attributeCount();
             for (size_t i = 0; i < numAttrs; ++i) {
-                const Attribute* attribute = newElement->attributeItem(i);
-                if (!m_domEditor->setAttribute(oldElement, attribute->name().localName(), attribute->value(), exceptionState))
+                const Attribute& attribute = newElement->attributeItem(i);
+                if (!m_domEditor->setAttribute(oldElement, attribute.name().localName(), attribute.value(), exceptionState))
                     return false;
             }
         }
@@ -315,11 +320,11 @@ bool DOMPatchSupport::innerPatchChildren(ContainerNode* parentNode, const Vector
 
         // Always match <head> and <body> tags with each other - we can't remove them from the DOM
         // upon patching.
-        if (oldList[i]->m_node->hasTagName(headTag)) {
+        if (isHTMLHeadElement(*oldList[i]->m_node)) {
             oldHead = oldList[i].get();
             continue;
         }
-        if (oldList[i]->m_node->hasTagName(bodyTag)) {
+        if (isHTMLBodyElement(*oldList[i]->m_node)) {
             oldBody = oldList[i].get();
             continue;
         }
@@ -359,9 +364,9 @@ bool DOMPatchSupport::innerPatchChildren(ContainerNode* parentNode, const Vector
     // Mark <head> and <body> nodes for merge.
     if (oldHead || oldBody) {
         for (size_t i = 0; i < newList.size(); ++i) {
-            if (oldHead && newList[i]->m_node->hasTagName(headTag))
+            if (oldHead && isHTMLHeadElement(*newList[i]->m_node))
                 merges.set(newList[i].get(), oldHead);
-            if (oldBody && newList[i]->m_node->hasTagName(bodyTag))
+            if (oldBody && isHTMLBodyElement(*newList[i]->m_node))
                 merges.set(newList[i].get(), oldBody);
         }
     }
@@ -376,7 +381,7 @@ bool DOMPatchSupport::innerPatchChildren(ContainerNode* parentNode, const Vector
     for (size_t i = 0; i < newMap.size(); ++i) {
         if (newMap[i].first || merges.contains(newList[i].get()))
             continue;
-        if (!insertBeforeAndMarkAsUsed(parentNode, newList[i].get(), parentNode->childNode(i), exceptionState))
+        if (!insertBeforeAndMarkAsUsed(parentNode, newList[i].get(), parentNode->traverseToChildAt(i), exceptionState))
             return false;
     }
 
@@ -385,10 +390,10 @@ bool DOMPatchSupport::innerPatchChildren(ContainerNode* parentNode, const Vector
         if (!oldMap[i].first)
             continue;
         RefPtr<Node> node = oldMap[i].first->m_node;
-        Node* anchorNode = parentNode->childNode(oldMap[i].second);
-        if (node.get() == anchorNode)
+        Node* anchorNode = parentNode->traverseToChildAt(oldMap[i].second);
+        if (node == anchorNode)
             continue;
-        if (node->hasTagName(bodyTag) || node->hasTagName(headTag))
+        if (isHTMLBodyElement(*node) || isHTMLHeadElement(*node))
             continue; // Never move head or body, move the rest of the nodes around them.
 
         if (!m_domEditor->insertBefore(parentNode, node.release(), anchorNode, exceptionState))
@@ -428,9 +433,9 @@ PassOwnPtr<DOMPatchSupport::Digest> DOMPatchSupport::createDigest(Node* node, Un
             size_t numAttrs = element->attributeCount();
             SHA1 attrsSHA1;
             for (size_t i = 0; i < numAttrs; ++i) {
-                const Attribute* attribute = element->attributeItem(i);
-                addStringToSHA1(attrsSHA1, attribute->name().toString());
-                addStringToSHA1(attrsSHA1, attribute->value());
+                const Attribute& attribute = element->attributeItem(i);
+                addStringToSHA1(attrsSHA1, attribute.name().toString());
+                addStringToSHA1(attrsSHA1, attribute.value());
             }
             Vector<uint8_t, 20> attrsHash;
             attrsSHA1.computeHash(attrsHash);

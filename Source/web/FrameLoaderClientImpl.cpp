@@ -60,9 +60,7 @@
 #include "core/events/MouseEvent.h"
 #include "core/dom/WheelController.h"
 #include "core/html/HTMLAppletElement.h"
-#include "core/html/HTMLFormElement.h" // needed by core/loader/FormState.h
 #include "core/loader/DocumentLoader.h"
-#include "core/loader/FormState.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/HistoryItem.h"
@@ -135,12 +133,6 @@ void FrameLoaderClientImpl::documentElementAvailable()
         m_webFrame->client()->didCreateDocumentElement(m_webFrame);
 }
 
-void FrameLoaderClientImpl::didExhaustMemoryAvailableForScript()
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didExhaustMemoryAvailableForScript(m_webFrame);
-}
-
 void FrameLoaderClientImpl::didCreateScriptContext(v8::Handle<v8::Context> context, int extensionGroup, int worldId)
 {
     WebViewImpl* webview = m_webFrame->viewImpl();
@@ -170,6 +162,12 @@ void FrameLoaderClientImpl::didChangeScrollOffset()
 {
     if (m_webFrame->client())
         m_webFrame->client()->didChangeScrollOffset(m_webFrame);
+}
+
+void FrameLoaderClientImpl::didUpdateCurrentHistoryItem()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didUpdateCurrentHistoryItem(m_webFrame);
 }
 
 bool FrameLoaderClientImpl::allowScript(bool enabledPerSettings)
@@ -238,6 +236,18 @@ bool FrameLoaderClientImpl::hasWebView() const
     return m_webFrame->viewImpl();
 }
 
+Frame* FrameLoaderClientImpl::opener() const
+{
+    WebFrameImpl* opener = toWebFrameImpl(m_webFrame->opener());
+    return opener ? opener->frame() : 0;
+}
+
+void FrameLoaderClientImpl::setOpener(Frame* opener)
+{
+    // FIXME: Temporary hack to stage converting locations that really should be Frame.
+    m_webFrame->setOpener(WebFrameImpl::fromFrame(toLocalFrame(opener)));
+}
+
 Frame* FrameLoaderClientImpl::parent() const
 {
     WebFrameImpl* frame = toWebFrameImpl(m_webFrame->parent());
@@ -291,7 +301,7 @@ void FrameLoaderClientImpl::detachedFromParent()
     m_webFrame->setClient(0);
 
     client->frameDetached(m_webFrame);
-    // Clear our reference to WebCore::Frame at the very end, in case the client
+    // Clear our reference to WebCore::LocalFrame at the very end, in case the client
     // refers to it.
     m_webFrame->setWebCoreFrame(nullptr);
 }
@@ -400,7 +410,7 @@ void FrameLoaderClientImpl::dispatchDidChangeIcons(WebCore::IconType type)
         m_webFrame->client()->didChangeIcon(m_webFrame, static_cast<WebIconURL::Type>(type));
 }
 
-void FrameLoaderClientImpl::dispatchDidCommitLoad(Frame* frame, HistoryItem* item, HistoryCommitType commitType)
+void FrameLoaderClientImpl::dispatchDidCommitLoad(LocalFrame* frame, HistoryItem* item, HistoryCommitType commitType)
 {
     m_webFrame->frame()->page()->historyController().updateForCommit(frame, item, commitType);
     m_webFrame->viewImpl()->didCommitLoad(commitType == StandardCommit, false);
@@ -468,16 +478,16 @@ void FrameLoaderClientImpl::dispatchWillRequestResource(FetchRequest* request)
     }
 }
 
-void FrameLoaderClientImpl::dispatchWillSendSubmitEvent(PassRefPtr<FormState> prpFormState)
+void FrameLoaderClientImpl::dispatchWillSendSubmitEvent(HTMLFormElement* form)
 {
     if (m_webFrame->client())
-        m_webFrame->client()->willSendSubmitEvent(m_webFrame, WebFormElement(prpFormState->form()));
+        m_webFrame->client()->willSendSubmitEvent(m_webFrame, WebFormElement(form));
 }
 
-void FrameLoaderClientImpl::dispatchWillSubmitForm(PassRefPtr<FormState> formState)
+void FrameLoaderClientImpl::dispatchWillSubmitForm(HTMLFormElement* form)
 {
     if (m_webFrame->client())
-        m_webFrame->client()->willSubmitForm(m_webFrame, WebFormElement(formState->form()));
+        m_webFrame->client()->willSubmitForm(m_webFrame, WebFormElement(form));
 }
 
 void FrameLoaderClientImpl::postProgressStartedNotification(LoadStartType loadStartType)
@@ -536,12 +546,6 @@ void FrameLoaderClientImpl::didAccessInitialDocument()
         m_webFrame->client()->didAccessInitialDocument(m_webFrame);
 }
 
-void FrameLoaderClientImpl::didDisownOpener()
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didDisownOpener(m_webFrame);
-}
-
 void FrameLoaderClientImpl::didDisplayInsecureContent()
 {
     if (m_webFrame->client())
@@ -572,7 +576,7 @@ void FrameLoaderClientImpl::selectorMatchChanged(const Vector<String>& addedSele
         client->didMatchCSS(m_webFrame, WebVector<WebString>(addedSelectors), WebVector<WebString>(removedSelectors));
 }
 
-PassRefPtr<DocumentLoader> FrameLoaderClientImpl::createDocumentLoader(Frame* frame, const ResourceRequest& request, const SubstituteData& data)
+PassRefPtr<DocumentLoader> FrameLoaderClientImpl::createDocumentLoader(LocalFrame* frame, const ResourceRequest& request, const SubstituteData& data)
 {
     RefPtr<WebDataSourceImpl> ds = WebDataSourceImpl::create(frame, request, data);
     if (m_webFrame->client())
@@ -604,7 +608,7 @@ void FrameLoaderClientImpl::transitionToCommittedForNewPage()
     m_webFrame->createFrameView();
 }
 
-PassRefPtr<Frame> FrameLoaderClientImpl::createFrame(
+PassRefPtr<LocalFrame> FrameLoaderClientImpl::createFrame(
     const KURL& url,
     const AtomicString& name,
     const Referrer& referrer,
@@ -616,13 +620,13 @@ PassRefPtr<Frame> FrameLoaderClientImpl::createFrame(
 }
 
 PassRefPtr<Widget> FrameLoaderClientImpl::createPlugin(
-    const IntSize& size, // FIXME: how do we use this?
     HTMLPlugInElement* element,
     const KURL& url,
     const Vector<String>& paramNames,
     const Vector<String>& paramValues,
     const String& mimeType,
-    bool loadManually)
+    bool loadManually,
+    DetachedPluginPolicy policy)
 {
     if (!m_webFrame->client())
         return nullptr;
@@ -645,22 +649,20 @@ PassRefPtr<Widget> FrameLoaderClientImpl::createPlugin(
     if (!webPlugin->initialize(container.get()))
         return nullptr;
 
-    // The element might have been removed during plugin initialization!
-    if (!element->renderer())
+    if (policy != AllowDetachedPlugin && !element->renderer())
         return nullptr;
 
     return container;
 }
 
 PassRefPtr<Widget> FrameLoaderClientImpl::createJavaAppletWidget(
-    const IntSize& size,
     HTMLAppletElement* element,
     const KURL& /* baseURL */,
     const Vector<String>& paramNames,
     const Vector<String>& paramValues)
 {
-    return createPlugin(size, element, KURL(), paramNames, paramValues,
-        "application/x-java-applet", false);
+    return createPlugin(element, KURL(), paramNames, paramValues,
+        "application/x-java-applet", false, FailOnDetachedPlugin);
 }
 
 ObjectContentType FrameLoaderClientImpl::objectContentType(
@@ -748,10 +750,10 @@ void FrameLoaderClientImpl::dispatchWillStartUsingPeerConnectionHandler(blink::W
     m_webFrame->client()->willStartUsingPeerConnectionHandler(webFrame(), handler);
 }
 
-void FrameLoaderClientImpl::didRequestAutocomplete(PassRefPtr<FormState> formState)
+void FrameLoaderClientImpl::didRequestAutocomplete(HTMLFormElement* form)
 {
     if (m_webFrame->viewImpl() && m_webFrame->viewImpl()->autofillClient())
-        m_webFrame->viewImpl()->autofillClient()->didRequestAutocomplete(m_webFrame, WebFormElement(formState->form()));
+        m_webFrame->viewImpl()->autofillClient()->didRequestAutocomplete(m_webFrame, WebFormElement(form));
 }
 
 bool FrameLoaderClientImpl::allowWebGL(bool enabledPerSettings)
@@ -777,11 +779,11 @@ void FrameLoaderClientImpl::dispatchWillInsertBody()
         m_webFrame->viewImpl()->willInsertBody(m_webFrame);
 }
 
-PassOwnPtr<WebServiceWorkerProvider> FrameLoaderClientImpl::createServiceWorkerProvider(PassOwnPtr<WebServiceWorkerProviderClient> client)
+PassOwnPtr<WebServiceWorkerProvider> FrameLoaderClientImpl::createServiceWorkerProvider()
 {
     if (!m_webFrame->client())
         return nullptr;
-    return adoptPtr(m_webFrame->client()->createServiceWorkerProvider(m_webFrame, client.leakPtr()));
+    return adoptPtr(m_webFrame->client()->createServiceWorkerProvider(m_webFrame));
 }
 
 SharedWorkerRepositoryClient* FrameLoaderClientImpl::sharedWorkerRepositoryClient()

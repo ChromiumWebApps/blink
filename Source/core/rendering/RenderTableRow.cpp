@@ -163,18 +163,15 @@ void RenderTableRow::layout()
     LayoutRectRecorder recorder(*this);
 
     // Table rows do not add translation.
-    LayoutStateMaintainer statePusher(this, LayoutSize());
-
-    bool paginated = view()->layoutState()->isPaginated();
+    LayoutStateMaintainer statePusher(*this, LayoutSize());
 
     for (RenderObject* child = firstChild(); child; child = child->nextSibling()) {
         if (child->isTableCell()) {
             SubtreeLayoutScope layouter(child);
             RenderTableCell* cell = toRenderTableCell(child);
-            if (!cell->needsLayout() && paginated && view()->layoutState()->pageLogicalHeight() && view()->layoutState()->pageLogicalOffset(cell, cell->logicalTop()) != cell->pageLogicalOffset())
-                layouter.setChildNeedsLayout(cell);
-
-            if (child->needsLayout()) {
+            if (!cell->needsLayout())
+                cell->markForPaginationRelayoutIfNeeded(layouter);
+            if (cell->needsLayout()) {
                 cell->computeAndSetBlockDirectionMargins(table());
                 cell->layout();
             }

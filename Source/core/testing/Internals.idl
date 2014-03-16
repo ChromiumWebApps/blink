@@ -140,6 +140,7 @@
     sequence<DOMString> userPreferredLanguages();
     void setUserPreferredLanguages(sequence<DOMString> languages);
 
+    [RaisesException] unsigned long activeDOMObjectCount(Document document);
     [RaisesException] unsigned long wheelEventHandlerCount(Document document);
     [RaisesException] unsigned long touchEventHandlerCount(Document document);
     [RaisesException] LayerRectList touchEventTargetLayerRects(Document document);
@@ -278,4 +279,9 @@
     [RaisesException] void setShouldRevealPassword(Element element, boolean reveal);
 
     [CallWith=ExecutionContext] Promise addOneToPromise(Promise promise);
+
+    void startSpeechInput(Element element);
+    void setValueForUser(Element element, DOMString value);
+
+    DOMString textSurroundingNode(Node node, long x, long y, unsigned long maxLength);
 };

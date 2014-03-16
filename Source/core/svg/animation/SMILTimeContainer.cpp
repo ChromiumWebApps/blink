@@ -26,25 +26,39 @@
 #include "config.h"
 #include "core/svg/animation/SMILTimeContainer.h"
 
+#include "core/animation/AnimationClock.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/frame/FrameView.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/animation/SVGSMILElement.h"
-#include "wtf/CurrentTime.h"
 
 using namespace std;
 
 namespace WebCore {
 
-static const double animationFrameDelay = 0.025;
+static const double initialFrameDelay = 0.025;
 
-SMILTimeContainer::SMILTimeContainer(SVGSVGElement* owner)
+// Every entry-point that calls updateAnimations() should instantiate a
+// DiscardScope to prevent deletion of the ownerElement (and hence itself.)
+class DiscardScope {
+public:
+    explicit DiscardScope(SVGSVGElement& timeContainerOwner) : m_discardScopeElement(&timeContainerOwner) { }
+
+private:
+    RefPtr<SVGSVGElement> m_discardScopeElement;
+};
+
+SMILTimeContainer::SMILTimeContainer(SVGSVGElement& owner)
     : m_beginTime(0)
     , m_pauseTime(0)
     , m_resumeTime(0)
     , m_accumulatedActiveTime(0)
     , m_presetStartTime(0)
+    , m_frameSchedulingState(Idle)
     , m_documentOrderIndexesDirty(false)
-    , m_timer(this, &SMILTimeContainer::timerFired)
+    , m_animationClock(AnimationClock::create())
+    , m_wakeupTimer(this, &SMILTimeContainer::wakeupTimerFired)
     , m_ownerSVGElement(owner)
 #ifndef NDEBUG
     , m_preventScheduledAnimationsChanges(false)
@@ -55,7 +69,7 @@ SMILTimeContainer::SMILTimeContainer(SVGSVGElement* owner)
 SMILTimeContainer::~SMILTimeContainer()
 {
     cancelAnimationFrame();
-    ASSERT(!m_timer.isActive());
+    ASSERT(!m_wakeupTimer.isActive());
 #ifndef NDEBUG
     ASSERT(!m_preventScheduledAnimationsChanges);
 #endif
@@ -99,11 +113,26 @@ void SMILTimeContainer::unschedule(SVGSMILElement* animation, SVGElement* target
     scheduled->remove(idx);
 }
 
+bool SMILTimeContainer::hasAnimations() const
+{
+    return !m_scheduledAnimations.isEmpty();
+}
+
+bool SMILTimeContainer::hasPendingSynchronization() const
+{
+    return m_frameSchedulingState == SynchronizeAnimations && m_wakeupTimer.isActive() && !m_wakeupTimer.nextFireInterval();
+}
+
 void SMILTimeContainer::notifyIntervalsChanged()
 {
+    if (!isStarted())
+        return;
     // Schedule updateAnimations() to be called asynchronously so multiple intervals
     // can change with updateAnimations() only called once at the end.
-    scheduleAnimationFrame();
+    if (hasPendingSynchronization())
+        return;
+    cancelAnimationFrame();
+    scheduleWakeUp(0, SynchronizeAnimations);
 }
 
 SMILTime SMILTimeContainer::elapsed() const
@@ -135,12 +164,25 @@ void SMILTimeContainer::begin()
     // If 'm_presetStartTime' is set, the timeline was modified via setElapsed() before the document began.
     // In this case pass on 'seekToTime=true' to updateAnimations().
     m_beginTime = now - m_presetStartTime;
-    updateAnimations(SMILTime(m_presetStartTime), m_presetStartTime ? true : false);
+    DiscardScope discardScope(m_ownerSVGElement);
+    SMILTime earliestFireTime = updateAnimations(SMILTime(m_presetStartTime), m_presetStartTime ? true : false);
     m_presetStartTime = 0;
 
     if (m_pauseTime) {
         m_pauseTime = now;
-        cancelAnimationFrame();
+        // If updateAnimations() caused new syncbase instance to be generated,
+        // we don't want to cancel those. Excepting that, no frame should've
+        // been scheduled at this point.
+        ASSERT(m_frameSchedulingState == Idle || m_frameSchedulingState == SynchronizeAnimations);
+    } else if (!hasPendingSynchronization()) {
+        ASSERT(isTimelineRunning());
+        // If the timeline is running, and there's pending animation updates,
+        // always perform the first update after the timeline was started using
+        // the wake-up mechanism.
+        if (earliestFireTime.isFinite()) {
+            SMILTime delay = earliestFireTime - elapsed();
+            scheduleWakeUp(std::max(initialFrameDelay, delay.value()), SynchronizeAnimations);
+        }
     }
 }
 
@@ -162,7 +204,7 @@ void SMILTimeContainer::resume()
     m_resumeTime = currentTime();
 
     m_pauseTime = 0;
-    scheduleAnimationFrame();
+    scheduleWakeUp(0, SynchronizeAnimations);
 }
 
 void SMILTimeContainer::setElapsed(SMILTime time)
@@ -173,8 +215,7 @@ void SMILTimeContainer::setElapsed(SMILTime time)
         return;
     }
 
-    if (m_beginTime)
-        cancelAnimationFrame();
+    cancelAnimationFrame();
 
     double now = currentTime();
     m_beginTime = now - time.value();
@@ -200,7 +241,8 @@ void SMILTimeContainer::setElapsed(SMILTime time)
     m_preventScheduledAnimationsChanges = false;
 #endif
 
-    updateAnimations(time, true);
+    DiscardScope discardScope(m_ownerSVGElement);
+    updateAnimationsAndScheduleFrameIfNeeded(time, true);
 }
 
 bool SMILTimeContainer::isTimelineRunning() const
@@ -210,42 +252,49 @@ bool SMILTimeContainer::isTimelineRunning() const
 
 void SMILTimeContainer::scheduleAnimationFrame(SMILTime fireTime)
 {
-    if (!isTimelineRunning())
-        return;
+    ASSERT(isTimelineRunning() && fireTime.isFinite());
+    ASSERT(!m_wakeupTimer.isActive());
 
-    if (!fireTime.isFinite())
-        return;
-
-    SMILTime delay = max(fireTime - elapsed(), SMILTime(animationFrameDelay));
-    m_timer.startOneShot(delay.value());
-}
-
-void SMILTimeContainer::scheduleAnimationFrame()
-{
-    if (!isTimelineRunning())
-        return;
-
-    m_timer.startOneShot(0);
+    SMILTime delay = fireTime - elapsed();
+    if (delay.value() < DocumentTimeline::s_minimumDelay) {
+        serviceOnNextFrame();
+    } else {
+        scheduleWakeUp(delay.value() - DocumentTimeline::s_minimumDelay, FutureAnimationFrame);
+    }
 }
 
 void SMILTimeContainer::cancelAnimationFrame()
 {
-    m_timer.stop();
+    m_frameSchedulingState = Idle;
+    m_wakeupTimer.stop();
 }
 
-void SMILTimeContainer::timerFired(Timer<SMILTimeContainer>*)
+void SMILTimeContainer::scheduleWakeUp(double delayTime, FrameSchedulingState frameSchedulingState)
 {
-    ASSERT(isTimelineRunning());
-    updateAnimations(elapsed());
+    ASSERT(frameSchedulingState == SynchronizeAnimations || frameSchedulingState == FutureAnimationFrame);
+    m_wakeupTimer.startOneShot(delayTime, FROM_HERE);
+    m_frameSchedulingState = frameSchedulingState;
+}
+
+void SMILTimeContainer::wakeupTimerFired(Timer<SMILTimeContainer>*)
+{
+    ASSERT(m_frameSchedulingState == SynchronizeAnimations || m_frameSchedulingState == FutureAnimationFrame);
+    if (m_frameSchedulingState == FutureAnimationFrame) {
+        ASSERT(isTimelineRunning());
+        m_frameSchedulingState = Idle;
+        serviceOnNextFrame();
+    } else {
+        m_frameSchedulingState = Idle;
+        DiscardScope discardScope(m_ownerSVGElement);
+        updateAnimationsAndScheduleFrameIfNeeded(elapsed());
+    }
 }
 
 void SMILTimeContainer::updateDocumentOrderIndexes()
 {
     unsigned timingElementCount = 0;
-    for (Element* element = m_ownerSVGElement; element; element = ElementTraversal::next(*element, m_ownerSVGElement)) {
-        if (isSVGSMILElement(*element))
-            toSVGSMILElement(element)->setDocumentOrderIndex(timingElementCount++);
-    }
+    for (SVGSMILElement* element = Traversal<SVGSMILElement>::firstWithin(m_ownerSVGElement); element; element = Traversal<SVGSMILElement>::next(*element, &m_ownerSVGElement))
+        element->setDocumentOrderIndex(timingElementCount++);
     m_documentOrderIndexesDirty = false;
 }
 
@@ -266,7 +315,60 @@ struct PriorityCompare {
     SMILTime m_elapsed;
 };
 
-void SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
+Document& SMILTimeContainer::document() const
+{
+    return m_ownerSVGElement.document();
+}
+
+AnimationClock& SMILTimeContainer::animationClock() const
+{
+    ASSERT(m_animationClock);
+    return *m_animationClock;
+}
+
+double SMILTimeContainer::currentTime() const
+{
+    return animationClock().currentTime();
+}
+
+void SMILTimeContainer::serviceOnNextFrame()
+{
+    if (document().view()) {
+        document().view()->scheduleAnimation();
+        m_frameSchedulingState = AnimationFrame;
+    }
+}
+
+void SMILTimeContainer::serviceAnimations(double monotonicAnimationStartTime)
+{
+    if (m_frameSchedulingState != AnimationFrame)
+        return;
+
+    m_frameSchedulingState = Idle;
+    animationClock().updateTime(monotonicAnimationStartTime);
+    DiscardScope discardScope(m_ownerSVGElement);
+    updateAnimationsAndScheduleFrameIfNeeded(elapsed());
+    animationClock().unfreeze();
+}
+
+void SMILTimeContainer::updateAnimationsAndScheduleFrameIfNeeded(SMILTime elapsed, bool seekToTime)
+{
+    SMILTime earliestFireTime = updateAnimations(elapsed, seekToTime);
+    // If updateAnimations() ended up triggering a synchronization (most likely
+    // via syncbases), then give that priority.
+    if (hasPendingSynchronization())
+        return;
+
+    if (!isTimelineRunning())
+        return;
+
+    if (!earliestFireTime.isFinite())
+        return;
+
+    scheduleAnimationFrame(earliestFireTime);
+}
+
+SMILTime SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
 {
     SMILTime earliestFireTime = SMILTime::unresolved();
 
@@ -326,8 +428,7 @@ void SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
 #ifndef NDEBUG
         m_preventScheduledAnimationsChanges = false;
 #endif
-        scheduleAnimationFrame(earliestFireTime);
-        return;
+        return earliestFireTime;
     }
 
     // Apply results to target elements.
@@ -337,8 +438,6 @@ void SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
 #ifndef NDEBUG
     m_preventScheduledAnimationsChanges = false;
 #endif
-
-    scheduleAnimationFrame(earliestFireTime);
 
     for (unsigned i = 0; i < animationsToApplySize; ++i) {
         if (animationsToApply[i]->inDocument() && animationsToApply[i]->isSVGDiscardElement()) {
@@ -355,6 +454,7 @@ void SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
             }
         }
     }
+    return earliestFireTime;
 }
 
 }

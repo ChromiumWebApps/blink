@@ -47,10 +47,14 @@ public:
     };
 
     static String failedToConstruct(const String& type, const String& detail = String());
+    static String failedToEnumerate(const String& type, const String& detail = String());
     static String failedToExecute(const String& method, const String& type, const String& detail = String());
     static String failedToGet(const String& property, const String& type, const String& detail);
     static String failedToSet(const String& property, const String& type, const String& detail);
     static String failedToDelete(const String& property, const String& type, const String& detail);
+    static String failedToGetIndexed(const String& type, const String& detail);
+    static String failedToSetIndexed(const String& type, const String& detail);
+    static String failedToDeleteIndexed(const String& type, const String& detail);
 
     static String incorrectPropertyType(const String& property, const String& detail);
 
@@ -110,11 +114,11 @@ public:
         result.append(" provided (");
         result.append(formatNumber(given));
         result.append(") is outside the range ");
-        result.append(lowerBound == ExclusiveBound ? '(' : '[');
+        result.append(lowerType == ExclusiveBound ? '(' : '[');
         result.append(formatNumber(lowerBound));
         result.append(", ");
         result.append(formatNumber(upperBound));
-        result.append(upperBound == ExclusiveBound ? ')' : ']');
+        result.append(upperType == ExclusiveBound ? ')' : ']');
         result.append('.');
         return result.toString();
     }

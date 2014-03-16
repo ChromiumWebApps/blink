@@ -47,11 +47,6 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<SVGSpreadMe
     return entries;
 }
 
-// Animated property definitions
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGGradientElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 SVGGradientElement::SVGGradientElement(const QualifiedName& tagName, Document& document)
     : SVGElement(tagName, document)
     , SVGURIReference(this)
@@ -63,7 +58,6 @@ SVGGradientElement::SVGGradientElement(const QualifiedName& tagName, Document& d
     addToPropertyMap(m_gradientTransform);
     addToPropertyMap(m_spreadMethod);
     addToPropertyMap(m_gradientUnits);
-    registerAnimatedPropertiesForSVGGradientElement();
 }
 
 bool SVGGradientElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -130,12 +124,7 @@ Vector<Gradient::ColorStop> SVGGradientElement::buildStops()
     Vector<Gradient::ColorStop> stops;
 
     float previousOffset = 0.0f;
-    for (Node* n = firstChild(); n; n = n->nextSibling()) {
-        SVGElement* element = n->isSVGElement() ? toSVGElement(n) : 0;
-        if (!element || !element->isGradientStop())
-            continue;
-
-        SVGStopElement* stop = toSVGStopElement(element);
+    for (SVGStopElement* stop = Traversal<SVGStopElement>::firstChild(*this); stop; stop = Traversal<SVGStopElement>::nextSibling(*stop)) {
         Color color = stop->stopColorIncludingOpacity();
 
         // Figure out right monotonic offset

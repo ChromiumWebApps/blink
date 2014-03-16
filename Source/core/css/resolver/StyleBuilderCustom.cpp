@@ -67,7 +67,7 @@
 #include "core/css/resolver/FontBuilder.h"
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/TransformBuilder.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/rendering/style/CounterContent.h"
 #include "core/rendering/style/CursorList.h"
@@ -77,7 +77,6 @@
 #include "core/rendering/style/SVGRenderStyle.h"
 #include "core/rendering/style/SVGRenderStyleDefs.h"
 #include "core/rendering/style/StyleGeneratedImage.h"
-#include "core/svg/SVGColor.h"
 #include "core/svg/SVGPaint.h"
 #include "platform/fonts/FontDescription.h"
 #include "wtf/MathExtras.h"
@@ -156,7 +155,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyColor(StyleResolverState& state
     if (state.applyPropertyToRegularStyle())
         state.style()->setColor(state.document().textLinkColors().colorFromPrimitiveValue(primitiveValue, state.style()->color()));
     if (state.applyPropertyToVisitedLinkStyle())
-        state.style()->setVisitedLinkColor(state.document().textLinkColors().colorFromPrimitiveValue(primitiveValue, state.style()->color(), state.element()->isLink() /* forVisitedLink */));
+        state.style()->setVisitedLinkColor(state.document().textLinkColors().colorFromPrimitiveValue(primitiveValue, state.style()->color(), true));
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyCursor(StyleResolverState& state)
@@ -236,7 +235,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyDisplay(StyleResolverState& sta
 
 void StyleBuilderFunctions::applyInitialCSSPropertyFontFamily(StyleResolverState& state)
 {
-    state.fontBuilder().setFontFamilyInitial(state.style()->effectiveZoom());
+    state.fontBuilder().setFontFamilyInitial();
 }
 
 void StyleBuilderFunctions::applyInheritCSSPropertyFontFamily(StyleResolverState& state)
@@ -246,22 +245,22 @@ void StyleBuilderFunctions::applyInheritCSSPropertyFontFamily(StyleResolverState
 
 void StyleBuilderFunctions::applyValueCSSPropertyFontFamily(StyleResolverState& state, CSSValue* value)
 {
-    state.fontBuilder().setFontFamilyValue(value, state.style()->effectiveZoom());
+    state.fontBuilder().setFontFamilyValue(value);
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyFontSize(StyleResolverState& state)
 {
-    state.fontBuilder().setFontSizeInitial(state.style()->effectiveZoom());
+    state.fontBuilder().setFontSizeInitial();
 }
 
 void StyleBuilderFunctions::applyInheritCSSPropertyFontSize(StyleResolverState& state)
 {
-    state.fontBuilder().setFontSizeInherit(state.parentFontDescription(), state.style()->effectiveZoom());
+    state.fontBuilder().setFontSizeInherit(state.parentFontDescription());
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyFontSize(StyleResolverState& state, CSSValue* value)
 {
-    state.fontBuilder().setFontSizeValue(value, state.parentStyle(), state.rootElementStyle(), state.style()->effectiveZoom());
+    state.fontBuilder().setFontSizeValue(value, state.parentStyle(), state.rootElementStyle());
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyFontWeight(StyleResolverState& state)
@@ -308,7 +307,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyLineHeight(StyleResolverState& 
         lineHeight = RenderStyle::initialLineHeight();
     } else if (primitiveValue->isLength()) {
         float multiplier = state.style()->effectiveZoom();
-        if (Frame* frame = state.document().frame())
+        if (LocalFrame* frame = state.document().frame())
             multiplier *= frame->textZoomFactor();
         lineHeight = primitiveValue->computeLength<Length>(state.cssToLengthConversionData().copyWithAdjustedZoom(multiplier));
     } else if (primitiveValue->isPercentage()) {
@@ -317,7 +316,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyLineHeight(StyleResolverState& 
         lineHeight = Length(primitiveValue->getDoubleValue() * 100.0, Percent);
     } else if (primitiveValue->isCalculated()) {
         double multiplier = state.style()->effectiveZoom();
-        if (Frame* frame = state.document().frame())
+        if (LocalFrame* frame = state.document().frame())
             multiplier *= frame->textZoomFactor();
         Length zoomedLength = Length(primitiveValue->cssCalcValue()->toCalcValue(state.cssToLengthConversionData().copyWithAdjustedZoom(multiplier)));
         lineHeight = Length(valueForLength(zoomedLength, state.style()->fontSize()), Fixed);
@@ -1074,13 +1073,14 @@ static bool degreeToGlyphOrientation(CSSPrimitiveValue* primitiveValue, EGlyphOr
     return true;
 }
 
-static Color colorFromSVGColorCSSValue(SVGColor* svgColor, const Color& fgColor)
+static Color colorFromSVGPaintCSSValue(SVGPaint* svgPaint, const Color& fgColor)
 {
     Color color;
-    if (svgColor->colorType() == SVGColor::SVG_COLORTYPE_CURRENTCOLOR)
+    if (svgPaint->paintType() == SVGPaint::SVG_PAINTTYPE_CURRENTCOLOR
+        || svgPaint->paintType() == SVGPaint::SVG_PAINTTYPE_URI_CURRENTCOLOR)
         color = fgColor;
     else
-        color = svgColor->color();
+        color = svgPaint->color();
     return color;
 }
 
@@ -2077,7 +2077,7 @@ void StyleBuilder::oldApplyProperty(CSSPropertyID id, StyleResolverState& state,
         }
         if (value->isSVGPaint()) {
             SVGPaint* svgPaint = toSVGPaint(value);
-            svgStyle->setFillPaint(svgPaint->paintType(), colorFromSVGColorCSSValue(svgPaint, state.style()->color()), svgPaint->uri(), state.applyPropertyToRegularStyle(), state.applyPropertyToVisitedLinkStyle());
+            svgStyle->setFillPaint(svgPaint->paintType(), colorFromSVGPaintCSSValue(svgPaint, state.style()->color()), svgPaint->uri(), state.applyPropertyToRegularStyle(), state.applyPropertyToVisitedLinkStyle());
         }
         break;
     }
@@ -2095,7 +2095,7 @@ void StyleBuilder::oldApplyProperty(CSSPropertyID id, StyleResolverState& state,
         }
         if (value->isSVGPaint()) {
             SVGPaint* svgPaint = toSVGPaint(value);
-            svgStyle->setStrokePaint(svgPaint->paintType(), colorFromSVGColorCSSValue(svgPaint, state.style()->color()), svgPaint->uri(), state.applyPropertyToRegularStyle(), state.applyPropertyToVisitedLinkStyle());
+            svgStyle->setStrokePaint(svgPaint->paintType(), colorFromSVGPaintCSSValue(svgPaint, state.style()->color()), svgPaint->uri(), state.applyPropertyToRegularStyle(), state.applyPropertyToVisitedLinkStyle());
         }
         break;
     }
@@ -2126,22 +2126,28 @@ void StyleBuilder::oldApplyProperty(CSSPropertyID id, StyleResolverState& state,
     case CSSPropertyStopColor:
     {
         HANDLE_SVG_INHERIT_AND_INITIAL(stopColor, StopColor);
-        if (value->isSVGColor())
-            state.style()->accessSVGStyle()->setStopColor(colorFromSVGColorCSSValue(toSVGColor(value), state.style()->color()));
+        if (primitiveValue->isRGBColor())
+            state.style()->accessSVGStyle()->setStopColor(primitiveValue->getRGBA32Value());
+        else if (primitiveValue->getValueID() == CSSValueCurrentcolor)
+            state.style()->accessSVGStyle()->setStopColor(state.style()->color());
         break;
     }
     case CSSPropertyLightingColor:
     {
         HANDLE_SVG_INHERIT_AND_INITIAL(lightingColor, LightingColor);
-        if (value->isSVGColor())
-            state.style()->accessSVGStyle()->setLightingColor(colorFromSVGColorCSSValue(toSVGColor(value), state.style()->color()));
+        if (primitiveValue->isRGBColor())
+            state.style()->accessSVGStyle()->setLightingColor(primitiveValue->getRGBA32Value());
+        else if (primitiveValue->getValueID() == CSSValueCurrentcolor)
+            state.style()->accessSVGStyle()->setLightingColor(state.style()->color());
         break;
     }
     case CSSPropertyFloodColor:
     {
         HANDLE_SVG_INHERIT_AND_INITIAL(floodColor, FloodColor);
-        if (value->isSVGColor())
-            state.style()->accessSVGStyle()->setFloodColor(colorFromSVGColorCSSValue(toSVGColor(value), state.style()->color()));
+        if (primitiveValue->isRGBColor())
+            state.style()->accessSVGStyle()->setFloodColor(primitiveValue->getRGBA32Value());
+        else if (primitiveValue->getValueID() == CSSValueCurrentcolor)
+            state.style()->accessSVGStyle()->setFloodColor(state.style()->color());
         break;
     }
     case CSSPropertyGlyphOrientationHorizontal:

@@ -404,7 +404,7 @@ InspectorTest.createHeapSnapshotMockFactories();
 
 InspectorTest.startProfilerTest = function(callback)
 {
-    WebInspector.showPanel("profiles");
+    WebInspector.inspectorView.showPanel("profiles");
     WebInspector.settings.showAdvancedHeapSnapshotProperties.set(true);
 
     InspectorTest.addResult("Profiler was enabled.");
@@ -529,7 +529,7 @@ InspectorTest.clickColumn = function(column, callback)
 
     function sortingComplete()
     {
-        InspectorTest._currentGrid().removeEventListener("sorting complete", sortingComplete, this);
+        InspectorTest._currentGrid().removeEventListener(WebInspector.HeapSnapshotSortableDataGrid.Events.SortingComplete, sortingComplete, this);
         InspectorTest.assertEquals(column.identifier, this._currentGrid().sortColumnIdentifier(), "unexpected sorting");
         column.sort = this._currentGrid().sortOrder();
         function callCallback()
@@ -538,7 +538,7 @@ InspectorTest.clickColumn = function(column, callback)
         }
         setTimeout(callCallback, 0);
     }
-    InspectorTest._currentGrid().addEventListener("sorting complete", sortingComplete, this);
+    InspectorTest._currentGrid().addEventListener(WebInspector.HeapSnapshotSortableDataGrid.Events.SortingComplete, sortingComplete, this);
     this._currentGrid()._clickInHeaderCell(event);
 };
 
@@ -552,7 +552,7 @@ InspectorTest.clickRowAndGetRetainers = function(row, callback)
         }
     };
     this._currentGrid()._mouseDownInDataTable(event);
-    var rootNode = InspectorTest.currentProfileView().retainmentDataGrid.rootNode();
+    var rootNode = InspectorTest.currentProfileView()._retainmentDataGrid.rootNode();
     function populateComplete()
     {
         rootNode.removeEventListener(WebInspector.HeapSnapshotGridNode.Events.PopulateComplete, populateComplete, this);
@@ -688,7 +688,9 @@ InspectorTest.switchToView = function(title, callback)
 {
     callback = InspectorTest.safeWrap(callback);
     var view = WebInspector.panels.profiles.visibleView;
-    view.changeView(title, callback);
+    view._changePerspectiveAndWait(title, callback);
+    // Increase the grid container height so the viewport don't limit the number of nodes.
+    InspectorTest._currentGrid().scrollContainer.style.height = "10000px";
 };
 
 InspectorTest.takeAndOpenSnapshot = function(generator, callback)
@@ -724,7 +726,7 @@ InspectorTest.currentProfileView = function()
 
 InspectorTest._currentGrid = function()
 {
-    return this.currentProfileView().dataGrid;
+    return this.currentProfileView()._dataGrid;
 };
 
 InspectorTest._snapshotViewShown = function()
@@ -732,13 +734,13 @@ InspectorTest._snapshotViewShown = function()
     if (InspectorTest._takeAndOpenSnapshotCallback) {
         var callback = InspectorTest._takeAndOpenSnapshotCallback;
         InspectorTest._takeAndOpenSnapshotCallback = null;
-        var dataGrid = this.dataGrid;
+        var dataGrid = this._dataGrid;
         function sortingComplete()
         {
-            dataGrid.removeEventListener("sorting complete", sortingComplete, null);
+            dataGrid.removeEventListener(WebInspector.HeapSnapshotSortableDataGrid.Events.SortingComplete, sortingComplete, null);
             callback();
         }
-        dataGrid.addEventListener("sorting complete", sortingComplete, null);
+        dataGrid.addEventListener(WebInspector.HeapSnapshotSortableDataGrid.Events.SortingComplete, sortingComplete, null);
     }
 };
 

@@ -27,7 +27,6 @@
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLFormControlElement.h"
 #include "core/html/forms/RadioButtonGroupScope.h"
-#include "core/loader/FormState.h"
 #include "core/loader/FormSubmission.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/WeakPtr.h"
@@ -114,7 +113,6 @@ public:
     const Vector<FormAssociatedElement*>& associatedElements() const;
     const Vector<HTMLImageElement*>& imageElements();
 
-    void getTextFieldValues(StringPairVector& fieldNamesAndValues) const;
     void anonymousNamedGetter(const AtomicString& name, bool&, RefPtr<RadioNodeList>&, bool&, RefPtr<Element>&);
 
 private:
@@ -139,8 +137,8 @@ private:
 
     void scheduleFormSubmission(PassRefPtr<FormSubmission>);
 
-    void collectAssociatedElements(Node* root, Vector<FormAssociatedElement*>&) const;
-    void collectImageElements(Node* root, Vector<HTMLImageElement*>&);
+    void collectAssociatedElements(Node& root, Vector<FormAssociatedElement*>&) const;
+    void collectImageElements(Node& root, Vector<HTMLImageElement*>&);
 
     // Returns true if the submission should proceed.
     bool validateInteractively(Event*);
@@ -184,8 +182,6 @@ private:
     Vector<RefPtr<Event> > m_pendingAutocompleteEvents;
     Timer<HTMLFormElement> m_requestAutocompleteTimer;
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLFormElement, hasTagName(HTMLNames::formTag));
 
 } // namespace WebCore
 

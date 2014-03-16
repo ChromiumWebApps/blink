@@ -33,9 +33,9 @@
 #include "WebSettings.h"
 #include "WebViewClient.h"
 #include "WebViewImpl.h"
-#include "core/rendering/CompositedLayerMapping.h"
-#include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/compositing/CompositedLayerMapping.h"
+#include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayer.h"
@@ -108,7 +108,7 @@ public:
     }
 
     WebViewImpl* webViewImpl() const { return m_helper.webViewImpl(); }
-    Frame* frame() const { return m_helper.webViewImpl()->mainFrameImpl()->frame(); }
+    LocalFrame* frame() const { return m_helper.webViewImpl()->mainFrameImpl()->frame(); }
 
 protected:
     std::string m_baseURL;

@@ -31,12 +31,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFESpecularLightingElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFESpecularLightingElement::SVGFESpecularLightingElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feSpecularLightingTag, document)
     , m_specularConstant(SVGAnimatedNumber::create(this, SVGNames::specularConstantAttr, SVGNumber::create(1)))
@@ -52,7 +46,6 @@ inline SVGFESpecularLightingElement::SVGFESpecularLightingElement(Document& docu
     addToPropertyMap(m_surfaceScale);
     addToPropertyMap(m_kernelUnitLength);
     addToPropertyMap(m_in1);
-    registerAnimatedPropertiesForSVGFESpecularLightingElement();
 }
 
 PassRefPtr<SVGFESpecularLightingElement> SVGFESpecularLightingElement::create(Document& document)
@@ -116,7 +109,7 @@ bool SVGFESpecularLightingElement::setFilterEffectAttribute(FilterEffect* effect
         return specularLighting->setSpecularExponent(m_specularExponent->currentValue()->value());
 
     LightSource* lightSource = const_cast<LightSource*>(specularLighting->lightSource());
-    SVGFELightElement* lightElement = SVGFELightElement::findLightElement(this);
+    SVGFELightElement* lightElement = SVGFELightElement::findLightElement(*this);
     ASSERT(lightSource);
     ASSERT(lightElement);
 
@@ -172,7 +165,7 @@ void SVGFESpecularLightingElement::svgAttributeChanged(const QualifiedName& attr
 
 void SVGFESpecularLightingElement::lightElementAttributeChanged(const SVGFELightElement* lightElement, const QualifiedName& attrName)
 {
-    if (SVGFELightElement::findLightElement(this) != lightElement)
+    if (SVGFELightElement::findLightElement(*this) != lightElement)
         return;
 
     // The light element has different attribute names so attrName can identify the requested attribute.
@@ -186,7 +179,7 @@ PassRefPtr<FilterEffect> SVGFESpecularLightingElement::build(SVGFilterBuilder* f
     if (!input1)
         return nullptr;
 
-    RefPtr<LightSource> lightSource = SVGFELightElement::findLightSource(this);
+    RefPtr<LightSource> lightSource = SVGFELightElement::findLightSource(*this);
     if (!lightSource)
         return nullptr;
 

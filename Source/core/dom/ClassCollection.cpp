@@ -35,7 +35,7 @@
 
 namespace WebCore {
 
-ClassCollection::ClassCollection(ContainerNode* rootNode, const AtomicString& classNames)
+ClassCollection::ClassCollection(ContainerNode& rootNode, const AtomicString& classNames)
     : HTMLCollection(rootNode, ClassCollectionType, DoesNotOverrideItemAfter)
     , m_classNames(classNames, document().inQuirksMode())
     , m_originalClassNames(classNames)
@@ -44,7 +44,7 @@ ClassCollection::ClassCollection(ContainerNode* rootNode, const AtomicString& cl
 
 ClassCollection::~ClassCollection()
 {
-    ownerNode()->nodeLists()->removeCache(this, ClassCollectionType, m_originalClassNames);
+    ownerNode().nodeLists()->removeCache(this, ClassCollectionType, m_originalClassNames);
 }
 
 } // namespace WebCore

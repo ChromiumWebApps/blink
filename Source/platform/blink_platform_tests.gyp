@@ -55,12 +55,37 @@
       '<@(platform_test_files)',
     ],
     'conditions': [
-      ['os_posix==1 and OS!="mac" and OS!="android" and OS!="ios" and linux_use_tcmalloc==1', {
+      # TODO(dmikurube): Kill linux_use_tcmalloc. http://crbug.com/345554
+      ['os_posix==1 and OS!="mac" and OS!="android" and OS!="ios" and ((use_allocator!="none" and use_allocator!="see_use_tcmalloc") or (use_allocator=="see_use_tcmalloc" and linux_use_tcmalloc==1))', {
         'dependencies': [
           '<(DEPTH)/base/base.gyp:base',
           '<(DEPTH)/base/allocator/allocator.gyp:allocator',
         ]
       }],
-    ]
+      ['OS=="android" and gtest_target_type == "shared_library"', {
+        'type': 'shared_library',
+        'dependencies': [
+          '<(DEPTH)/testing/android/native_test.gyp:native_test_native_code',
+          '<(DEPTH)/tools/android/forwarder2/forwarder.gyp:forwarder2',
+        ],
+      }],
+    ],
   }],
+  'conditions': [
+    ['OS=="android" and android_webview_build==0 and gtest_target_type == "shared_library"', {
+      'targets': [{
+        'target_name': 'blink_platform_unittests_apk',
+        'type': 'none',
+        'dependencies': [
+          '<(DEPTH)/base/base.gyp:base_java',
+          '<(DEPTH)/net/net.gyp:net_java',
+          'blink_platform_unittests',
+        ],
+        'variables': {
+          'test_suite_name': 'blink_platform_unittests',
+        },
+        'includes': [ '../../../../build/apk_test.gypi' ],
+      }],
+    }],
+  ],
 }

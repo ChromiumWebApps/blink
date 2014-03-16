@@ -35,8 +35,7 @@ class CSSStyleSheet;
 class MutableStylePropertySet;
 class StylePropertySet;
 
-class StyleRuleBase : public RefCountedWillBeRefCountedGarbageCollected<StyleRuleBase> {
-    DECLARE_GC_INFO;
+class StyleRuleBase : public RefCountedWillBeGarbageCollectedFinalized<StyleRuleBase> {
     WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
     enum Type {
@@ -67,7 +66,7 @@ public:
     bool isImportRule() const { return type() == Import; }
     bool isFilterRule() const { return type() == Filter; }
 
-    PassRefPtr<StyleRuleBase> copy() const;
+    PassRefPtrWillBeRawPtr<StyleRuleBase> copy() const;
 
 #if !ENABLE(OILPAN)
     void deref()
@@ -78,8 +77,8 @@ public:
 #endif // !ENABLE(OILPAN)
 
     // FIXME: There shouldn't be any need for the null parent version.
-    PassRefPtr<CSSRule> createCSSOMWrapper(CSSStyleSheet* parentSheet = 0) const;
-    PassRefPtr<CSSRule> createCSSOMWrapper(CSSRule* parentRule) const;
+    PassRefPtrWillBeRawPtr<CSSRule> createCSSOMWrapper(CSSStyleSheet* parentSheet = 0) const;
+    PassRefPtrWillBeRawPtr<CSSRule> createCSSOMWrapper(CSSRule* parentRule) const;
 
     void trace(Visitor*);
     void traceAfterDispatch(Visitor*) { };
@@ -94,7 +93,7 @@ protected:
 private:
     void destroy();
 
-    PassRefPtr<CSSRule> createCSSOMWrapper(CSSStyleSheet* parentSheet, CSSRule* parentRule) const;
+    PassRefPtrWillBeRawPtr<CSSRule> createCSSOMWrapper(CSSStyleSheet* parentSheet, CSSRule* parentRule) const;
 
     unsigned m_type : 5;
 };
@@ -102,19 +101,19 @@ private:
 class StyleRule : public StyleRuleBase {
     WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
-    static PassRefPtrWillBeRawPtr<StyleRule> create() { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRule()); }
+    static PassRefPtrWillBeRawPtr<StyleRule> create() { return adoptRefWillBeNoop(new StyleRule()); }
 
     ~StyleRule();
 
     const CSSSelectorList& selectorList() const { return m_selectorList; }
-    const StylePropertySet* properties() const { return m_properties.get(); }
-    MutableStylePropertySet* mutableProperties();
+    const StylePropertySet& properties() const { return *m_properties; }
+    MutableStylePropertySet& mutableProperties();
 
     void parserAdoptSelectorVector(Vector<OwnPtr<CSSParserSelector> >& selectors) { m_selectorList.adoptSelectorVector(selectors); }
     void wrapperAdoptSelectorList(CSSSelectorList& selectors) { m_selectorList.adopt(selectors); }
     void setProperties(PassRefPtr<StylePropertySet>);
 
-    PassRefPtr<StyleRule> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRule(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRule> copy() const { return adoptRefWillBeNoop(new StyleRule(*this)); }
 
     static unsigned averageSizeInBytes();
 
@@ -124,22 +123,22 @@ private:
     StyleRule();
     StyleRule(const StyleRule&);
 
-    RefPtr<StylePropertySet> m_properties;
+    RefPtr<StylePropertySet> m_properties; // Cannot be null.
     CSSSelectorList m_selectorList;
 };
 
 class StyleRuleFontFace : public StyleRuleBase {
 public:
-    static PassRefPtrWillBeRawPtr<StyleRuleFontFace> create() { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleFontFace); }
+    static PassRefPtrWillBeRawPtr<StyleRuleFontFace> create() { return adoptRefWillBeNoop(new StyleRuleFontFace); }
 
     ~StyleRuleFontFace();
 
-    const StylePropertySet* properties() const { return m_properties.get(); }
-    MutableStylePropertySet* mutableProperties();
+    const StylePropertySet& properties() const { return *m_properties; }
+    MutableStylePropertySet& mutableProperties();
 
     void setProperties(PassRefPtr<StylePropertySet>);
 
-    PassRefPtr<StyleRuleFontFace> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleFontFace(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRuleFontFace> copy() const { return adoptRefWillBeNoop(new StyleRuleFontFace(*this)); }
 
     void traceAfterDispatch(Visitor* visitor) { StyleRuleBase::traceAfterDispatch(visitor); }
 
@@ -147,24 +146,24 @@ private:
     StyleRuleFontFace();
     StyleRuleFontFace(const StyleRuleFontFace&);
 
-    RefPtr<StylePropertySet> m_properties;
+    RefPtr<StylePropertySet> m_properties; // Cannot be null.
 };
 
 class StyleRulePage : public StyleRuleBase {
 public:
-    static PassRefPtrWillBeRawPtr<StyleRulePage> create() { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRulePage); }
+    static PassRefPtrWillBeRawPtr<StyleRulePage> create() { return adoptRefWillBeNoop(new StyleRulePage); }
 
     ~StyleRulePage();
 
     const CSSSelector* selector() const { return m_selectorList.first(); }
-    const StylePropertySet* properties() const { return m_properties.get(); }
-    MutableStylePropertySet* mutableProperties();
+    const StylePropertySet& properties() const { return *m_properties; }
+    MutableStylePropertySet& mutableProperties();
 
     void parserAdoptSelectorVector(Vector<OwnPtr<CSSParserSelector> >& selectors) { m_selectorList.adoptSelectorVector(selectors); }
     void wrapperAdoptSelectorList(CSSSelectorList& selectors) { m_selectorList.adopt(selectors); }
     void setProperties(PassRefPtr<StylePropertySet>);
 
-    PassRefPtr<StyleRulePage> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRulePage(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRulePage> copy() const { return adoptRefWillBeNoop(new StyleRulePage(*this)); }
 
     void traceAfterDispatch(Visitor* visitor) { StyleRuleBase::traceAfterDispatch(visitor); }
 
@@ -172,62 +171,62 @@ private:
     StyleRulePage();
     StyleRulePage(const StyleRulePage&);
 
-    RefPtr<StylePropertySet> m_properties;
+    RefPtr<StylePropertySet> m_properties; // Cannot be null.
     CSSSelectorList m_selectorList;
 };
 
 class StyleRuleGroup : public StyleRuleBase {
 public:
-    const Vector<RefPtr<StyleRuleBase> >& childRules() const { return m_childRules; }
+    const WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& childRules() const { return m_childRules; }
 
-    void wrapperInsertRule(unsigned, PassRefPtr<StyleRuleBase>);
+    void wrapperInsertRule(unsigned, PassRefPtrWillBeRawPtr<StyleRuleBase>);
     void wrapperRemoveRule(unsigned);
 
-    void traceAfterDispatch(Visitor* visitor) { StyleRuleBase::traceAfterDispatch(visitor); }
+    void traceAfterDispatch(Visitor*);
 
 protected:
-    StyleRuleGroup(Type, Vector<RefPtr<StyleRuleBase> >& adoptRule);
+    StyleRuleGroup(Type, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRule);
     StyleRuleGroup(const StyleRuleGroup&);
 
 private:
-    Vector<RefPtr<StyleRuleBase> > m_childRules;
+    WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> > m_childRules;
 };
 
 class StyleRuleMedia : public StyleRuleGroup {
 public:
-    static PassRefPtrWillBeRawPtr<StyleRuleMedia> create(PassRefPtr<MediaQuerySet> media, Vector<RefPtr<StyleRuleBase> >& adoptRules)
+    static PassRefPtrWillBeRawPtr<StyleRuleMedia> create(PassRefPtrWillBeRawPtr<MediaQuerySet> media, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRules)
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleMedia(media, adoptRules));
+        return adoptRefWillBeNoop(new StyleRuleMedia(media, adoptRules));
     }
 
     MediaQuerySet* mediaQueries() const { return m_mediaQueries.get(); }
 
-    PassRefPtr<StyleRuleMedia> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleMedia(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRuleMedia> copy() const { return adoptRefWillBeNoop(new StyleRuleMedia(*this)); }
 
-    void traceAfterDispatch(Visitor* visitor) { StyleRuleGroup::traceAfterDispatch(visitor); }
+    void traceAfterDispatch(Visitor*);
 
 private:
-    StyleRuleMedia(PassRefPtr<MediaQuerySet>, Vector<RefPtr<StyleRuleBase> >& adoptRules);
+    StyleRuleMedia(PassRefPtrWillBeRawPtr<MediaQuerySet>, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRules);
     StyleRuleMedia(const StyleRuleMedia&);
 
-    RefPtr<MediaQuerySet> m_mediaQueries;
+    RefPtrWillBeMember<MediaQuerySet> m_mediaQueries;
 };
 
 class StyleRuleSupports : public StyleRuleGroup {
 public:
-    static PassRefPtrWillBeRawPtr<StyleRuleSupports> create(const String& conditionText, bool conditionIsSupported, Vector<RefPtr<StyleRuleBase> >& adoptRules)
+    static PassRefPtrWillBeRawPtr<StyleRuleSupports> create(const String& conditionText, bool conditionIsSupported, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRules)
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleSupports(conditionText, conditionIsSupported, adoptRules));
+        return adoptRefWillBeNoop(new StyleRuleSupports(conditionText, conditionIsSupported, adoptRules));
     }
 
     String conditionText() const { return m_conditionText; }
     bool conditionIsSupported() const { return m_conditionIsSupported; }
-    PassRefPtr<StyleRuleSupports> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleSupports(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRuleSupports> copy() const { return adoptRefWillBeNoop(new StyleRuleSupports(*this)); }
 
     void traceAfterDispatch(Visitor* visitor) { StyleRuleGroup::traceAfterDispatch(visitor); }
 
 private:
-    StyleRuleSupports(const String& conditionText, bool conditionIsSupported, Vector<RefPtr<StyleRuleBase> >& adoptRules);
+    StyleRuleSupports(const String& conditionText, bool conditionIsSupported, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRules);
     StyleRuleSupports(const StyleRuleSupports&);
 
     String m_conditionText;
@@ -236,16 +235,16 @@ private:
 
 class StyleRuleViewport : public StyleRuleBase {
 public:
-    static PassRefPtrWillBeRawPtr<StyleRuleViewport> create() { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleViewport); }
+    static PassRefPtrWillBeRawPtr<StyleRuleViewport> create() { return adoptRefWillBeNoop(new StyleRuleViewport); }
 
     ~StyleRuleViewport();
 
-    const StylePropertySet* properties() const { return m_properties.get(); }
-    MutableStylePropertySet* mutableProperties();
+    const StylePropertySet& properties() const { return *m_properties; }
+    MutableStylePropertySet& mutableProperties();
 
     void setProperties(PassRefPtr<StylePropertySet>);
 
-    PassRefPtr<StyleRuleViewport> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleViewport(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRuleViewport> copy() const { return adoptRefWillBeNoop(new StyleRuleViewport(*this)); }
 
     void traceAfterDispatch(Visitor* visitor) { StyleRuleBase::traceAfterDispatch(visitor); }
 
@@ -253,23 +252,23 @@ private:
     StyleRuleViewport();
     StyleRuleViewport(const StyleRuleViewport&);
 
-    RefPtr<StylePropertySet> m_properties;
+    RefPtr<StylePropertySet> m_properties; // Cannot be null
 };
 
 class StyleRuleFilter : public StyleRuleBase {
 public:
-    static PassRefPtrWillBeRawPtr<StyleRuleFilter> create(const String& filterName) { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleFilter(filterName)); }
+    static PassRefPtrWillBeRawPtr<StyleRuleFilter> create(const String& filterName) { return adoptRefWillBeNoop(new StyleRuleFilter(filterName)); }
 
     ~StyleRuleFilter();
 
     const String& filterName() const { return m_filterName; }
 
-    const StylePropertySet* properties() const { return m_properties.get(); }
-    MutableStylePropertySet* mutableProperties();
+    const StylePropertySet& properties() const { return *m_properties; }
+    MutableStylePropertySet& mutableProperties();
 
     void setProperties(PassRefPtr<StylePropertySet>);
 
-    PassRefPtr<StyleRuleFilter> copy() const { return adoptRefCountedWillBeRefCountedGarbageCollected(new StyleRuleFilter(*this)); }
+    PassRefPtrWillBeRawPtr<StyleRuleFilter> copy() const { return adoptRefWillBeNoop(new StyleRuleFilter(*this)); }
 
     void traceAfterDispatch(Visitor* visitor) { StyleRuleBase::traceAfterDispatch(visitor); }
 

@@ -15,7 +15,7 @@ function loaded()
 
 function test()
 {
-    WebInspector.showPanel("elements");
+    WebInspector.inspectorView.showPanel("elements");
     WebInspector.settings.showShadowDOM.set(true);
     InspectorTest.expandElementsTree(step0);
 
@@ -41,8 +41,7 @@ function test()
         InspectorTest.findNode(matchFunction, callback);
         function callback(node)
         {
-            if (node)
-                WebInspector._updateFocusedNode(node.id);
+            WebInspector.Revealer.reveal(node);
             next(node);
         }
     }

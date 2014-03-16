@@ -46,7 +46,6 @@ class StyleRuleFontFace;
 class StyleRuleImport;
 
 class StyleSheetContents : public RefCountedWillBeGarbageCollectedFinalized<StyleSheetContents> {
-    DECLARE_GC_INFO
 public:
     static PassRefPtrWillBeRawPtr<StyleSheetContents> create(const CSSParserContext& context)
     {
@@ -96,10 +95,10 @@ public:
 
     void setHasFontFaceRule(bool b) { m_hasFontFaceRule = b; }
     bool hasFontFaceRule() const { return m_hasFontFaceRule; }
-    void findFontFaceRules(Vector<const StyleRuleFontFace*>& fontFaceRules);
+    void findFontFaceRules(WillBeHeapVector<RawPtrWillBeMember<const StyleRuleFontFace> >& fontFaceRules);
 
     void parserAddNamespace(const AtomicString& prefix, const AtomicString& uri);
-    void parserAppendRule(PassRefPtr<StyleRuleBase>);
+    void parserAppendRule(PassRefPtrWillBeRawPtr<StyleRuleBase>);
     void parserSetEncodingFromCharsetRule(const String& encoding);
     void parserSetUsesRemUnits(bool b) { m_usesRemUnits = b; }
 
@@ -108,14 +107,14 @@ public:
     bool hasCharsetRule() const { return !m_encodingFromCharsetRule.isNull(); }
     String encodingFromCharsetRule() const { return m_encodingFromCharsetRule; }
     // Rules other than @charset and @import.
-    const Vector<RefPtr<StyleRuleBase> >& childRules() const { return m_childRules; }
-    const Vector<RefPtr<StyleRuleImport> >& importRules() const { return m_importRules; }
+    const WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& childRules() const { return m_childRules; }
+    const WillBeHeapVector<RefPtrWillBeMember<StyleRuleImport> >& importRules() const { return m_importRules; }
 
     void notifyLoadedSheet(const CSSStyleSheetResource*);
 
     StyleSheetContents* parentStyleSheet() const;
     StyleRuleImport* ownerRule() const { return m_ownerRule; }
-    void clearOwnerRule() { m_ownerRule = 0; }
+    void clearOwnerRule() { m_ownerRule = nullptr; }
 
     // Note that href is the URL that started the redirect chain that led to
     // this style sheet. This property probably isn't useful for much except
@@ -130,7 +129,7 @@ public:
 
     unsigned estimatedSizeInBytes() const;
 
-    bool wrapperInsertRule(PassRefPtr<StyleRuleBase>, unsigned index);
+    bool wrapperInsertRule(PassRefPtrWillBeRawPtr<StyleRuleBase>, unsigned index);
     void wrapperDeleteRule(unsigned index);
 
     PassRefPtrWillBeRawPtr<StyleSheetContents> copy() const
@@ -140,7 +139,9 @@ public:
 
     void registerClient(CSSStyleSheet*);
     void unregisterClient(CSSStyleSheet*);
-    bool hasOneClient() { return m_clients.size() == 1; }
+    bool hasOneClient() { return (m_loadingClients.size() + m_completedClients.size()) == 1; }
+    void clientLoadCompleted(CSSStyleSheet*);
+    void clientLoadStarted(CSSStyleSheet*);
 
     bool isMutable() const { return m_isMutable; }
     void setMutable() { m_isMutable = true; }
@@ -166,13 +167,13 @@ private:
 
     void clearCharsetRule();
 
-    StyleRuleImport* m_ownerRule;
+    RawPtrWillBeMember<StyleRuleImport> m_ownerRule;
 
     String m_originalURL;
 
     String m_encodingFromCharsetRule;
-    Vector<RefPtr<StyleRuleImport> > m_importRules;
-    Vector<RefPtr<StyleRuleBase> > m_childRules;
+    WillBeHeapVector<RefPtrWillBeMember<StyleRuleImport> > m_importRules;
+    WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> > m_childRules;
     typedef HashMap<AtomicString, AtomicString> PrefixNamespaceURIMap;
     PrefixNamespaceURIMap m_namespaces;
 
@@ -186,8 +187,11 @@ private:
 
     CSSParserContext m_parserContext;
 
-    Vector<CSSStyleSheet*> m_clients;
-    OwnPtr<RuleSet> m_ruleSet;
+    WillBeHeapHashSet<RawPtrWillBeWeakMember<CSSStyleSheet> > m_loadingClients;
+    WillBeHeapHashSet<RawPtrWillBeWeakMember<CSSStyleSheet> > m_completedClients;
+    typedef WillBeHeapHashSet<RawPtrWillBeWeakMember<CSSStyleSheet> >::iterator ClientsIterator;
+
+    OwnPtrWillBeMember<RuleSet> m_ruleSet;
 };
 
 } // namespace

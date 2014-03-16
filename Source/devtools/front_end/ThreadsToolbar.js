@@ -50,6 +50,9 @@ WebInspector.ThreadsToolbar.prototype = {
 
     _reset: function()
     {
+        if (!WebInspector.experimentsSettings.workersInMainWindow.isEnabled())
+             return;
+
         this._threadIdToOption = {};
 
         var connectedThreads = WebInspector.workerManager.threadsList();
@@ -111,7 +114,7 @@ WebInspector.ThreadsToolbar.prototype = {
     _alterVisibility: function()
     {
         var hidden = this._comboBox.size() === 1;
-        this.element.enableStyleClass("hidden", hidden);
+        this.element.classList.toggle("hidden", hidden);
     }
 
 }

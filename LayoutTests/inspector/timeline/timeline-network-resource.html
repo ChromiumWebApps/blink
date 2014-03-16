@@ -18,10 +18,8 @@ function test()
     var requestId;
     var scriptUrl = "timeline-network-resource.js";
 
-    WebInspector.showPanel("timeline");
     var model = WebInspector.panels.timeline._model;
     var presentationModel = InspectorTest.timelinePresentationModel();
-    presentationModel.setGlueRecords(true);
 
     InspectorTest.startTimeline(step1);
 
@@ -54,7 +52,7 @@ function test()
                 lastRecordStartTime = record.startTime;
             }
         }
-        WebInspector.TimelinePresentationModel.forAllRecords([presentationModel.rootRecord()], format);
+        model.forAllRecords(format);
         InspectorTest.completeTest();
     }
 

@@ -64,7 +64,6 @@ public:
 
     using Node::remove;
     void remove(int index);
-    void remove(HTMLOptionElement*);
 
     String value() const;
     void setValue(const String&);
@@ -141,7 +140,7 @@ private:
 
     virtual void defaultEventHandler(Event*) OVERRIDE;
 
-    void dispatchChangeEventForMenuList();
+    void dispatchInputAndChangeEventForMenuList();
 
     void recalcListItems(bool updateSelectedStates = true) const;
 
@@ -157,7 +156,7 @@ private:
 
     enum SelectOptionFlag {
         DeselectOtherOptions = 1 << 0,
-        DispatchChangeEvent = 1 << 1,
+        DispatchInputAndChangeEvent = 1 << 1,
         UserDriven = 1 << 2,
     };
     typedef unsigned SelectOptionFlags;
@@ -206,8 +205,6 @@ private:
     bool m_activeSelectionState;
     mutable bool m_shouldRecalcListItems;
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLSelectElement, hasTagName(HTMLNames::selectTag));
 
 } // namespace
 

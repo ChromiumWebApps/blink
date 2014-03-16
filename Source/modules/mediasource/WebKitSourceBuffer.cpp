@@ -52,8 +52,6 @@ static bool throwExceptionIfRemoved(bool isRemoved, ExceptionState& exceptionSta
     return false;
 }
 
-DEFINE_GC_INFO(WebKitSourceBuffer);
-
 PassRefPtrWillBeRawPtr<WebKitSourceBuffer> WebKitSourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, PassRefPtrWillBeRawPtr<WebKitMediaSource> source)
 {
     return adoptRefWillBeNoop(new WebKitSourceBuffer(webSourceBuffer, source));
@@ -138,7 +136,10 @@ void WebKitSourceBuffer::append(PassRefPtr<Uint8Array> data, ExceptionState& exc
     m_source->openIfInEndedState();
 
     // Steps 6 & beyond are handled by m_webSourceBuffer.
-    m_webSourceBuffer->append(data->data(), data->length());
+
+    // Use null for |timestampOffset| parameter because the prefixed API does not allow appends
+    // to update timestampOffset.
+    m_webSourceBuffer->append(data->data(), data->length(), 0);
 }
 
 void WebKitSourceBuffer::abort(ExceptionState& exceptionState)

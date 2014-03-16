@@ -38,7 +38,6 @@ crbug.com/24182 http/tests/navigation/slowmetaredirect-basic.html [ Slow ]
 crbug.com/24182 http/tests/navigation/slowtimerredirect-basic.html [ Slow ]
 crbug.com/24182 http/tests/storage/callbacks-are-called-in-correct-context.html [ Slow ]
 crbug.com/24182 http/tests/workers/terminate-during-sync-operation.html [ Slow ]
-crbug.com/24182 http/tests/xmlhttprequest/supported-xml-content-types.html [ Slow ]
 crbug.com/24182 http/tests/xmlhttprequest/timeout/xmlhttprequest-timeout-aborted.html [ Slow ]
 crbug.com/24182 jquery/attributes.html [ Slow ]
 crbug.com/24182 jquery/core.html [ Slow ]
@@ -135,3 +134,5 @@ crbug.com/246749 inspector/extensions/extensions-panel.html [ Slow ]
 crbug.com/248969 [ Debug ] printing/page-count-with-one-word.html [ Slow ]
 
 crbug.com/336481 inspector/jump-to-previous-editing-location.html [ Slow ]
+
+crbug.com/346259 http/tests/websocket/no-crash-on-cookie-flood.html [ Slow ]

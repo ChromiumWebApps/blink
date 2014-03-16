@@ -82,7 +82,7 @@ public:
 
     Node* firstChild() const { return m_firstChild; }
     Node* lastChild() const { return m_lastChild; }
-    bool hasChildNodes() const { return m_firstChild; }
+    bool hasChildren() const { return m_firstChild; }
 
     bool hasOneChild() const { return m_firstChild && !m_firstChild->nextSibling(); }
     bool hasOneTextChild() const { return hasOneChild() && m_firstChild->isTextNode(); }
@@ -90,8 +90,8 @@ public:
 
     PassRefPtr<HTMLCollection> children();
 
-    unsigned childNodeCount() const;
-    Node* childNode(unsigned index) const;
+    unsigned countChildren() const;
+    Node* traverseToChildAt(unsigned index) const;
 
     PassRefPtr<Element> querySelector(const AtomicString& selectors, ExceptionState&);
     PassRefPtr<NodeList> querySelectorAll(const AtomicString& selectors, ExceptionState&);
@@ -215,18 +215,18 @@ inline void ContainerNode::detachChildren(const AttachContext& context)
         child->detach(childrenContext);
 }
 
-inline unsigned Node::childNodeCount() const
+inline unsigned Node::countChildren() const
 {
     if (!isContainerNode())
         return 0;
-    return toContainerNode(this)->childNodeCount();
+    return toContainerNode(this)->countChildren();
 }
 
-inline Node* Node::childNode(unsigned index) const
+inline Node* Node::traverseToChildAt(unsigned index) const
 {
     if (!isContainerNode())
         return 0;
-    return toContainerNode(this)->childNode(index);
+    return toContainerNode(this)->traverseToChildAt(index);
 }
 
 inline Node* Node::firstChild() const
@@ -243,13 +243,13 @@ inline Node* Node::lastChild() const
     return toContainerNode(this)->lastChild();
 }
 
-inline Node* Node::highestAncestor() const
+inline Node& Node::highestAncestor() const
 {
     Node* node = const_cast<Node*>(this);
     Node* highest = node;
     for (; node; node = node->parentNode())
         highest = node;
-    return highest;
+    return *highest;
 }
 
 inline Node* Node::parentElementOrShadowRoot() const

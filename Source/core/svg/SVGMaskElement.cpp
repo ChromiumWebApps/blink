@@ -30,12 +30,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGMaskElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGMaskElement::SVGMaskElement(Document& document)
     : SVGElement(SVGNames::maskTag, document)
     , SVGTests(this)
@@ -62,7 +56,6 @@ inline SVGMaskElement::SVGMaskElement(Document& document)
     addToPropertyMap(m_height);
     addToPropertyMap(m_maskUnits);
     addToPropertyMap(m_maskContentUnits);
-    registerAnimatedPropertiesForSVGMaskElement();
 }
 
 PassRefPtr<SVGMaskElement> SVGMaskElement::create(Document& document)

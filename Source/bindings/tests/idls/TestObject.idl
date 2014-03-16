@@ -34,9 +34,8 @@ enum TestEnumType { "", "EnumValue1", "EnumValue2", "EnumValue3" };
 
 callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
 
-[
-    ImplementedAs=TestObj
-] interface TestObject : EventTarget {
+// No extended attributes on the interface; those go in TestInterface.idl
+interface TestObject : EventTarget {
     // Attributes
     readonly attribute long            readOnlyLongAttr;
     readonly attribute DOMString       readOnlyStringAttr;
@@ -59,6 +58,7 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
     attribute EventHandler             eventHandlerAttr;
     [MeasureAs=TestFeature] attribute TestObject testObjAttr;
     [ExposeJSAccessors] attribute DOMString attrWithJSGetterAndSetter;
+    [MeasureAs=TestFeature] attribute TestSubObjConstructor TestSubObjMeasured;
 
     // Name starting with an acronym
     attribute TestObject                  XMLObjAttr;
@@ -299,6 +299,7 @@ callback TestCallbackFunction = void (TestEnumType formal1, TestObject formal2);
 
     [DeprecateAs=Method] void deprecatedMethod();
     [DeprecateAs=StaticMethod] static void deprecatedStaticMethod();
+    [DeprecateAs=ConstructorAttribute] attribute TestSubObjConstructor deprecatedConstructor;
 
     [DeprecateAs=Constant] const unsigned short DEPRECATED_CONSTANT = 1;
 

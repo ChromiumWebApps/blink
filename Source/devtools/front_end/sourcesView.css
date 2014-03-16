@@ -41,7 +41,12 @@
     border-bottom: 1px solid #BBB;
 }
 
+#sources-panel-sources-view .tabbed-pane-header {
+    background-color: rgb(236, 236, 236);
+}
+
 #sources-panel-sources-view .sources-status-bar {
+    display: flex;
     position: relative;
     flex: 0 0 20px;
     background-color: rgb(236, 236, 236);
@@ -73,4 +78,26 @@
 #sources-panel-sources-view .drag-mask {
     background-color: transparent;
     z-index: 1000;
+}
+
+.source-frame-debugger-script {
+    background-color: rgba(255, 255, 194, 0.5);
+}
+
+.source-frame-unsaved-committed-changes {
+    background-color: rgba(255, 225, 205, 0.40);
+}
+
+.editor-container-unsaved-committed-changes-icon {
+    background-image: url(Images/statusbarButtonGlyphs.png);
+    background-size: 320px 144px;
+    background-position: -202px -107px;
+}
+
+button.status-bar-item.scripts-debugger-show-hide-button {
+    display: none;
+}
+
+button.status-bar-item.scripts-navigator-show-hide-button {
+    display: none;
 }

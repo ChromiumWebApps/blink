@@ -45,8 +45,8 @@
 #include "core/rendering/RenderLayerStackingNode.h"
 
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "public/platform/Platform.h"
 
 namespace WebCore {
@@ -84,11 +84,6 @@ RenderLayerStackingNode::~RenderLayerStackingNode()
         updateStackingParentForNormalFlowList(0);
     }
 #endif
-}
-
-bool RenderLayerStackingNode::isStackingContext(const RenderStyle* style) const
-{
-    return !style->hasAutoZIndex() || layer()->isRootLayer();
 }
 
 // Helper for the sorting of layers by z-index.
@@ -386,7 +381,7 @@ void RenderLayerStackingNode::updateLayerListsIfNeeded()
 
 void RenderLayerStackingNode::updateStackingNodesAfterStyleChange(const RenderStyle* oldStyle)
 {
-    bool wasStackingContext = oldStyle ? isStackingContext(oldStyle) : false;
+    bool wasStackingContext = oldStyle ? !oldStyle->hasAutoZIndex() : false;
     EVisibility oldVisibility = oldStyle ? oldStyle->visibility() : VISIBLE;
     int oldZIndex = oldStyle ? oldStyle->zIndex() : 0;
 

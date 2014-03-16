@@ -71,12 +71,12 @@ void SVGFontFaceUriElement::childrenChanged(bool changedByParser, Node* beforeCh
 {
     SVGElement::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
 
-    if (!parentNode() || !parentNode()->hasTagName(font_face_srcTag))
+    if (!isSVGFontFaceSrcElement(parentNode()))
         return;
 
     ContainerNode* grandparent = parentNode()->parentNode();
-    if (grandparent && grandparent->hasTagName(font_faceTag))
-        toSVGFontFaceElement(grandparent)->rebuildFontFace();
+    if (isSVGFontFaceElement(grandparent))
+        toSVGFontFaceElement(*grandparent).rebuildFontFace();
 }
 
 Node::InsertionNotificationRequest SVGFontFaceUriElement::insertedInto(ContainerNode* rootParent)

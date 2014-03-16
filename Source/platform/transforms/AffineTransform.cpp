@@ -134,7 +134,11 @@ AffineTransform& AffineTransform::multiply(const AffineTransform& other)
 AffineTransform& AffineTransform::rotate(double a)
 {
     // angle is in degree. Switch to radian
-    a = deg2rad(a);
+    return rotateRadians(deg2rad(a));
+}
+
+AffineTransform& AffineTransform::rotateRadians(double a)
+{
     double cosAngle = cos(a);
     double sinAngle = sin(a);
     AffineTransform rot(cosAngle, sinAngle, -sinAngle, cosAngle, 0, 0);
@@ -178,7 +182,7 @@ AffineTransform& AffineTransform::scaleNonUniform(double sx, double sy)
 
 AffineTransform& AffineTransform::rotateFromVector(double x, double y)
 {
-    return rotate(rad2deg(atan2(y, x)));
+    return rotateRadians(atan2(y, x));
 }
 
 AffineTransform& AffineTransform::flipX()
@@ -274,6 +278,9 @@ IntRect AffineTransform::mapRect(const IntRect &rect) const
 FloatRect AffineTransform::mapRect(const FloatRect& rect) const
 {
     if (isIdentityOrTranslation()) {
+        if (!m_transform[4] && !m_transform[5])
+            return rect;
+
         FloatRect mappedRect(rect);
         mappedRect.move(narrowPrecisionToFloat(m_transform[4]), narrowPrecisionToFloat(m_transform[5]));
         return mappedRect;
@@ -318,14 +325,14 @@ void AffineTransform::blend(const AffineTransform& from, double progress)
     }
 
     // Don't rotate the long way around.
-    srA.angle = fmod(srA.angle, 2 * piDouble);
-    srB.angle = fmod(srB.angle, 2 * piDouble);
+    srA.angle = fmod(srA.angle, twoPiDouble);
+    srB.angle = fmod(srB.angle, twoPiDouble);
 
     if (fabs(srA.angle - srB.angle) > piDouble) {
         if (srA.angle > srB.angle)
-            srA.angle -= piDouble * 2;
+            srA.angle -= twoPiDouble;
         else
-            srB.angle -= piDouble * 2;
+            srB.angle -= twoPiDouble;
     }
 
     srA.scaleX += progress * (srB.scaleX - srA.scaleX);
@@ -372,7 +379,7 @@ bool AffineTransform::decompose(DecomposedType& decomp) const
     double angle = atan2(m.b(), m.a());
 
     // Remove rotation from matrix
-    m.rotate(rad2deg(-angle));
+    m.rotateRadians(-angle);
 
     // Return results
     decomp.scaleX = sx;
@@ -396,7 +403,7 @@ void AffineTransform::recompose(const DecomposedType& decomp)
     this->setD(decomp.remainderD);
     this->setE(decomp.translateX);
     this->setF(decomp.translateY);
-    this->rotate(rad2deg(decomp.angle));
+    this->rotateRadians(decomp.angle);
     this->scale(decomp.scaleX, decomp.scaleY);
 }
 

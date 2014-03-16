@@ -67,8 +67,6 @@
       'PageScaleConstraintsSet.h',
       'PageWidgetDelegate.cpp',
       'PageWidgetDelegate.h',
-      'PinchViewports.cpp',
-      'PinchViewports.h',
       'PopupContainer.cpp',
       'PopupContainer.h',
       'PopupListBox.cpp',
@@ -110,7 +108,6 @@
       'WebCachedURLRequest.cpp',
       'WebColorName.cpp',
       'WebColorSuggestion.cpp',
-      'WebCrossOriginPreflightResultCache.cpp',
       'WebCustomElement.cpp',
       'WebDOMActivityLogger.cpp',
       'WebDOMCustomEvent.cpp',
@@ -144,7 +141,6 @@
       'WebEntities.h',
       'WebFileChooserCompletionImpl.cpp',
       'WebFileChooserCompletionImpl.h',
-      'WebFontCache.cpp',
       'WebFontDescription.cpp',
       'WebFontImpl.cpp',
       'WebFontImpl.h',
@@ -308,6 +304,7 @@
       'tests/URLTestHelpers.h',
       'tests/ViewportTest.cpp',
       'tests/WebFrameTest.cpp',
+      'tests/WebHelperPluginTest.cpp',
       'tests/WebImageTest.cpp',
       'tests/WebInputEventConversionTest.cpp',
       'tests/WebInputEventFactoryTestMac.mm',
@@ -331,13 +328,6 @@
             'tests/WebPageNewSerializerTest.cpp',
             'tests/WebPageSerializerTest.cpp',
           ],
-        }
-      ],
-      ['OS=="win" and "ENABLE_HARFBUZZ_ON_WINDOWS=0" in feature_defines',
-        {
-          'web_unittest_files': [
-            'tests/UniscribeHelperTest.cpp',
-          ]
         }
       ],
       ['OS=="mac"',

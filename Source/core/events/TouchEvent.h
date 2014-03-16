@@ -42,33 +42,35 @@ public:
         return adoptRef(new TouchEvent);
     }
     static PassRefPtr<TouchEvent> create(TouchList* touches,
-            TouchList* targetTouches, TouchList* changedTouches,
-            const AtomicString& type, PassRefPtr<AbstractView> view,
-            int screenX, int screenY, int pageX, int pageY,
-            bool ctrlKey, bool altKey, bool shiftKey, bool metaKey)
+        TouchList* targetTouches, TouchList* changedTouches,
+        const AtomicString& type, PassRefPtr<AbstractView> view,
+        int screenX, int screenY, int pageX, int pageY,
+        bool ctrlKey, bool altKey, bool shiftKey, bool metaKey)
     {
         return adoptRef(new TouchEvent(touches, targetTouches, changedTouches,
-                type, view, screenX, screenY, pageX, pageY,
-                ctrlKey, altKey, shiftKey, metaKey));
+            type, view, screenX, screenY, pageX, pageY,
+            ctrlKey, altKey, shiftKey, metaKey));
     }
 
     void initTouchEvent(TouchList* touches, TouchList* targetTouches,
-            TouchList* changedTouches, const AtomicString& type,
-            PassRefPtr<AbstractView> view, int screenX, int screenY,
-            int clientX, int clientY,
-            bool ctrlKey, bool altKey, bool shiftKey, bool metaKey);
+        TouchList* changedTouches, const AtomicString& type,
+        PassRefPtr<AbstractView>, int screenX, int screenY,
+        int clientX, int clientY,
+        bool ctrlKey, bool altKey, bool shiftKey, bool metaKey);
 
     TouchList* touches() const { return m_touches.get(); }
     TouchList* targetTouches() const { return m_targetTouches.get(); }
     TouchList* changedTouches() const { return m_changedTouches.get(); }
 
-    void setTouches(PassRefPtr<TouchList> touches) { m_touches = touches; }
-    void setTargetTouches(PassRefPtr<TouchList> targetTouches) { m_targetTouches = targetTouches; }
-    void setChangedTouches(PassRefPtr<TouchList> changedTouches) { m_changedTouches = changedTouches; }
+    void setTouches(PassRefPtrWillBeRawPtr<TouchList> touches) { m_touches = touches; }
+    void setTargetTouches(PassRefPtrWillBeRawPtr<TouchList> targetTouches) { m_targetTouches = targetTouches; }
+    void setChangedTouches(PassRefPtrWillBeRawPtr<TouchList> changedTouches) { m_changedTouches = changedTouches; }
 
     virtual bool isTouchEvent() const OVERRIDE;
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
     TouchEvent();
@@ -78,9 +80,9 @@ private:
             int pageY,
             bool ctrlKey, bool altKey, bool shiftKey, bool metaKey);
 
-    RefPtr<TouchList> m_touches;
-    RefPtr<TouchList> m_targetTouches;
-    RefPtr<TouchList> m_changedTouches;
+    RefPtrWillBePersistent<TouchList> m_touches;
+    RefPtrWillBePersistent<TouchList> m_targetTouches;
+    RefPtrWillBePersistent<TouchList> m_changedTouches;
 };
 
 class TouchEventDispatchMediator FINAL : public EventDispatchMediator {

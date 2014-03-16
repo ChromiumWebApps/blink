@@ -30,7 +30,7 @@
 
 #include "core/events/Event.h"
 #include "core/speech/SpeechInputResultList.h"
-
+#include "heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 
 namespace WebCore {
@@ -45,11 +45,13 @@ public:
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     SpeechInputEvent();
     SpeechInputEvent(const AtomicString& eventType, const SpeechInputResultArray& results);
 
-    RefPtr<SpeechInputResultList> m_results;
+    RefPtrWillBeMember<SpeechInputResultList> m_results;
 };
 
 } // namespace WebCore

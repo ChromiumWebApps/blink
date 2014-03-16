@@ -107,7 +107,7 @@ void Font::drawText(GraphicsContext* context, const TextRunPaintInfo& runInfo, c
     // Don't draw anything while we are using custom fonts that are in the process of loading,
     // except if the 'force' argument is set to true (in which case it will use a fallback
     // font).
-    if (loadingCustomFonts() && customFontNotReadyAction == DoNotPaintIfFontNotReady)
+    if (shouldSkipDrawing() && customFontNotReadyAction == DoNotPaintIfFontNotReady)
         return;
 
     CodePath codePathToUse = codePath(runInfo.run);
@@ -123,7 +123,7 @@ void Font::drawText(GraphicsContext* context, const TextRunPaintInfo& runInfo, c
 
 void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& runInfo, const AtomicString& mark, const FloatPoint& point) const
 {
-    if (loadingCustomFonts())
+    if (shouldSkipDrawing())
         return;
 
     CodePath codePathToUse = codePath(runInfo.run);
@@ -166,19 +166,19 @@ float Font::width(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFo
     return result;
 }
 
-float Font::width(const TextRun& run, int& charsConsumed, String& glyphName) const
+float Font::width(const TextRun& run, int& charsConsumed, Glyph& glyphId) const
 {
 #if ENABLE(SVG_FONTS)
     if (TextRun::RenderingContext* renderingContext = run.renderingContext())
-        return renderingContext->floatWidthUsingSVGFont(*this, run, charsConsumed, glyphName);
+        return renderingContext->floatWidthUsingSVGFont(*this, run, charsConsumed, glyphId);
 #endif
 
     charsConsumed = run.length();
-    glyphName = "";
+    glyphId = 0;
     return width(run);
 }
 
-FloatRect Font::selectionRectForText(const TextRun& run, const FloatPoint& point, int h, int from, int to) const
+FloatRect Font::selectionRectForText(const TextRun& run, const FloatPoint& point, int h, int from, int to, bool accountForGlyphBounds) const
 {
     to = (to == -1 ? run.length() : to);
 
@@ -188,7 +188,7 @@ FloatRect Font::selectionRectForText(const TextRun& run, const FloatPoint& point
         codePathToUse = ComplexPath;
 
     if (codePathToUse != ComplexPath)
-        return selectionRectForSimpleText(run, point, h, from, to);
+        return selectionRectForSimpleText(run, point, h, from, to, accountForGlyphBounds);
 
     return selectionRectForComplexText(run, point, h, from, to);
 }
@@ -368,7 +368,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
     ASSERT(isMainThread());
 
     if (variant == AutoVariant) {
-        if (m_fontDescription.smallCaps() && !primaryFont()->isSVGFont()) {
+        if (m_fontDescription.variant() && !primaryFont()->isSVGFont()) {
             UChar32 upperC = toUpper(c);
             if (upperC != c) {
                 c = upperC;
@@ -499,7 +499,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
             page->setGlyphDataForCharacter(c, data.glyph, data.fontData);
             data.fontData->setMaxGlyphPageTreeLevel(max(data.fontData->maxGlyphPageTreeLevel(), node->level()));
             if (!Character::isCJKIdeographOrSymbol(c) && data.fontData->platformData().orientation() != Horizontal && !data.fontData->isTextOrientationFallback())
-                return glyphDataAndPageForNonCJKCharacterWithGlyphOrientation(c, m_fontDescription.nonCJKGlyphOrientation(), data, fallbackPage, pageNumber);
+                return glyphDataAndPageForNonCJKCharacterWithGlyphOrientation(c, m_fontDescription.nonCJKGlyphOrientation(), data, page, pageNumber);
         }
         return make_pair(data, page);
     }
@@ -660,7 +660,7 @@ void Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& run
     // Draw each contiguous run of glyphs that use the same font data.
     const SimpleFontData* fontData = glyphBuffer.fontDataAt(0);
     FloatPoint startPoint(point);
-    float nextX = startPoint.x() + glyphBuffer.advanceAt(0);
+    FloatPoint nextPoint = startPoint + glyphBuffer.advanceAt(0);
     unsigned lastFrom = 0;
     unsigned nextGlyph = 1;
 #if ENABLE(SVG_FONTS)
@@ -679,9 +679,9 @@ void Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& run
 
             lastFrom = nextGlyph;
             fontData = nextFontData;
-            startPoint.setX(nextX);
+            startPoint = nextPoint;
         }
-        nextX += glyphBuffer.advanceAt(nextGlyph);
+        nextPoint += glyphBuffer.advanceAt(nextGlyph);
         nextGlyph++;
     }
 
@@ -705,7 +705,7 @@ inline static float offsetToMiddleOfGlyph(const SimpleFontData* fontData, Glyph 
 
 inline static float offsetToMiddleOfAdvanceAtIndex(const GlyphBuffer& glyphBuffer, size_t i)
 {
-    return glyphBuffer.advanceAt(i) / 2;
+    return glyphBuffer.advanceAt(i).width() / 2;
 }
 
 void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& runInfo, const GlyphBuffer& glyphBuffer, const AtomicString& mark, const FloatPoint& point) const
@@ -730,7 +730,7 @@ void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& r
     GlyphBuffer markBuffer;
     for (unsigned i = 0; i + 1 < glyphBuffer.size(); ++i) {
         float middleOfNextGlyph = offsetToMiddleOfAdvanceAtIndex(glyphBuffer, i + 1);
-        float advance = glyphBuffer.advanceAt(i) - middleOfLastGlyph + middleOfNextGlyph;
+        float advance = glyphBuffer.advanceAt(i).width() - middleOfLastGlyph + middleOfNextGlyph;
         markBuffer.add(glyphBuffer.glyphAt(i) ? markGlyph : spaceGlyph, markFontData, advance);
         middleOfLastGlyph = middleOfNextGlyph;
     }
@@ -755,10 +755,10 @@ float Font::floatWidthForSimpleText(const TextRun& run, HashSet<const SimpleFont
     return it.m_runWidthSoFar;
 }
 
-FloatRect Font::selectionRectForSimpleText(const TextRun& run, const FloatPoint& point, int h, int from, int to) const
+FloatRect Font::selectionRectForSimpleText(const TextRun& run, const FloatPoint& point, int h, int from, int to, bool accountForGlyphBounds) const
 {
     GlyphBuffer glyphBuffer;
-    WidthIterator it(this, run);
+    WidthIterator it(this, run, 0, accountForGlyphBounds);
     it.advance(from, &glyphBuffer);
     float beforeWidth = it.m_runWidthSoFar;
     it.advance(to, &glyphBuffer);
@@ -772,13 +772,15 @@ FloatRect Font::selectionRectForSimpleText(const TextRun& run, const FloatPoint&
         it.advance(run.length(), &glyphBuffer);
         float totalWidth = it.m_runWidthSoFar;
         float pixelAlignedX = floorf(point.x() + totalWidth - afterWidth + LayoutUnit::epsilon());
-        return FloatRect(pixelAlignedX, point.y(),
-            roundf(point.x() + totalWidth - beforeWidth) - pixelAlignedX, h);
+        return FloatRect(pixelAlignedX, accountForGlyphBounds ? it.minGlyphBoundingBoxY() : point.y(),
+            roundf(point.x() + totalWidth - beforeWidth) - pixelAlignedX,
+            accountForGlyphBounds ? it.maxGlyphBoundingBoxY() - it.minGlyphBoundingBoxY() : h);
     }
 
     float pixelAlignedX = floorf(point.x() + beforeWidth + LayoutUnit::epsilon());
-    return FloatRect(pixelAlignedX, point.y(),
-        roundf(point.x() + afterWidth) - pixelAlignedX, h);
+    return FloatRect(pixelAlignedX, accountForGlyphBounds ? it.minGlyphBoundingBoxY() : point.y(),
+        roundf(point.x() + afterWidth) - pixelAlignedX,
+        accountForGlyphBounds ? it.maxGlyphBoundingBoxY() - it.minGlyphBoundingBoxY() : h);
 }
 
 int Font::offsetForPositionForSimpleText(const TextRun& run, float x, bool includePartialGlyphs) const

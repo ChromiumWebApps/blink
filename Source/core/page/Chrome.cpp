@@ -25,10 +25,10 @@
 #include "public/platform/WebScreenInfo.h"
 #include "HTMLNames.h"
 #include "core/dom/Document.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/page/ChromeClient.h"
-#include "core/frame/Frame.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/page/PopupOpeningObserver.h"
@@ -90,7 +90,7 @@ blink::WebScreenInfo Chrome::screenInfo() const
     return m_client->screenInfo();
 }
 
-void Chrome::contentsSizeChanged(Frame* frame, const IntSize& size) const
+void Chrome::contentsSizeChanged(LocalFrame* frame, const IntSize& size) const
 {
     m_client->contentsSizeChanged(frame, size);
 }
@@ -142,7 +142,7 @@ bool Chrome::canRunModal() const
 
 static bool canRunModalIfDuringPageDismissal(Page* page, ChromeClient::DialogType dialog, const String& message)
 {
-    for (Frame* frame = page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
+    for (LocalFrame* frame = page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         Document::PageDismissalType dismissal = frame->document()->pageDismissalEventBeingDispatched();
         if (dismissal != Document::NoDismissal)
             return page->chrome().client().shouldRunModalDialogDuringPageDismissal(dialog, message, dismissal);
@@ -199,7 +199,7 @@ bool Chrome::canRunBeforeUnloadConfirmPanel()
     return m_client->canRunBeforeUnloadConfirmPanel();
 }
 
-bool Chrome::runBeforeUnloadConfirmPanel(const String& message, Frame* frame)
+bool Chrome::runBeforeUnloadConfirmPanel(const String& message, LocalFrame* frame)
 {
     // Defer loads in case the client method runs a new event loop that would
     // otherwise cause the load to continue while we're in the middle of executing JavaScript.
@@ -216,7 +216,7 @@ void Chrome::closeWindowSoon()
     m_client->closeWindowSoon();
 }
 
-void Chrome::runJavaScriptAlert(Frame* frame, const String& message)
+void Chrome::runJavaScriptAlert(LocalFrame* frame, const String& message)
 {
     if (!canRunModalIfDuringPageDismissal(m_page, ChromeClient::AlertDialog, message))
         return;
@@ -233,7 +233,7 @@ void Chrome::runJavaScriptAlert(Frame* frame, const String& message)
     InspectorInstrumentation::didRunJavaScriptDialog(cookie);
 }
 
-bool Chrome::runJavaScriptConfirm(Frame* frame, const String& message)
+bool Chrome::runJavaScriptConfirm(LocalFrame* frame, const String& message)
 {
     if (!canRunModalIfDuringPageDismissal(m_page, ChromeClient::ConfirmDialog, message))
         return false;
@@ -251,7 +251,7 @@ bool Chrome::runJavaScriptConfirm(Frame* frame, const String& message)
     return ok;
 }
 
-bool Chrome::runJavaScriptPrompt(Frame* frame, const String& prompt, const String& defaultValue, String& result)
+bool Chrome::runJavaScriptPrompt(LocalFrame* frame, const String& prompt, const String& defaultValue, String& result)
 {
     if (!canRunModalIfDuringPageDismissal(m_page, ChromeClient::PromptDialog, prompt))
         return false;
@@ -270,7 +270,7 @@ bool Chrome::runJavaScriptPrompt(Frame* frame, const String& prompt, const Strin
     return ok;
 }
 
-void Chrome::setStatusbarText(Frame* frame, const String& status)
+void Chrome::setStatusbarText(LocalFrame* frame, const String& status)
 {
     ASSERT(frame);
     m_client->setStatusbarText(status);
@@ -303,7 +303,7 @@ void Chrome::setToolTip(const HitTestResult& result)
     // Lastly, for <input type="file"> that allow multiple files, we'll consider a tooltip for the selected filenames
     if (toolTip.isEmpty()) {
         if (Node* node = result.innerNonSharedNode()) {
-            if (node->hasTagName(inputTag)) {
+            if (isHTMLInputElement(*node)) {
                 HTMLInputElement* input = toHTMLInputElement(node);
                 toolTip = input->defaultToolTip();
 
@@ -320,7 +320,7 @@ void Chrome::setToolTip(const HitTestResult& result)
     m_client->setToolTip(toolTip, toolTipDirection);
 }
 
-void Chrome::print(Frame* frame)
+void Chrome::print(LocalFrame* frame)
 {
     // Defer loads in case the client method runs a new event loop that would
     // otherwise cause the load to continue while we're in the middle of executing JavaScript.
@@ -352,7 +352,7 @@ void Chrome::openTextDataListChooser(HTMLInputElement& input)
     m_client->openTextDataListChooser(input);
 }
 
-void Chrome::runOpenPanel(Frame* frame, PassRefPtr<FileChooser> fileChooser)
+void Chrome::runOpenPanel(LocalFrame* frame, PassRefPtr<FileChooser> fileChooser)
 {
     notifyPopupOpeningObservers();
     m_client->runOpenPanel(frame, fileChooser);
@@ -370,6 +370,7 @@ void Chrome::setCursor(const Cursor& cursor)
 
 void Chrome::scheduleAnimation()
 {
+    m_page->animator().setAnimationFramePending();
     m_client->scheduleAnimation();
 }
 
@@ -380,7 +381,7 @@ bool Chrome::hasOpenedPopup() const
     return m_client->hasOpenedPopup();
 }
 
-PassRefPtr<PopupMenu> Chrome::createPopupMenu(Frame& frame, PopupMenuClient* client) const
+PassRefPtr<PopupMenu> Chrome::createPopupMenu(LocalFrame& frame, PopupMenuClient* client) const
 {
     notifyPopupOpeningObservers();
     return m_client->createPopupMenu(frame, client);

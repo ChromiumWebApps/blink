@@ -10,7 +10,7 @@ var initialize_NetworkTest = function() {
 
 InspectorTest.dumpNetworkRequests = function()
 {
-    var requests = WebInspector.panel("network").requests.slice();
+    var requests = WebInspector.inspectorView.panel("network").requests.slice();
     requests.sort(function(a, b) {return a.url.localeCompare(b.url);});
     InspectorTest.addResult("resources count = " + requests.length);
     for (i = 0; i < requests.length; i++)
@@ -57,7 +57,7 @@ InspectorTest.makeXHR = function(method, url, async, user, password, headers, wi
 
     function innerCallback(msg)
     {
-        if (msg._messageText.indexOf("XHR loaded") !== -1)
+        if (msg.messageText.indexOf("XHR loaded") !== -1)
             callback();
         else
             InspectorTest.addConsoleSniffer(innerCallback);

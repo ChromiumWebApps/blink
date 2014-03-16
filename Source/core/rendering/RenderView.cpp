@@ -24,13 +24,12 @@
 #include "RuntimeEnabledFeatures.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "core/frame/Frame.h"
 #include "core/page/Page.h"
 #include "core/rendering/ColumnInfo.h"
-#include "core/rendering/CompositedLayerMapping.h"
 #include "core/rendering/FlowThreadController.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestResult.h"
@@ -38,8 +37,9 @@
 #include "core/rendering/RenderFlowThread.h"
 #include "core/rendering/RenderGeometryMap.h"
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/RenderLayerCompositor.h"
 #include "core/rendering/RenderSelectionInfo.h"
+#include "core/rendering/compositing/CompositedLayerMapping.h"
+#include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/TransformState.h"
@@ -172,9 +172,6 @@ void RenderView::layoutContent(const LayoutState& state)
     if (RuntimeEnabledFeatures::dialogElementEnabled())
         positionDialogs();
 
-    if (m_frameView->partialLayout().isStopping())
-        return;
-
 #ifndef NDEBUG
     checkLayoutState(state);
 #endif
@@ -193,7 +190,6 @@ void RenderView::checkLayoutState(const LayoutState& state)
 
 void RenderView::initializeLayoutState(LayoutState& state)
 {
-    // FIXME: May be better to push a clip and avoid issuing offscreen repaints.
     state.m_clipped = false;
     state.m_pageLogicalHeight = m_pageLogicalHeight;
     state.m_pageLogicalHeightChanged = m_pageLogicalHeightChanged;
@@ -226,7 +222,7 @@ void RenderView::layout()
         }
 
         if (document().svgExtensions())
-            document().accessSVGExtensions()->invalidateSVGRootsWithRelativeLengthDescendents(&layoutScope);
+            document().accessSVGExtensions().invalidateSVGRootsWithRelativeLengthDescendents(&layoutScope);
     }
 
     ASSERT(!m_layoutState);
@@ -240,11 +236,6 @@ void RenderView::layout()
     m_layoutState = &state;
 
     layoutContent(state);
-
-    if (m_frameView->partialLayout().isStopping()) {
-        m_layoutState = 0;
-        return;
-    }
 
 #ifndef NDEBUG
     checkLayoutState(state);
@@ -358,6 +349,7 @@ static inline bool rendererObscuresBackground(RenderBox* rootBox)
     RenderStyle* style = rootBox->style();
     if (style->visibility() != VISIBLE
         || style->opacity() != 1
+        || style->hasFilter()
         || style->hasTransform())
         return false;
 
@@ -464,22 +456,6 @@ void RenderView::repaintViewRectangle(const LayoutRect& ur) const
         // FIXME: Hardcoded offsets here are not good.
         r.moveBy(obj->contentBoxRect().location());
         obj->repaintRectangle(r);
-    }
-}
-
-void RenderView::repaintRectangleInViewAndCompositedLayers(const LayoutRect& ur)
-{
-    if (!shouldRepaint(ur))
-        return;
-
-    repaintViewRectangle(ur);
-
-    // FIXME: We don't actually know how to hit these ASSERTS.
-    DisableCompositingQueryAsserts disabler;
-
-    if (compositor()->inCompositingMode()) {
-        IntRect repaintRect = pixelSnappedIntRect(ur);
-        compositor()->repaintCompositedLayers(&repaintRect);
     }
 }
 
@@ -896,7 +872,7 @@ float RenderView::zoomFactor() const
     return m_frameView->frame().pageZoomFactor();
 }
 
-void RenderView::pushLayoutState(RenderObject* root)
+void RenderView::pushLayoutState(RenderObject& root)
 {
     ASSERT(m_layoutStateDisableCount == 0);
     ASSERT(m_layoutState == 0);
@@ -905,9 +881,9 @@ void RenderView::pushLayoutState(RenderObject* root)
     m_layoutState = new LayoutState(root);
 }
 
-bool RenderView::shouldDisableLayoutStateForSubtree(RenderObject* renderer) const
+bool RenderView::shouldDisableLayoutStateForSubtree(RenderObject& renderer) const
 {
-    RenderObject* o = renderer;
+    RenderObject* o = &renderer;
     while (o) {
         if (o->shouldDisableLayoutState())
             return true;
@@ -942,7 +918,7 @@ bool RenderView::usesCompositing() const
 RenderLayerCompositor* RenderView::compositor()
 {
     if (!m_compositor)
-        m_compositor = adoptPtr(new RenderLayerCompositor(this));
+        m_compositor = adoptPtr(new RenderLayerCompositor(*this));
 
     return m_compositor.get();
 }
@@ -961,7 +937,7 @@ FlowThreadController* RenderView::flowThreadController()
     return m_flowThreadController.get();
 }
 
-void RenderView::pushLayoutStateForCurrentFlowThread(const RenderObject* object)
+void RenderView::pushLayoutStateForCurrentFlowThread(const RenderObject& object)
 {
     if (!m_flowThreadController)
         return;

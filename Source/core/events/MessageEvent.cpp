@@ -112,7 +112,7 @@ MessageEvent::MessageEvent(const String& data, const String& origin)
     ScriptWrappable::init(this);
 }
 
-MessageEvent::MessageEvent(PassRefPtr<Blob> data, const String& origin)
+MessageEvent::MessageEvent(PassRefPtrWillBeRawPtr<Blob> data, const String& origin)
     : Event(EventTypeNames::message, false, false)
     , m_dataType(DataTypeBlob)
     , m_dataAsBlob(data)
@@ -183,6 +183,11 @@ const AtomicString& MessageEvent::interfaceName() const
 void MessageEvent::entangleMessagePorts(ExecutionContext* context)
 {
     m_ports = MessagePort::entanglePorts(*context, m_channels.release());
+}
+
+void MessageEvent::trace(Visitor* visitor)
+{
+    Event::trace(visitor);
 }
 
 } // namespace WebCore

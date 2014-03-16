@@ -28,17 +28,10 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGSwitchElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGSwitchElement::SVGSwitchElement(Document& document)
     : SVGGraphicsElement(SVGNames::switchTag, document)
 {
     ScriptWrappable::init(this);
-    registerAnimatedPropertiesForSVGSwitchElement();
 
     UseCounter::count(document, UseCounter::SVGSwitchElement);
 }

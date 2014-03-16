@@ -25,7 +25,7 @@
 #include "config.h"
 #include "core/rendering/RenderLayerModelObject.h"
 
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
 
@@ -75,7 +75,7 @@ void RenderLayerModelObject::willBeDestroyed()
 {
     if (isPositioned()) {
         // Don't use this->view() because the document's renderView has been set to 0 during destruction.
-        if (Frame* frame = this->frame()) {
+        if (LocalFrame* frame = this->frame()) {
             if (FrameView* frameView = frame->view()) {
                 if (style()->hasViewportConstrainedPosition())
                     frameView->removeViewportConstrainedObject(this);
@@ -101,7 +101,7 @@ void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderS
             // having an outline to not having an outline.
             if (diff == StyleDifferenceRepaintLayer) {
                 layer()->repainter().repaintIncludingDescendants();
-                if (!(oldStyle->clip() == newStyle->clip()))
+                if (oldStyle->clip() != newStyle->clip())
                     layer()->clipper().clearClipRectsIncludingDescendants();
             } else if (diff == StyleDifferenceRepaint || newStyle->outlineSize() < oldStyle->outlineSize())
                 repaint();
@@ -111,16 +111,19 @@ void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderS
             // When a layout hint happens, we go ahead and do a repaint of the layer, since the layer could
             // end up being destroyed.
             if (hasLayer()) {
-                if (oldStyle->position() != newStyle->position()
-                    || oldStyle->zIndex() != newStyle->zIndex()
-                    || oldStyle->hasAutoZIndex() != newStyle->hasAutoZIndex()
-                    || !(oldStyle->clip() == newStyle->clip())
-                    || oldStyle->hasClip() != newStyle->hasClip()
-                    || oldStyle->opacity() != newStyle->opacity()
-                    || oldStyle->transform() != newStyle->transform()
-                    || oldStyle->filter() != newStyle->filter()
-                    )
-                layer()->repainter().repaintIncludingDescendants();
+                if (oldStyle->hasClip() != newStyle->hasClip()
+                    || oldStyle->clip() != newStyle->clip()) {
+                    // Composited layers don't need to be repainted when a parent's clip changes.
+                    layer()->repainter().repaintIncludingNonCompositingDescendants(containerForRepaint());
+                } else if (!layer()->hasCompositedLayerMapping()) {
+                    if (oldStyle->position() != newStyle->position()
+                        || oldStyle->zIndex() != newStyle->zIndex()
+                        || oldStyle->hasAutoZIndex() != newStyle->hasAutoZIndex()
+                        || oldStyle->opacity() != newStyle->opacity()
+                        || oldStyle->transform() != newStyle->transform()
+                        || oldStyle->filter() != newStyle->filter())
+                    layer()->repainter().repaintIncludingDescendants();
+                }
             } else if (newStyle->hasTransform() || newStyle->opacity() < 1 || newStyle->hasFilter()) {
                 // If we don't have a layer yet, but we are going to get one because of transform or opacity,
                 //  then we need to repaint the old position of the object.
@@ -167,7 +170,7 @@ void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderSt
     if (layer()) {
         // FIXME: Ideally we shouldn't need this setter but we can't easily infer an overflow-only layer
         // from the style.
-        layer()->setIsOverflowOnlyLayer(type == OverflowClipLayer);
+        layer()->setLayerType(type);
 
         layer()->styleChanged(diff, oldStyle);
         if (hadLayer && layer()->isSelfPaintingLayer() != layerWasSelfPainting)

@@ -46,7 +46,7 @@ testInner("-webkit-clip-path", "circle(-1px, +1px, 1px)", "circle(-1px, 1px, 1px
 testInner("-webkit-clip-path", "circle(-1.5px, +1.5px, 1.5px)", "circle(-1.5px, 1.5px, 1.5px)");
 testInner("-webkit-clip-path", "circle(-.5px, +.5px, .5px)", "circle(-0.5px, 0.5px, 0.5px)");
 
-testInner("-webkit-clip-path", "circle(0 at 0 0)", "circle(0px at 0px 0px)");
+testInner("-webkit-clip-path", "circle(0 at 0 0)", "circle(0px at 0% 0%)");
 testInner("-webkit-clip-path", "circle(1px at -1px +1px)", "circle(1px at -1px 1px)");
 testInner("-webkit-clip-path", "circle(1.5px at -1.5px +1.5px)", "circle(1.5px at -1.5px 1.5px)");
 testInner("-webkit-clip-path", "circle(.5px at -.5px +.5px)", "circle(0.5px at -0.5px 0.5px)");
@@ -98,13 +98,13 @@ testInner("-webkit-clip-path", "circle(100%, 100%, 100%)", "circle(100%, 100%, 1
 testInner("-webkit-clip-path", "circle(100% at 100% 100%)", "circle(100% at 100% 100%)");
 testInner("-webkit-clip-path", "rectangle(45%, 45%, 90%, 60%, 25%, 10%)", "rectangle(45%, 45%, 90%, 60%, 25%, 10%)");
 testInner("-webkit-clip-path", "ellipse(100%, 100%, 100%, 100%)", "ellipse(100%, 100%, 100%, 100%)");
-testInner("-webkit-clip-path", "polygon(10% 20%, 30% 40%, 40% 50%)", "polygon(nonzero, 10% 20%, 30% 40%, 40% 50%)");
+testInner("-webkit-clip-path", "polygon(10% 20%, 30% 40%, 40% 50%)", "polygon(10% 20%, 30% 40%, 40% 50%)");
 
 testComputed("-webkit-clip-path", "circle(50%, 100%, 150%)", "circle(50%, 100%, 150%)");
 testComputed("-webkit-clip-path", "circle(150% at 50% 100%)", "circle(150% at 50% 100%)");
 testComputed("-webkit-clip-path", "rectangle(45%, 45%, 90%, 60%, 25%, 10%)", "rectangle(45%, 45%, 90%, 60%, 25%, 10%)");
 testComputed("-webkit-clip-path", "ellipse(100%, 100%, 100%, 100%)", "ellipse(100%, 100%, 100%, 100%)");
-testComputed("-webkit-clip-path", "polygon(10% 20%, 30% 40%, 40% 50%)", "polygon(nonzero, 10% 20%, 30% 40%, 40% 50%)");
+testComputed("-webkit-clip-path", "polygon(10% 20%, 30% 40%, 40% 50%)", "polygon(10% 20%, 30% 40%, 40% 50%)");
 
 // reject non-lengths
 negativeTest("-webkit-clip-path", "circle(1px, 1px, 1)");

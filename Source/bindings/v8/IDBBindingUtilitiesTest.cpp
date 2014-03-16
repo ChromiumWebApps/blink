@@ -28,7 +28,6 @@
 
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8PerIsolateData.h"
-#include "bindings/v8/V8Utilities.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBKeyPath.h"
 
@@ -93,14 +92,11 @@ void checkKeyPathNumberValue(const ScriptValue& value, const String& keyPath, in
 class IDBKeyFromValueAndKeyPathTest : public testing::Test {
 public:
     IDBKeyFromValueAndKeyPathTest()
-        : m_handleScope(v8::Isolate::GetCurrent())
-        , m_scope(v8::Context::New(v8::Isolate::GetCurrent()))
+        : m_scope(V8ExecutionScope::create(v8::Isolate::GetCurrent()))
     {
     }
-
 private:
-    v8::HandleScope m_handleScope;
-    v8::Context::Scope m_scope;
+    OwnPtr<V8ExecutionScope> m_scope;
 };
 
 TEST_F(IDBKeyFromValueAndKeyPathTest, TopLevelPropertyStringValue)

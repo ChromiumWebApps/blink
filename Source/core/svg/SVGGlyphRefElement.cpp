@@ -28,12 +28,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGGlyphRefElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGGlyphRefElement::SVGGlyphRefElement(Document& document)
     : SVGElement(SVGNames::glyphRefTag, document)
     , SVGURIReference(this)
@@ -43,7 +37,6 @@ inline SVGGlyphRefElement::SVGGlyphRefElement(Document& document)
     , m_dy(0)
 {
     ScriptWrappable::init(this);
-    registerAnimatedPropertiesForSVGGlyphRefElement();
 }
 
 PassRefPtr<SVGGlyphRefElement> SVGGlyphRefElement::create(Document& document)
@@ -56,9 +49,7 @@ bool SVGGlyphRefElement::hasValidGlyphElement(AtomicString& glyphName) const
     // FIXME: We only support xlink:href so far.
     // https://bugs.webkit.org/show_bug.cgi?id=64787
     Element* element = targetElementFromIRIString(getAttribute(XLinkNames::hrefAttr), document(), &glyphName);
-    if (!element || !element->hasTagName(SVGNames::glyphTag))
-        return false;
-    return true;
+    return isSVGGlyphElement(element);
 }
 
 template<typename CharType>

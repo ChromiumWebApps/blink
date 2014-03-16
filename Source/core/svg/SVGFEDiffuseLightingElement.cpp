@@ -30,12 +30,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFEDiffuseLightingElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFEDiffuseLightingElement::SVGFEDiffuseLightingElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feDiffuseLightingTag, document)
     , m_diffuseConstant(SVGAnimatedNumber::create(this, SVGNames::diffuseConstantAttr, SVGNumber::create(1)))
@@ -49,7 +43,6 @@ inline SVGFEDiffuseLightingElement::SVGFEDiffuseLightingElement(Document& docume
     addToPropertyMap(m_surfaceScale);
     addToPropertyMap(m_kernelUnitLength);
     addToPropertyMap(m_in1);
-    registerAnimatedPropertiesForSVGFEDiffuseLightingElement();
 }
 
 PassRefPtr<SVGFEDiffuseLightingElement> SVGFEDiffuseLightingElement::create(Document& document)
@@ -109,7 +102,7 @@ bool SVGFEDiffuseLightingElement::setFilterEffectAttribute(FilterEffect* effect,
         return diffuseLighting->setDiffuseConstant(m_diffuseConstant->currentValue()->value());
 
     LightSource* lightSource = const_cast<LightSource*>(diffuseLighting->lightSource());
-    const SVGFELightElement* lightElement = SVGFELightElement::findLightElement(this);
+    const SVGFELightElement* lightElement = SVGFELightElement::findLightElement(*this);
     ASSERT(lightSource);
     ASSERT(lightElement);
 
@@ -165,7 +158,7 @@ void SVGFEDiffuseLightingElement::svgAttributeChanged(const QualifiedName& attrN
 
 void SVGFEDiffuseLightingElement::lightElementAttributeChanged(const SVGFELightElement* lightElement, const QualifiedName& attrName)
 {
-    if (SVGFELightElement::findLightElement(this) != lightElement)
+    if (SVGFELightElement::findLightElement(*this) != lightElement)
         return;
 
     // The light element has different attribute names.
@@ -179,7 +172,7 @@ PassRefPtr<FilterEffect> SVGFEDiffuseLightingElement::build(SVGFilterBuilder* fi
     if (!input1)
         return nullptr;
 
-    RefPtr<LightSource> lightSource = SVGFELightElement::findLightSource(this);
+    RefPtr<LightSource> lightSource = SVGFELightElement::findLightSource(*this);
     if (!lightSource)
         return nullptr;
 

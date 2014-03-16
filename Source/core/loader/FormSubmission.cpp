@@ -42,6 +42,7 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
+#include "heap/Handle.h"
 #include "platform/network/FormData.h"
 #include "platform/network/FormDataBuilder.h"
 #include "wtf/CurrentTime.h"
@@ -188,8 +189,11 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
             copiedAttributes.setTarget(attributeValue);
     }
 
-    if (copiedAttributes.method() == DialogMethod)
-        return adoptRef(new FormSubmission(submitButton->resultForDialogSubmit()));
+    if (copiedAttributes.method() == DialogMethod) {
+        if (submitButton)
+            return adoptRef(new FormSubmission(submitButton->resultForDialogSubmit()));
+        return adoptRef(new FormSubmission(""));
+    }
 
     Document& document = form->document();
     KURL actionURL = document.completeURL(copiedAttributes.action().isEmpty() ? document.url().string() : copiedAttributes.action());
@@ -205,20 +209,18 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
         }
     }
     WTF::TextEncoding dataEncoding = isMailtoForm ? UTF8Encoding() : FormDataBuilder::encodingFromAcceptCharset(copiedAttributes.acceptCharset(), document.inputEncoding(), document.defaultCharset());
-    RefPtr<DOMFormData> domFormData = DOMFormData::create(dataEncoding.encodingForFormSubmission());
-    Vector<pair<String, String> > formValues;
+    RefPtrWillBeRawPtr<DOMFormData> domFormData = DOMFormData::create(dataEncoding.encodingForFormSubmission());
 
     bool containsPasswordData = false;
     for (unsigned i = 0; i < form->associatedElements().size(); ++i) {
         FormAssociatedElement* control = form->associatedElements()[i];
-        HTMLElement* element = toHTMLElement(control);
-        if (!element->isDisabledFormControl())
+        ASSERT(control);
+        HTMLElement& element = toHTMLElement(*control);
+        if (!element.isDisabledFormControl())
             control->appendFormData(*domFormData, isMultiPartForm);
-        if (element->hasTagName(inputTag)) {
-            HTMLInputElement* input = toHTMLInputElement(element);
-            if (input->isTextField())
-                formValues.append(pair<String, String>(input->name().string(), input->value()));
-            if (input->isPasswordField() && !input->value().isEmpty())
+        if (isHTMLInputElement(element)) {
+            HTMLInputElement& input = toHTMLInputElement(element);
+            if (input.isPasswordField() && !input.value().isEmpty())
                 containsPasswordData = true;
         }
     }
@@ -241,7 +243,7 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
     formData->setIdentifier(generateFormDataIdentifier());
     formData->setContainsPasswordData(containsPasswordData);
     AtomicString targetOrBaseTarget = copiedAttributes.target().isEmpty() ? document.baseTarget() : copiedAttributes.target();
-    RefPtr<FormState> formState = FormState::create(form, formValues, &document, trigger);
+    RefPtr<FormState> formState = FormState::create(*form, trigger);
     return adoptRef(new FormSubmission(copiedAttributes.method(), actionURL, targetOrBaseTarget, encodingType, formState.release(), formData.release(), boundary, event));
 }
 

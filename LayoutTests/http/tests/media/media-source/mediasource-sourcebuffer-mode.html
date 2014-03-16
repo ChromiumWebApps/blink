@@ -4,7 +4,6 @@
         <script src="/w3c/resources/testharness.js"></script>
         <script src="/w3c/resources/testharnessreport.js"></script>
         <script src="mediasource-util.js"></script>
-        <script src="/media/resources/media-source/webm/segment-info.js"></script>
 
         <link rel='stylesheet' href='/w3c/resources/testharness.css'>
     </head>
@@ -102,7 +101,8 @@
                   assert_equals(sourceBuffer.mode, 'segments');
                   sourceBuffer.mode = 'segments';  // No exception should occur.
                   assert_equals(sourceBuffer.timestampOffset, 0.0);
-                  sourceBuffer.timestampOffset = 10.0;  // No exception should occur.
+                  sourceBuffer.timestampOffset = 10.123456789;  // No exception should occur.
+                  assert_equals(sourceBuffer.timestampOffset, 10.123456789);  // Super-precise offsets should round-trip.
 
                   // Append first part of media segment.
                   test.expectEvent(sourceBuffer, 'updateend', 'Partial media segment append ended.');
@@ -116,7 +116,7 @@
                   assert_throws('InvalidStateError',
                       function() { sourceBuffer.mode = 'segments'; },
                       'Setting valid sourceBuffer.mode while still parsing media segment threw InvalidStateError.');
-                  assert_equals(sourceBuffer.timestampOffset, 10.0);
+                  assert_equals(sourceBuffer.timestampOffset, 10.123456789);
                   assert_throws('InvalidStateError',
                       function() { sourceBuffer.timestampOffset = 20.0; },
                       'Setting valid sourceBuffer.timestampOffset while still parsing media segment threw InvalidStateError.');
@@ -131,7 +131,7 @@
                   assert_false(sourceBuffer.updating, 'updating attribute is false');
                   assert_equals(sourceBuffer.mode, 'segments');
                   sourceBuffer.mode = 'segments';  // No exception should occur.
-                  assert_equals(sourceBuffer.timestampOffset, 10.0);
+                  assert_equals(sourceBuffer.timestampOffset, 10.123456789);
                   sourceBuffer.timestampOffset = 20.0;  // No exception should occur.
                   test.done();
               });

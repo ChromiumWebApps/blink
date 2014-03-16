@@ -33,14 +33,6 @@
     content: url(Images/profileIcon.png);
 }
 
-.heap-snapshot-sidebar-tree-item.wait .icon {
-    content: url(Images/spinner.gif);
-}
-
-.heap-snapshot-sidebar-tree-item.wait.selected .icon {
-    content: url(Images/spinnerSelected.gif);
-}
-
 .heap-snapshot-sidebar-tree-item.small .icon {
     content: url(Images/profileSmallIcon.png);
 }
@@ -53,6 +45,10 @@
     left: 0;
     right: 0;
     bottom: 0;
+}
+
+.heap-snapshot-view .pie-chart {
+    margin: 12px 30px;
 }
 
 .heap-snapshot-view .data-grid {
@@ -213,4 +209,35 @@ table.heap-snapshot-help {
     left: 0;
     right: 0;
     bottom: 0;
+}
+
+.heap-snapshot-stats-legend {
+    margin-left: 24px;
+}
+
+.heap-snapshot-stats-legend > div {
+    margin-top: 1px;
+    width: 170px;
+}
+
+.heap-snapshot-stats-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1px solid rgba(100, 100, 100, 0.3);
+}
+
+.heap-snapshot-stats-swatch.heap-snapshot-stats-empty-swatch {
+    border: none;
+}
+
+.heap-snapshot-stats-name,
+.heap-snapshot-stats-size {
+    display: inline-block;
+    margin-left: 6px;
+}
+
+.heap-snapshot-stats-size {
+    float: right;
+    text-align: right;
 }

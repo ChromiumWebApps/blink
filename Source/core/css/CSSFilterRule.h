@@ -31,6 +31,7 @@
 #define CSSFilterRule_h
 
 #include "core/css/CSSRule.h"
+#include "heap/Handle.h"
 
 namespace WebCore {
 
@@ -40,7 +41,10 @@ class StyleRuleCSSStyleDeclaration;
 
 class CSSFilterRule FINAL : public CSSRule {
 public:
-    static PassRefPtr<CSSFilterRule> create(StyleRuleFilter* rule, CSSStyleSheet* sheet) { return adoptRef(new CSSFilterRule(rule, sheet)); }
+    static PassRefPtrWillBeRawPtr<CSSFilterRule> create(StyleRuleFilter* rule, CSSStyleSheet* sheet)
+    {
+        return adoptRefWillBeNoop(new CSSFilterRule(rule, sheet));
+    }
 
     virtual ~CSSFilterRule();
 
@@ -50,10 +54,12 @@ public:
 
     CSSStyleDeclaration* style() const;
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     CSSFilterRule(StyleRuleFilter*, CSSStyleSheet* parent);
 
-    RefPtr<StyleRuleFilter> m_filterRule;
+    RefPtrWillBeMember<StyleRuleFilter> m_filterRule;
     mutable RefPtr<StyleRuleCSSStyleDeclaration> m_propertiesCSSOMWrapper;
 };
 

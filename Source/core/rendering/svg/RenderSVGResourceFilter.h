@@ -85,14 +85,12 @@ public:
 
     FloatRect drawingRegion(RenderObject*) const;
 private:
-    bool fitsInMaximumImageSize(const FloatSize&, FloatSize&);
+    void adjustScaleForMaximumImageSize(const FloatSize&, FloatSize&);
 
     typedef HashMap<RenderObject*, OwnPtr<FilterData> > FilterMap;
     FilterMap m_filter;
 
-    HashMap<RenderObject*, FloatRect> m_objects;
-
-    static bool s_deferredFilterRendering;
+    HashSet<RenderObject*> m_objects;
 };
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderSVGResourceFilter, isSVGResourceFilter());

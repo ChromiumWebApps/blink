@@ -42,22 +42,11 @@ private:
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
     virtual void svgAttributeChanged(const QualifiedName&) OVERRIDE;
 
-    virtual bool isGradientStop() const OVERRIDE { return true; }
-
     virtual RenderObject* createRenderer(RenderStyle*) OVERRIDE;
     virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE;
 
     RefPtr<SVGAnimatedNumber> m_offset;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGStopElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 };
-
-inline bool isSVGStopElement(const Node& node)
-{
-    return node.isSVGElement() && toSVGElement(node).isGradientStop();
-}
-
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGStopElement);
 
 } // namespace WebCore
 

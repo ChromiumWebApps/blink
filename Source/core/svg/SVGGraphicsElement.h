@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2004, 2005, 2008 Nikolas Zimmermann <zimmermann@kde.org>
  * Copyright (C) 2004, 2005, 2006, 2007 Rob Buis <buis@kde.org>
+ * Copyright (C) 2014 Google, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -64,6 +65,9 @@ public:
     SVGAnimatedTransformList* transform() { return m_transform.get(); }
     const SVGAnimatedTransformList* transform() const { return m_transform.get(); }
 
+    AffineTransform computeCTM(SVGElement::CTMScope mode, SVGGraphicsElement::StyleUpdateStrategy,
+        const SVGGraphicsElement* ancestor = 0) const;
+
 protected:
     SVGGraphicsElement(const QualifiedName&, Document&, ConstructionType = CreateSVGElement);
 
@@ -72,8 +76,6 @@ protected:
     virtual void svgAttributeChanged(const QualifiedName&) OVERRIDE;
 
     RefPtr<SVGAnimatedTransformList> m_transform;
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGGraphicsElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
 private:
     virtual bool isSVGGraphicsElement() const OVERRIDE FINAL { return true; }
@@ -87,7 +89,7 @@ inline bool isSVGGraphicsElement(const Node& node)
     return node.isSVGElement() && toSVGElement(node).isSVGGraphicsElement();
 }
 
-DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(SVGGraphicsElement);
+DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(SVGGraphicsElement);
 
 } // namespace WebCore
 

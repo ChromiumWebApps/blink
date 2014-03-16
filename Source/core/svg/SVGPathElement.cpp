@@ -50,11 +50,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGPathElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGPathElement::SVGPathElement(Document& document)
     : SVGGeometryElement(SVGNames::pathTag, document)
     , m_pathLength(SVGAnimatedNumber::create(this, SVGNames::pathLengthAttr, SVGNumber::create()))
@@ -64,7 +59,6 @@ inline SVGPathElement::SVGPathElement(Document& document)
 
     addToPropertyMap(m_pathLength);
     addToPropertyMap(m_pathSegList);
-    registerAnimatedPropertiesForSVGPathElement();
 }
 
 PassRefPtr<SVGPathElement> SVGPathElement::create(Document& document)
@@ -212,7 +206,7 @@ void SVGPathElement::parseAttribute(const QualifiedName& name, const AtomicStrin
     } else if (name == SVGNames::pathLengthAttr) {
         m_pathLength->setBaseValueAsString(value, parseError);
         if (parseError == NoError && m_pathLength->baseValue()->value() < 0)
-            document().accessSVGExtensions()->reportError("A negative value for path attribute <pathLength> is not allowed");
+            document().accessSVGExtensions().reportError("A negative value for path attribute <pathLength> is not allowed");
     } else {
         ASSERT_NOT_REACHED();
     }
@@ -246,10 +240,10 @@ void SVGPathElement::invalidateMPathDependencies()
 {
     // <mpath> can only reference <path> but this dependency is not handled in
     // markForLayoutAndParentResourceInvalidation so we update any mpath dependencies manually.
-    if (HashSet<SVGElement*>* dependencies = document().accessSVGExtensions()->setOfElementsReferencingTarget(this)) {
+    if (HashSet<SVGElement*>* dependencies = document().accessSVGExtensions().setOfElementsReferencingTarget(this)) {
         HashSet<SVGElement*>::iterator end = dependencies->end();
         for (HashSet<SVGElement*>::iterator it = dependencies->begin(); it != end; ++it) {
-            if ((*it)->hasTagName(SVGNames::mpathTag))
+            if (isSVGMPathElement(**it))
                 toSVGMPathElement(*it)->targetPathChanged();
         }
     }

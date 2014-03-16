@@ -28,12 +28,8 @@
 #ifndef Frame_h
 #define Frame_h
 
-#include "core/loader/FrameLoader.h"
-#include "core/loader/NavigationScheduler.h"
-#include "core/page/FrameTree.h"
-#include "platform/geometry/IntSize.h"
-#include "platform/scroll/ScrollTypes.h"
 #include "wtf/Forward.h"
+#include "wtf/HashSet.h"
 #include "wtf/RefCounted.h"
 
 namespace blink {
@@ -42,290 +38,77 @@ class WebLayer;
 
 namespace WebCore {
 
-    class ChromeClient;
-    class Color;
-    class DOMWindow;
-    class Document;
-    class DragImage;
-    class Editor;
-    class Element;
-    class EventHandler;
-    class FetchContext;
-    class FloatSize;
-    class FrameDestructionObserver;
-    class FrameHost;
-    class FrameSelection;
-    class FrameView;
-    class HTMLFrameOwnerElement;
-    class HTMLTableCellElement;
-    class InputMethodController;
-    class IntPoint;
-    class Node;
-    class Page;
-    class Range;
-    class RenderPart;
-    class RenderView;
-    class TreeScope;
-    class ScriptController;
-    class Settings;
-    class SpellChecker;
-    class TreeScope;
-    class VisiblePosition;
-    class Widget;
+class Document;
+class DOMWindow;
+class ChromeClient;
+class FrameDestructionObserver;
+class FrameHost;
+class HTMLFrameOwnerElement;
+class Page;
+class RenderView;
+class Settings;
 
-    class FrameInit : public RefCounted<FrameInit> {
-    public:
-        // For creating a dummy Frame
-        static PassRefPtr<FrameInit> create(int64_t frameID, FrameHost* host, FrameLoaderClient* client)
-        {
-            return adoptRef(new FrameInit(frameID, host, client));
-        }
+class Frame : public RefCounted<Frame> {
+public:
+    virtual bool isLocalFrame() const { return false; }
+    virtual bool isRemoteFrame() const { return false; }
 
-        int64_t frameID() const { return m_frameID; }
+    virtual ~Frame();
 
-        void setFrameHost(FrameHost* host) { m_frameHost = host; }
-        FrameHost* frameHost() const { return m_frameHost; }
+    void addDestructionObserver(FrameDestructionObserver*);
+    void removeDestructionObserver(FrameDestructionObserver*);
 
-        void setFrameLoaderClient(FrameLoaderClient* client) { m_client = client; }
-        FrameLoaderClient* frameLoaderClient() const { return m_client; }
+    virtual void willDetachFrameHost();
+    virtual void detachFromFrameHost();
 
-        void setOwnerElement(HTMLFrameOwnerElement* ownerElement) { m_ownerElement = ownerElement; }
-        HTMLFrameOwnerElement* ownerElement() const { return m_ownerElement; }
+    // NOTE: Page is moving out of Blink up into the browser process as
+    // part of the site-isolation (out of process iframes) work.
+    // FrameHost should be used instead where possible.
+    Page* page() const;
+    FrameHost* host() const; // Null when the frame is detached.
 
-    protected:
-        FrameInit(int64_t frameID, FrameHost* host = 0, FrameLoaderClient* client = 0)
-            : m_frameID(frameID)
-            , m_client(client)
-            , m_frameHost(host)
-            , m_ownerElement(0)
-        {
-        }
+    bool isMainFrame() const;
 
-    private:
-        int64_t m_frameID;
-        FrameLoaderClient* m_client;
-        FrameHost* m_frameHost;
-        HTMLFrameOwnerElement* m_ownerElement;
-    };
+    // FIXME: DOMWindow and Document should both be moved to LocalFrame
+    // after RemoteFrame is complete enough to exist without them.
+    virtual void setDOMWindow(PassRefPtr<DOMWindow>);
+    DOMWindow* domWindow() const;
+    Document* document() const;
 
-    class Frame : public RefCounted<Frame> {
-    public:
-        static PassRefPtr<Frame> create(PassRefPtr<FrameInit>);
+    ChromeClient& chromeClient() const;
 
-        void init();
-        void setView(PassRefPtr<FrameView>);
-        void createView(const IntSize&, const Color&, bool,
-            ScrollbarMode = ScrollbarAuto, bool horizontalLock = false,
-            ScrollbarMode = ScrollbarAuto, bool verticalLock = false);
+    RenderView* contentRenderer() const; // Root of the render tree for the document contained in this frame.
 
-        ~Frame();
+    int64_t frameID() const { return m_frameID; }
 
-        void addDestructionObserver(FrameDestructionObserver*);
-        void removeDestructionObserver(FrameDestructionObserver*);
+    // FIXME: These should move to RemoteFrame when that is instantiated.
+    void setRemotePlatformLayer(blink::WebLayer* remotePlatformLayer) { m_remotePlatformLayer = remotePlatformLayer; }
+    blink::WebLayer* remotePlatformLayer() const { return m_remotePlatformLayer; }
 
-        void willDetachFrameHost();
-        void detachFromFrameHost();
-        void disconnectOwnerElement();
+    Settings* settings() const; // can be null
 
-        // NOTE: Page is moving out of Blink up into the browser process as
-        // part of the site-isolation (out of process iframes) work.
-        // FrameHost should be used instead where possible.
-        Page* page() const;
-        FrameHost* host() const; // Null when the frame is detached.
+protected:
+    Frame(FrameHost*, HTMLFrameOwnerElement*);
 
-        HTMLFrameOwnerElement* ownerElement() const;
-        bool isMainFrame() const;
+    FrameHost* m_host;
+    HTMLFrameOwnerElement* m_ownerElement;
 
-        void setDOMWindow(PassRefPtr<DOMWindow>);
-        DOMWindow* domWindow() const;
-        Document* document() const;
-        FrameView* view() const;
+    RefPtr<DOMWindow> m_domWindow;
 
-        ChromeClient& chromeClient() const;
-        Editor& editor() const;
-        EventHandler& eventHandler() const;
-        FrameLoader& loader() const;
-        NavigationScheduler& navigationScheduler() const;
-        FrameSelection& selection() const;
-        FrameTree& tree() const;
-        InputMethodController& inputMethodController() const;
-        FetchContext& fetchContext() const { return loader().fetchContext(); }
-        ScriptController& script();
-        SpellChecker& spellChecker() const;
+private:
 
-        RenderView* contentRenderer() const; // Root of the render tree for the document contained in this frame.
-        RenderPart* ownerRenderer() const; // Renderer for the element that contains this frame.
+    HashSet<FrameDestructionObserver*> m_destructionObservers;
 
-        void didChangeVisibilityState();
+    // Temporary hack for history.
+    int64_t m_frameID;
 
-        int64_t frameID() const { return m_frameInit->frameID(); }
+    blink::WebLayer* m_remotePlatformLayer;
+};
 
-        // FIXME: These should move to RemoteFrame once that exists.
-        // RemotePlatformLayer is only ever set for Frames which exist in another process.
-        void setRemotePlatformLayer(blink::WebLayer* remotePlatformLayer) { m_remotePlatformLayer = remotePlatformLayer; }
-        blink::WebLayer* remotePlatformLayer() const { return m_remotePlatformLayer; }
-
-    // ======== All public functions below this point are candidates to move out of Frame into another class. ========
-
-        bool inScope(TreeScope*) const;
-
-        void countObjectsNeedingLayout(unsigned& needsLayoutObjects, unsigned& totalObjects, bool& isPartial);
-
-        // See GraphicsLayerClient.h for accepted flags.
-        String layerTreeAsText(unsigned flags = 0) const;
-        String trackedRepaintRectsAsText() const;
-
-        Settings* settings() const; // can be NULL
-
-        void setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio);
-        bool shouldUsePrintingLayout() const;
-        FloatSize resizePageRectsKeepingRatio(const FloatSize& originalSize, const FloatSize& expectedSize);
-
-        bool inViewSourceMode() const;
-        void setInViewSourceMode(bool = true);
-
-        void setPageZoomFactor(float factor);
-        float pageZoomFactor() const { return m_pageZoomFactor; }
-        void setTextZoomFactor(float factor);
-        float textZoomFactor() const { return m_textZoomFactor; }
-        void setPageAndTextZoomFactors(float pageZoomFactor, float textZoomFactor);
-
-        void deviceOrPageScaleFactorChanged();
-        double devicePixelRatio() const;
-
-        // Orientation is the interface orientation in degrees. Some examples are:
-        //  0 is straight up; -90 is when the device is rotated 90 clockwise;
-        //  90 is when rotated counter clockwise.
-        void sendOrientationChangeEvent(int orientation);
-        int orientation() const { return m_orientation; }
-
-        String documentTypeString() const;
-
-        PassOwnPtr<DragImage> nodeImage(Node*);
-        PassOwnPtr<DragImage> dragImageForSelection();
-
-        String selectedText() const;
-        String selectedTextForClipboard() const;
-
-        VisiblePosition visiblePositionForPoint(const IntPoint& framePoint);
-        Document* documentAtPoint(const IntPoint& windowPoint);
-        PassRefPtr<Range> rangeForPoint(const IntPoint& framePoint);
-
-        // Should only be called on the main frame of a page.
-        void notifyChromeClientWheelEventHandlerCountChanged() const;
-
-        bool isURLAllowed(const KURL&) const;
-
-    // ========
-
-    private:
-        Frame(PassRefPtr<FrameInit>);
-
-        HashSet<FrameDestructionObserver*> m_destructionObservers;
-
-        FrameHost* m_host;
-        mutable FrameTree m_treeNode;
-        mutable FrameLoader m_loader;
-        mutable NavigationScheduler m_navigationScheduler;
-
-        RefPtr<FrameView> m_view;
-        RefPtr<DOMWindow> m_domWindow;
-
-        OwnPtr<ScriptController> m_script;
-        const OwnPtr<Editor> m_editor;
-        const OwnPtr<SpellChecker> m_spellChecker;
-        const OwnPtr<FrameSelection> m_selection;
-        const OwnPtr<EventHandler> m_eventHandler;
-        OwnPtr<InputMethodController> m_inputMethodController;
-
-        RefPtr<FrameInit> m_frameInit;
-
-        float m_pageZoomFactor;
-        float m_textZoomFactor;
-
-        int m_orientation;
-
-        bool m_inViewSourceMode;
-
-        blink::WebLayer* m_remotePlatformLayer;
-    };
-
-    inline void Frame::init()
-    {
-        m_loader.init();
-    }
-
-    inline FrameLoader& Frame::loader() const
-    {
-        return m_loader;
-    }
-
-    inline NavigationScheduler& Frame::navigationScheduler() const
-    {
-        return m_navigationScheduler;
-    }
-
-    inline FrameView* Frame::view() const
-    {
-        return m_view.get();
-    }
-
-    inline ScriptController& Frame::script()
-    {
-        return *m_script;
-    }
-
-    inline DOMWindow* Frame::domWindow() const
-    {
-        return m_domWindow.get();
-    }
-
-    inline FrameSelection& Frame::selection() const
-    {
-        return *m_selection;
-    }
-
-    inline Editor& Frame::editor() const
-    {
-        return *m_editor;
-    }
-
-    inline SpellChecker& Frame::spellChecker() const
-    {
-        return *m_spellChecker;
-    }
-
-    inline InputMethodController& Frame::inputMethodController() const
-    {
-        return *m_inputMethodController;
-    }
-
-    inline HTMLFrameOwnerElement* Frame::ownerElement() const
-    {
-        return m_frameInit->ownerElement();
-    }
-
-    inline bool Frame::inViewSourceMode() const
-    {
-        return m_inViewSourceMode;
-    }
-
-    inline void Frame::setInViewSourceMode(bool mode)
-    {
-        m_inViewSourceMode = mode;
-    }
-
-    inline FrameTree& Frame::tree() const
-    {
-        return m_treeNode;
-    }
-
-    inline EventHandler& Frame::eventHandler() const
-    {
-        ASSERT(m_eventHandler);
-        return *m_eventHandler;
-    }
-
+inline DOMWindow* Frame::domWindow() const
+{
+    return m_domWindow.get();
+}
 } // namespace WebCore
 
 #endif // Frame_h

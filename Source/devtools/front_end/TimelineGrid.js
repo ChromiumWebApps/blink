@@ -35,29 +35,124 @@ WebInspector.TimelineGrid = function()
 {
     this.element = document.createElement("div");
 
-    this._itemsGraphsElement = document.createElement("div");
-    this._itemsGraphsElement.id = "resources-graphs";
-    this.element.appendChild(this._itemsGraphsElement);
-
     this._dividersElement = this.element.createChild("div", "resources-dividers");
 
     this._gridHeaderElement = document.createElement("div");
+    this._gridHeaderElement.id = "timeline-grid-header";
     this._eventDividersElement = this._gridHeaderElement.createChild("div", "resources-event-dividers");
     this._dividersLabelBarElement = this._gridHeaderElement.createChild("div", "resources-dividers-label-bar");
     this.element.appendChild(this._gridHeaderElement);
 
     this._leftCurtainElement = this.element.createChild("div", "timeline-cpu-curtain-left");
     this._rightCurtainElement = this.element.createChild("div", "timeline-cpu-curtain-right");
-
-    this._gridSliceTime = 1;
 }
 
-WebInspector.TimelineGrid.prototype = {
-    get itemsGraphsElement()
-    {
-        return this._itemsGraphsElement;
-    },
+/**
+ * @param {!WebInspector.TimelineGrid.Calculator} calculator
+ * @param {number} clientWidth
+ * @return {!{offsets: !Array.<number>, precision: number}}
+ */
+WebInspector.TimelineGrid.calculateDividerOffsets = function(calculator, clientWidth)
+{
+    const minGridSlicePx = 64; // minimal distance between grid lines.
+    const gridFreeZoneAtLeftPx = 50;
 
+    var dividersCount = clientWidth / minGridSlicePx;
+    var gridSliceTime = calculator.boundarySpan() / dividersCount;
+    var pixelsPerTime = clientWidth / calculator.boundarySpan();
+
+    // Align gridSliceTime to a nearest round value.
+    // We allow spans that fit into the formula: span = (1|2|5)x10^n,
+    // e.g.: ...  .1  .2  .5  1  2  5  10  20  50  ...
+    // After a span has been chosen make grid lines at multiples of the span.
+
+    var logGridSliceTime = Math.ceil(Math.log(gridSliceTime) / Math.LN10);
+    gridSliceTime = Math.pow(10, logGridSliceTime);
+    if (gridSliceTime * pixelsPerTime >= 5 * minGridSlicePx)
+        gridSliceTime = gridSliceTime / 5;
+    if (gridSliceTime * pixelsPerTime >= 2 * minGridSlicePx)
+        gridSliceTime = gridSliceTime / 2;
+
+    var firstDividerTime = Math.ceil((calculator.minimumBoundary() - calculator.zeroTime()) / gridSliceTime) * gridSliceTime + calculator.zeroTime();
+    var lastDividerTime = calculator.maximumBoundary();
+    // Add some extra space past the right boundary as the rightmost divider label text
+    // may be partially shown rather than just pop up when a new rightmost divider gets into the view.
+    if (calculator.paddingLeft() > 0)
+        lastDividerTime = lastDividerTime + minGridSlicePx / pixelsPerTime;
+    dividersCount = Math.ceil((lastDividerTime - firstDividerTime) / gridSliceTime);
+
+    var skipLeftmostDividers = calculator.paddingLeft() === 0;
+
+    if (!gridSliceTime)
+        dividersCount = 0;
+
+    var offsets = [];
+    for (var i = 0; i < dividersCount; ++i) {
+        var left = calculator.computePosition(firstDividerTime + gridSliceTime * i);
+        if (skipLeftmostDividers && left < gridFreeZoneAtLeftPx)
+            continue;
+        offsets.push(firstDividerTime + gridSliceTime * i);
+    }
+
+    return {offsets: offsets, precision: Math.max(0, -Math.floor(Math.log(gridSliceTime * 1.01) / Math.LN10))};
+}
+
+/**
+ * @param {!Object} canvas
+ * @param {!WebInspector.TimelineGrid.Calculator} calculator
+ * @param {?Array.<number>=} dividerOffsets
+ */
+WebInspector.TimelineGrid.drawCanvasGrid = function(canvas, calculator, dividerOffsets)
+{
+    var context = canvas.getContext("2d");
+    context.save();
+    var ratio = window.devicePixelRatio;
+    context.scale(ratio, ratio);
+    context.translate(0.5, 0.5);
+    var printDeltas = !!dividerOffsets;
+    var width = canvas.width / window.devicePixelRatio;
+    var height = canvas.height / window.devicePixelRatio;
+    var precision = 0;
+    if (!dividerOffsets) {
+        var dividersData = WebInspector.TimelineGrid.calculateDividerOffsets(calculator, width);
+        dividerOffsets = dividersData.offsets;
+        precision = dividersData.precision;
+    }
+
+    context.fillStyle = "#333";
+    context.strokeStyle = "rgba(0, 0, 0, 0.1)";
+    context.textBaseline = "hanging";
+    context.font = (printDeltas ? "italic bold 11px " : " 11px ") + WebInspector.fontFamily();
+    context.lineWidth = 1;
+
+    const minWidthForTitle = 60;
+    var lastPosition = 0;
+    var time = 0;
+    var lastTime = 0;
+    var paddingRight = 4;
+    var paddingTop = 3;
+    for (var i = 0; i < dividerOffsets.length; ++i) {
+        time = dividerOffsets[i];
+        var position = calculator.computePosition(time);
+        context.beginPath();
+        if (position - lastPosition > minWidthForTitle) {
+            if (!printDeltas || i !== 0) {
+                var text = printDeltas ? calculator.formatTime(calculator.zeroTime() + time - lastTime) : calculator.formatTime(time, precision);
+                var textWidth = context.measureText(text).width;
+                var textPosition = printDeltas ? (position + lastPosition - textWidth) / 2 : position - textWidth - paddingRight;
+                context.fillText(text, textPosition, paddingTop);
+            }
+        }
+        context.moveTo(position, 0);
+        context.lineTo(position, height);
+        context.stroke();
+        lastTime = time;
+        lastPosition = position;
+    }
+    context.restore();
+},
+
+WebInspector.TimelineGrid.prototype = {
     get dividersElement()
     {
         return this._dividersElement;
@@ -68,15 +163,6 @@ WebInspector.TimelineGrid.prototype = {
         return this._dividersLabelBarElement;
     },
 
-    get gridHeaderElement()
-    {
-        return this._gridHeaderElement;
-    },
-
-    get gridSliceTime() {
-        return this._gridSliceTime;
-    },
-
     removeDividers: function()
     {
         this._dividersElement.removeChildren();
@@ -84,53 +170,31 @@ WebInspector.TimelineGrid.prototype = {
     },
 
     /**
+     * @param {!WebInspector.TimelineGrid.Calculator} calculator
+     * @param {?Array.<number>=} dividerOffsets
+     * @param {boolean=} printDeltas
      * @return {boolean}
      */
-    updateDividers: function(calculator)
+    updateDividers: function(calculator, dividerOffsets, printDeltas)
     {
-        const minGridSlicePx = 64; // minimal distance between grid lines.
-        const gridFreeZoneAtLeftPx = 50;
+        var precision = 0;
+        if (!dividerOffsets) {
+            var dividersData = WebInspector.TimelineGrid.calculateDividerOffsets(calculator, this._dividersElement.clientWidth);
+            dividerOffsets = dividersData.offsets;
+            precision = dividersData.precision;
+            printDeltas = false;
+        }
 
         var dividersElementClientWidth = this._dividersElement.clientWidth;
-        var dividersCount = dividersElementClientWidth / minGridSlicePx;
-        var gridSliceTime = calculator.boundarySpan() / dividersCount;
-        var pixelsPerTime = dividersElementClientWidth / calculator.boundarySpan();
-
-        // Align gridSliceTime to a nearest round value.
-        // We allow spans that fit into the formula: span = (1|2|5)x10^n,
-        // e.g.: ...  .1  .2  .5  1  2  5  10  20  50  ...
-        // After a span has been chosen make grid lines at multiples of the span.
-
-        var logGridSliceTime = Math.ceil(Math.log(gridSliceTime) / Math.LN10);
-        gridSliceTime = Math.pow(10, logGridSliceTime);
-        if (gridSliceTime * pixelsPerTime >= 5 * minGridSlicePx)
-            gridSliceTime = gridSliceTime / 5;
-        if (gridSliceTime * pixelsPerTime >= 2 * minGridSlicePx)
-            gridSliceTime = gridSliceTime / 2;
-        this._gridSliceTime = gridSliceTime;
-
-        var firstDividerTime = Math.ceil((calculator.minimumBoundary() - calculator.zeroTime()) / gridSliceTime) * gridSliceTime + calculator.zeroTime();
-        var lastDividerTime = calculator.maximumBoundary();
-        // Add some extra space past the right boundary as the rightmost divider label text
-        // may be partially shown rather than just pop up when a new rightmost divider gets into the view.
-        if (calculator.paddingLeft > 0)
-            lastDividerTime = lastDividerTime + minGridSlicePx / pixelsPerTime;
-        dividersCount = Math.ceil((lastDividerTime - firstDividerTime) / gridSliceTime);
 
         // Reuse divider elements and labels.
         var divider = this._dividersElement.firstChild;
         var dividerLabelBar = this._dividersLabelBarElement.firstChild;
 
-        var skipLeftmostDividers = calculator.paddingLeft === 0;
-
-        if (!gridSliceTime)
-            dividersCount = 0;
-
-        for (var i = 0; i < dividersCount; ++i) {
-            var left = calculator.computePosition(firstDividerTime + gridSliceTime * i);
-            if (skipLeftmostDividers && left < gridFreeZoneAtLeftPx)
-                continue;
-
+        const minWidthForTitle = 60;
+        var lastPosition = 0;
+        var lastTime = 0;
+        for (var i = 0; i < dividerOffsets.length; ++i) {
             if (!divider) {
                 divider = document.createElement("div");
                 divider.className = "resources-divider";
@@ -145,8 +209,21 @@ WebInspector.TimelineGrid.prototype = {
                 this._dividersLabelBarElement.appendChild(dividerLabelBar);
             }
 
-            dividerLabelBar._labelElement.textContent = calculator.formatTime(firstDividerTime + gridSliceTime * i - calculator.minimumBoundary());
-            var percentLeft = 100 * left / dividersElementClientWidth;
+            var time = dividerOffsets[i];
+            var position = calculator.computePosition(time);
+            if (position - lastPosition > minWidthForTitle)
+                dividerLabelBar._labelElement.textContent = printDeltas ? calculator.formatTime(time - lastTime) : calculator.formatTime(time, precision);
+            else
+                dividerLabelBar._labelElement.textContent = "";
+
+            if (printDeltas)
+                dividerLabelBar._labelElement.style.width = Math.ceil(position - lastPosition) + "px";
+            else
+                dividerLabelBar._labelElement.style.removeProperty("width");
+
+            lastPosition = position;
+            lastTime = time;
+            var percentLeft = 100 * position / dividersElementClientWidth;
             divider.style.left = percentLeft + "%";
             dividerLabelBar.style.left = percentLeft + "%";
 
@@ -228,7 +305,7 @@ WebInspector.TimelineGrid.prototype = {
 
     setScrollAndDividerTop: function(scrollTop, dividersTop)
     {
-        this._dividersElement.style.top = scrollTop + "px";
+        this._dividersLabelBarElement.style.top = scrollTop + "px";
         this._leftCurtainElement.style.top = scrollTop + "px";
         this._rightCurtainElement.style.top = scrollTop + "px";
     }
@@ -241,17 +318,22 @@ WebInspector.TimelineGrid.Calculator = function() { }
 
 WebInspector.TimelineGrid.Calculator.prototype = {
     /**
-     * @param {number} time
      * @return {number}
      */
-    computePosition: function(time) { return 0; },
+    paddingLeft: function() { },
 
     /**
      * @param {number} time
-     * @param {boolean=} hires
+     * @return {number}
+     */
+    computePosition: function(time) { },
+
+    /**
+     * @param {number} time
+     * @param {number=} precision
      * @return {string}
      */
-    formatTime: function(time, hires) { },
+    formatTime: function(time, precision) { },
 
     /** @return {number} */
     minimumBoundary: function() { },

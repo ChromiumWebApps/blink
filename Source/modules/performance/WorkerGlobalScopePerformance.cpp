@@ -41,10 +41,6 @@ WorkerGlobalScopePerformance::WorkerGlobalScopePerformance()
 {
 }
 
-WorkerGlobalScopePerformance::~WorkerGlobalScopePerformance()
-{
-}
-
 const char* WorkerGlobalScopePerformance::supplementName()
 {
     return "WorkerGlobalScopePerformance";
@@ -52,10 +48,10 @@ const char* WorkerGlobalScopePerformance::supplementName()
 
 WorkerGlobalScopePerformance& WorkerGlobalScopePerformance::from(WorkerGlobalScope& context)
 {
-    WorkerGlobalScopePerformance* supplement = static_cast<WorkerGlobalScopePerformance*>(WorkerSupplement::from(context, supplementName()));
+    WorkerGlobalScopePerformance* supplement = static_cast<WorkerGlobalScopePerformance*>(WillBeHeapSupplement<WorkerGlobalScope>::from(context, supplementName()));
     if (!supplement) {
         supplement = new WorkerGlobalScopePerformance();
-        provideTo(context, supplementName(), adoptPtr(supplement));
+        provideTo(context, supplementName(), adoptPtrWillBeNoop(supplement));
     }
     return *supplement;
 }
@@ -70,6 +66,11 @@ WorkerPerformance* WorkerGlobalScopePerformance::performance()
     if (!m_performance)
         m_performance = WorkerPerformance::create();
     return m_performance.get();
+}
+
+void WorkerGlobalScopePerformance::trace(Visitor* visitor)
+{
+    visitor->trace(m_performance);
 }
 
 } // namespace WebCore

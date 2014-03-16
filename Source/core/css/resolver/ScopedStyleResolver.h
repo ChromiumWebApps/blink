@@ -31,6 +31,7 @@
 #include "core/css/RuleSet.h"
 #include "core/dom/ContainerNode.h"
 #include "wtf/HashMap.h"
+#include "wtf/HashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
@@ -56,12 +57,12 @@ public:
 
 public:
     const StyleRuleKeyframes* keyframeStylesForAnimation(const StringImpl* animationName);
-    void addKeyframeStyle(PassRefPtr<StyleRuleKeyframes>);
+    void addKeyframeStyle(PassRefPtrWillBeRawPtr<StyleRuleKeyframes>);
 
     void collectMatchingAuthorRules(ElementRuleCollector&, bool includeEmptyRules, bool applyAuthorStyles, CascadeScope, CascadeOrder = ignoreCascadeOrder);
     void matchPageRules(PageRuleCollector&);
     void addRulesFromSheet(CSSStyleSheet*, const MediaQueryEvaluator&, StyleResolver*);
-    void collectFeaturesTo(RuleFeatureSet&);
+    void collectFeaturesTo(RuleFeatureSet&, HashSet<const StyleSheetContents*>& visitedSharedStyleSheetContents);
     void resetAuthorStyle();
     void collectViewportRulesTo(StyleResolver*) const;
 
@@ -73,7 +74,7 @@ private:
 
     Vector<CSSStyleSheet*> m_authorStyleSheets;
 
-    typedef HashMap<const StringImpl*, RefPtr<StyleRuleKeyframes> > KeyframesRuleMap;
+    typedef WillBePersistentHeapHashMap<const StringImpl*, RefPtrWillBeMember<StyleRuleKeyframes> > KeyframesRuleMap;
     KeyframesRuleMap m_keyframesRuleMap;
 };
 

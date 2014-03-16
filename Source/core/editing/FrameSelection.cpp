@@ -46,6 +46,8 @@
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
 #include "core/frame/DOMWindow.h"
+#include "core/frame/LocalFrame.h"
+#include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLInputElement.h"
@@ -53,7 +55,6 @@
 #include "core/page/EditorClient.h"
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
-#include "core/frame/Frame.h"
 #include "core/page/FrameTree.h"
 #include "core/frame/FrameView.h"
 #include "core/page/Page.h"
@@ -62,6 +63,7 @@
 #include "core/rendering/HitTestRequest.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
+#include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderText.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/RenderView.h"
@@ -82,14 +84,15 @@ static inline LayoutUnit NoXPosForVerticalArrowNavigation()
     return LayoutUnit::min();
 }
 
-static inline bool shouldAlwaysUseDirectionalSelection(Frame* frame)
+static inline bool shouldAlwaysUseDirectionalSelection(LocalFrame* frame)
 {
     return !frame || frame->editor().behavior().shouldConsiderSelectionAsDirectional();
 }
 
-FrameSelection::FrameSelection(Frame* frame)
+FrameSelection::FrameSelection(LocalFrame* frame)
     : m_frame(frame)
     , m_xPosForVerticalArrowNavigation(NoXPosForVerticalArrowNavigation())
+    , m_observingVisibleSelection(false)
     , m_granularity(CharacterGranularity)
     , m_caretBlinkTimer(this, &FrameSelection::caretBlinkTimerFired)
     , m_absCaretBoundsDirty(true)
@@ -100,6 +103,11 @@ FrameSelection::FrameSelection(Frame* frame)
 {
     if (shouldAlwaysUseDirectionalSelection(m_frame))
         m_selection.setIsDirectional(true);
+}
+
+FrameSelection::~FrameSelection()
+{
+    stopObservingVisibleSelectionChangeIfNecessary();
 }
 
 Element* FrameSelection::rootEditableElementOrDocumentElement() const
@@ -148,7 +156,7 @@ static void adjustEndpointsAtBidiBoundary(VisiblePosition& visibleBase, VisibleP
     if (base.atLeftBoundaryOfBidiRun()) {
         if (!extent.atRightBoundaryOfBidiRun(base.bidiLevelOnRight())
             && base.isEquivalent(extent.leftBoundaryOfBidiRun(base.bidiLevelOnRight()))) {
-            visibleBase = base.positionAtLeftBoundaryOfBiDiRun();
+            visibleBase = VisiblePosition(base.positionAtLeftBoundaryOfBiDiRun());
             return;
         }
         return;
@@ -157,19 +165,19 @@ static void adjustEndpointsAtBidiBoundary(VisiblePosition& visibleBase, VisibleP
     if (base.atRightBoundaryOfBidiRun()) {
         if (!extent.atLeftBoundaryOfBidiRun(base.bidiLevelOnLeft())
             && base.isEquivalent(extent.rightBoundaryOfBidiRun(base.bidiLevelOnLeft()))) {
-            visibleBase = base.positionAtRightBoundaryOfBiDiRun();
+            visibleBase = VisiblePosition(base.positionAtRightBoundaryOfBiDiRun());
             return;
         }
         return;
     }
 
     if (extent.atLeftBoundaryOfBidiRun() && extent.isEquivalent(base.leftBoundaryOfBidiRun(extent.bidiLevelOnRight()))) {
-        visibleExtent = extent.positionAtLeftBoundaryOfBiDiRun();
+        visibleExtent = VisiblePosition(extent.positionAtLeftBoundaryOfBiDiRun());
         return;
     }
 
     if (extent.atRightBoundaryOfBidiRun() && extent.isEquivalent(base.rightBoundaryOfBidiRun(extent.bidiLevelOnLeft()))) {
-        visibleExtent = extent.positionAtRightBoundaryOfBiDiRun();
+        visibleExtent = VisiblePosition(extent.positionAtRightBoundaryOfBiDiRun());
         return;
     }
 }
@@ -224,7 +232,7 @@ void FrameSelection::setSelection(const VisibleSelection& newSelection, SetSelec
     if (s.base().anchorNode()) {
         Document& document = *s.base().document();
         if (document.frame() && document.frame() != m_frame && document != m_frame->document()) {
-            RefPtr<Frame> guard = document.frame();
+            RefPtr<LocalFrame> guard = document.frame();
             document.frame()->selection().setSelection(s, options, align, granularity);
             // It's possible that during the above set selection, this FrameSelection has been modified by
             // selectFrameElementInParentIfFullySelected, but that the selection is no longer valid since
@@ -260,6 +268,9 @@ void FrameSelection::setSelection(const VisibleSelection& newSelection, SetSelec
 
     if (!(options & DoNotUpdateAppearance)) {
         m_frame->document()->updateLayoutIgnorePendingStylesheets();
+
+        // Hits in compositing/overflow/do-not-paint-outline-into-composited-scrolling-contents.html
+        DisableCompositingQueryAsserts disabler;
         updateAppearance();
     }
 
@@ -321,9 +332,9 @@ void FrameSelection::respondToNodeModification(Node& node, bool baseRemoved, boo
         Position start = m_selection.start();
         Position end = m_selection.end();
         if (startRemoved)
-            updatePositionForNodeRemoval(start, &node);
+            updatePositionForNodeRemoval(start, node);
         if (endRemoved)
-            updatePositionForNodeRemoval(end, &node);
+            updatePositionForNodeRemoval(end, node);
 
         if (start.isNotNull() && end.isNotNull()) {
             if (m_selection.isBaseFirst())
@@ -486,6 +497,8 @@ TextDirection FrameSelection::directionOfSelection()
 
 void FrameSelection::didChangeFocus()
 {
+    // Hits in virtual/gpu/compositedscrolling/scrollbars/scrollbar-miss-mousemove-disabled.html
+    DisableCompositingQueryAsserts disabler;
     updateAppearance();
 }
 
@@ -584,7 +597,7 @@ VisiblePosition FrameSelection::nextWordPositionForPlatform(const VisiblePositio
 static void adjustPositionForUserSelectAll(VisiblePosition& pos, bool isForward)
 {
     if (Node* rootUserSelectAll = Position::rootUserSelectAllForNode(pos.deepEquivalent().anchorNode()))
-        pos = isForward ? positionAfterNode(rootUserSelectAll).downstream(CanCrossEditingBoundary) : positionBeforeNode(rootUserSelectAll).upstream(CanCrossEditingBoundary);
+        pos = VisiblePosition(isForward ? positionAfterNode(rootUserSelectAll).downstream(CanCrossEditingBoundary) : positionBeforeNode(rootUserSelectAll).upstream(CanCrossEditingBoundary));
 }
 
 VisiblePosition FrameSelection::modifyExtendingRight(TextGranularity granularity)
@@ -932,7 +945,7 @@ bool FrameSelection::modify(EAlteration alter, SelectionDirection direction, Tex
     willBeModified(alter, direction);
 
     bool wasRange = m_selection.isRange();
-    Position originalStartPosition = m_selection.start();
+    VisiblePosition originalStartPosition = m_selection.visibleStart();
     VisiblePosition position;
     switch (direction) {
     case DirectionRight:
@@ -991,7 +1004,7 @@ bool FrameSelection::modify(EAlteration alter, SelectionDirection direction, Tex
             VisibleSelection newSelection = m_selection;
             newSelection.setExtent(position);
             if (m_selection.isBaseFirst() != newSelection.isBaseFirst())
-                position = m_selection.base();
+                position = m_selection.visibleBase();
         }
 
         // Standard Mac behavior when extending to a boundary is grow the selection rather than leaving the
@@ -1130,7 +1143,7 @@ LayoutUnit FrameSelection::lineDirectionPointForBlockDirectionNavigation(EPositi
         break;
     }
 
-    Frame* frame = pos.document()->frame();
+    LocalFrame* frame = pos.document()->frame();
     if (!frame)
         return x;
 
@@ -1307,7 +1320,7 @@ bool FrameSelection::contains(const LayoutPoint& point)
 void FrameSelection::selectFrameElementInParentIfFullySelected()
 {
     // Find the parent frame; if there is none, then we have nothing to do.
-    Frame* parent = m_frame->tree().parent();
+    LocalFrame* parent = m_frame->tree().parent();
     if (!parent)
         return;
     Page* page = m_frame->page();
@@ -1349,7 +1362,7 @@ void FrameSelection::selectAll()
 {
     Document* document = m_frame->document();
 
-    if (document->focusedElement() && document->focusedElement()->hasTagName(selectTag)) {
+    if (isHTMLSelectElement(document->focusedElement())) {
         HTMLSelectElement* selectElement = toHTMLSelectElement(document->focusedElement());
         if (selectElement->canSelectAll()) {
             selectElement->selectAll();
@@ -1386,7 +1399,7 @@ void FrameSelection::selectAll()
     notifyRendererOfSelectionChange(UserTriggered);
 }
 
-bool FrameSelection::setSelectedRange(Range* range, EAffinity affinity, bool closeTyping)
+bool FrameSelection::setSelectedRange(Range* range, EAffinity affinity, SetSelectionOptions options)
 {
     if (!range || !range->startContainer() || !range->endContainer())
         return false;
@@ -1401,17 +1414,31 @@ bool FrameSelection::setSelectedRange(Range* range, EAffinity affinity, bool clo
     if (exceptionState.hadException())
         return false;
 
+    m_logicalRange = nullptr;
+    stopObservingVisibleSelectionChangeIfNecessary();
+
     // FIXME: Can we provide extentAffinity?
     VisiblePosition visibleStart(range->startPosition(), collapsed ? affinity : DOWNSTREAM);
     VisiblePosition visibleEnd(range->endPosition(), SEL_DEFAULT_AFFINITY);
-    setSelection(VisibleSelection(visibleStart, visibleEnd), ClearTypingStyle | (closeTyping ? CloseTyping : 0));
+    setSelection(VisibleSelection(visibleStart, visibleEnd), options);
+
+    m_logicalRange = range->cloneRange(ASSERT_NO_EXCEPTION);
+    startObservingVisibleSelectionChange();
+
     return true;
+}
+
+PassRefPtr<Range> FrameSelection::firstRange() const
+{
+    if (m_logicalRange)
+        return m_logicalRange->cloneRange(ASSERT_NO_EXCEPTION);
+    return m_selection.firstRange();
 }
 
 bool FrameSelection::isInPasswordField() const
 {
     HTMLTextFormControlElement* textControl = enclosingTextFormControl(start());
-    return textControl && textControl->hasTagName(inputTag) && toHTMLInputElement(textControl)->isPasswordField();
+    return isHTMLInputElement(textControl) && toHTMLInputElement(textControl)->isPasswordField();
 }
 
 void FrameSelection::notifyAccessibilityForSelectionChange()
@@ -1488,7 +1515,7 @@ bool FrameSelection::isFocusedAndActive() const
     return m_focused && m_frame->page() && m_frame->page()->focusController().isActive();
 }
 
-inline static bool shouldStopBlinkingDueToTypingCommand(Frame* frame)
+inline static bool shouldStopBlinkingDueToTypingCommand(LocalFrame* frame)
 {
     return frame->editor().lastEditCommand() && frame->editor().lastEditCommand()->shouldStopCaretBlinking();
 }
@@ -1520,7 +1547,7 @@ void FrameSelection::updateAppearance()
     // already blinking in the right location.
     if (shouldBlink && !m_caretBlinkTimer.isActive()) {
         if (double blinkInterval = RenderTheme::theme().caretBlinkInterval())
-            m_caretBlinkTimer.startRepeating(blinkInterval);
+            m_caretBlinkTimer.startRepeating(blinkInterval, FROM_HERE);
 
         if (!m_caretPaint) {
             m_caretPaint = true;
@@ -1617,7 +1644,7 @@ void FrameSelection::notifyRendererOfSelectionChange(EUserTriggered userTriggere
 }
 
 // Helper function that tells whether a particular node is an element that has an entire
-// Frame and FrameView, a <frame>, <iframe>, or <object>.
+// LocalFrame and FrameView, a <frame>, <iframe>, or <object>.
 static bool isFrameElement(const Node* n)
 {
     if (!n)
@@ -1698,17 +1725,16 @@ static HTMLFormElement* scanForForm(Node* start)
 {
     if (!start)
         return 0;
-    Element* element = start->isElementNode() ? toElement(start) : ElementTraversal::next(*start);
-    for (; element; element = ElementTraversal::next(*element)) {
-        if (element->hasTagName(formTag))
+    HTMLElement* element = start->isHTMLElement() ? toHTMLElement(start) : Traversal<HTMLElement>::next(*start);
+    for (; element; element = Traversal<HTMLElement>::next(*element)) {
+        if (isHTMLFormElement(*element))
             return toHTMLFormElement(element);
-        if (element->isHTMLElement()) {
-            HTMLFormElement* owner = toHTMLElement(element)->formOwner();
-            if (owner)
+
+        if (HTMLFormElement* owner = element->formOwner())
                 return owner;
-        }
-        if (element->hasTagName(frameTag) || element->hasTagName(iframeTag)) {
-            Node* childDocument = toHTMLFrameElementBase(element)->contentDocument();
+
+        if (isHTMLFrameElement(*element) || isHTMLIFrameElement(*element)) {
+            Node* childDocument = toHTMLFrameElementBase(*element).contentDocument();
             if (HTMLFormElement* frameResult = scanForForm(childDocument))
                 return frameResult;
         }
@@ -1727,7 +1753,7 @@ HTMLFormElement* FrameSelection::currentForm() const
     // Try walking up the node tree to find a form element.
     Node* node;
     for (node = start; node; node = node->parentNode()) {
-        if (node->hasTagName(formTag))
+        if (isHTMLFormElement(*node))
             return toHTMLFormElement(node);
         if (node->isHTMLElement()) {
             HTMLFormElement* owner = toHTMLElement(node)->formOwner();
@@ -1777,10 +1803,11 @@ void FrameSelection::setSelectionFromNone()
         return;
 
     Node* node = document->documentElement();
-    while (node && !node->hasTagName(bodyTag))
-        node = NodeTraversal::next(*node);
-    if (node)
-        setSelection(VisibleSelection(firstPositionInOrBeforeNode(node), DOWNSTREAM));
+    if (!node)
+        return;
+    Node* body = isHTMLBodyElement(*node) ? node : Traversal<HTMLBodyElement>::next(*node);
+    if (body)
+        setSelection(VisibleSelection(firstPositionInOrBeforeNode(body), DOWNSTREAM));
 }
 
 bool FrameSelection::dispatchSelectStart()
@@ -1799,6 +1826,30 @@ void FrameSelection::setShouldShowBlockCursor(bool shouldShowBlockCursor)
     m_frame->document()->updateLayoutIgnorePendingStylesheets();
 
     updateAppearance();
+}
+
+void FrameSelection::didChangeVisibleSelection()
+{
+    ASSERT(m_observingVisibleSelection);
+    // Invalidate the logical range when the underlying VisibleSelection has changed.
+    m_logicalRange = nullptr;
+    m_selection.clearChangeObserver();
+    m_observingVisibleSelection = false;
+}
+
+void FrameSelection::startObservingVisibleSelectionChange()
+{
+    ASSERT(!m_observingVisibleSelection);
+    m_selection.setChangeObserver(*this);
+    m_observingVisibleSelection = true;
+}
+
+void FrameSelection::stopObservingVisibleSelectionChangeIfNecessary()
+{
+    if (m_observingVisibleSelection) {
+        m_selection.clearChangeObserver();
+        m_observingVisibleSelection = false;
+    }
 }
 
 #ifndef NDEBUG

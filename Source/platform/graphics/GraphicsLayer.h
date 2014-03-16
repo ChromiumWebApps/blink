@@ -59,6 +59,7 @@ namespace WebCore {
 
 class FloatRect;
 class GraphicsContext;
+class GraphicsLayer;
 class GraphicsLayerFactory;
 class Image;
 class ScrollableArea;
@@ -74,6 +75,8 @@ public:
 protected:
     virtual ~LinkHighlightClient() { }
 };
+
+typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
 
 // GraphicsLayer is an abstraction for a rendering surface with backing store,
 // which may have associated transformation and animations.
@@ -103,7 +106,7 @@ public:
 
     const Vector<GraphicsLayer*>& children() const { return m_children; }
     // Returns true if the child list changed.
-    bool setChildren(const Vector<GraphicsLayer*>&);
+    bool setChildren(const GraphicsLayerVector&);
 
     // Add child layers. If the child is already parented, it will be removed from its old parent.
     void addChild(GraphicsLayer*);
@@ -202,6 +205,9 @@ public:
     bool isRootForIsolatedGroup() const { return m_isRootForIsolatedGroup; }
     void setIsRootForIsolatedGroup(bool);
 
+    bool hasGpuRasterizationHint() const { return m_hasGpuRasterizationHint; }
+    void setHasGpuRasterizationHint(bool);
+
     const FilterOperations& filters() const { return m_filters; }
 
     // Returns true if filter can be rendered by the compositor
@@ -232,7 +238,6 @@ public:
     // Layer contents
     void setContentsToImage(Image*);
     void setContentsToNinePatch(Image*, const IntRect& aperture);
-    void setContentsToSolidColor(const Color&);
     void setContentsToPlatformLayer(blink::WebLayer* layer) { setContentsTo(layer); }
     bool hasContentsLayer() const { return m_contentsLayer; }
 
@@ -289,8 +294,8 @@ public:
     virtual void paint(GraphicsContext&, const IntRect& clip) OVERRIDE;
 
     // WebAnimationDelegate implementation.
-    virtual void notifyAnimationStarted(double wallClockTime, double monotonicTime, blink::WebAnimation::TargetProperty) OVERRIDE;
-    virtual void notifyAnimationFinished(double wallClockTime, double monotonicTime, blink::WebAnimation::TargetProperty) OVERRIDE;
+    virtual void notifyAnimationStarted(double monotonicTime, blink::WebAnimation::TargetProperty) OVERRIDE;
+    virtual void notifyAnimationFinished(double monotonicTime, blink::WebAnimation::TargetProperty) OVERRIDE;
 
     // WebLayerScrollClient implementation.
     virtual void didScroll() OVERRIDE;
@@ -357,6 +362,7 @@ private:
     bool m_drawsContent : 1;
     bool m_contentsVisible : 1;
     bool m_isRootForIsolatedGroup : 1;
+    bool m_hasGpuRasterizationHint: 1;
 
     bool m_hasScrollParent : 1;
     bool m_hasClipParent : 1;
@@ -382,8 +388,6 @@ private:
     OwnPtr<blink::WebContentLayer> m_layer;
     OwnPtr<blink::WebImageLayer> m_imageLayer;
     OwnPtr<blink::WebNinePatchLayer> m_ninePatchLayer;
-    Color m_contentsSolidColor;
-    OwnPtr<blink::WebSolidColorLayer> m_solidColorLayer;
     blink::WebLayer* m_contentsLayer;
     // We don't have ownership of m_contentsLayer, but we do want to know if a given layer is the
     // same as our current layer in setContentsTo(). Since m_contentsLayer may be deleted at this point,
@@ -399,7 +403,6 @@ private:
     GraphicsLayerDebugInfo m_debugInfo;
     int m_3dRenderingContext;
 };
-
 
 } // namespace WebCore
 

@@ -29,8 +29,7 @@ InspectorTest.selectIdNodeWithId = function(idValue, pseudoType, callback)
     callback = InspectorTest.safeWrap(callback);
     function onNodeFound(node)
     {
-        if (node)
-            WebInspector._updateFocusedNode(node.id);
+        WebInspector.Revealer.reveal(node);
         callback(node);
     }
 
@@ -57,7 +56,7 @@ InspectorTest.waitForPseudoIdNodeStyles = function(idValue, pseudoType, callback
 
 InspectorTest.selectPseudoIdNodeAndWaitForStyles = function(idValue, pseudoType, callback)
 {
-    WebInspector.showPanel("elements");
+    WebInspector.inspectorView.showPanel("elements");
     callback = InspectorTest.safeWrap(callback);
 
     var targetNode;
@@ -195,12 +194,12 @@ function test()
         function domCallback()
         {
             WebInspector.domAgent.removeEventListener(eventName, domCallback, this);
-            WebInspector.panel("elements").treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.ElementsTreeUpdated, treeCallback, this);
+            WebInspector.inspectorView.panel("elements").treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.ElementsTreeUpdated, treeCallback, this);
         }
 
         function treeCallback()
         {
-            WebInspector.panel("elements").treeOutline.removeEventListener(WebInspector.ElementsTreeOutline.Events.ElementsTreeUpdated, treeCallback, this);
+            WebInspector.inspectorView.panel("elements").treeOutline.removeEventListener(WebInspector.ElementsTreeOutline.Events.ElementsTreeUpdated, treeCallback, this);
             InspectorTest.dumpElementsTree(containerNode);
             next();
         }

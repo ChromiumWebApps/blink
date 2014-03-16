@@ -51,12 +51,6 @@
 
 namespace WebCore {
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGUseElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGGraphicsElement)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGUseElement::SVGUseElement(Document& document, bool wasInsertedByParser)
     : SVGGraphicsElement(SVGNames::useTag, document)
     , SVGURIReference(this)
@@ -76,7 +70,6 @@ inline SVGUseElement::SVGUseElement(Document& document, bool wasInsertedByParser
     addToPropertyMap(m_y);
     addToPropertyMap(m_width);
     addToPropertyMap(m_height);
-    registerAnimatedPropertiesForSVGUseElement();
 }
 
 PassRefPtr<SVGUseElement> SVGUseElement::create(Document& document, bool wasInsertedByParser)
@@ -250,10 +243,8 @@ static void dumpInstanceTree(unsigned int& depth, String& text, SVGElementInstan
     SVGElement* element = targetInstance->correspondingElement();
     ASSERT(element);
 
-    if (element->hasTagName(SVGNames::useTag)) {
-        if (toSVGUseElement(element)->resourceIsStillLoading())
-            return;
-    }
+    if (isSVGUseElement(*element) && toSVGUseElement(*element).resourceIsStillLoading())
+        return;
 
     SVGElement* shadowTreeElement = targetInstance->shadowTreeElement();
     ASSERT(shadowTreeElement);
@@ -374,7 +365,7 @@ void SVGUseElement::clearResourceReferences()
     m_needsShadowTreeRecreation = false;
     document().unscheduleUseShadowTreeUpdate(*this);
 
-    document().accessSVGExtensions()->removeAllTargetReferencesForElement(this);
+    document().accessSVGExtensions().removeAllTargetReferencesForElement(this);
 }
 
 void SVGUseElement::buildPendingResource()
@@ -395,7 +386,7 @@ void SVGUseElement::buildPendingResource()
         if (id.isEmpty())
             return;
 
-        referencedDocument()->accessSVGExtensions()->addPendingResource(id, this);
+        referencedDocument()->accessSVGExtensions().addPendingResource(id, this);
         ASSERT(hasPendingResources());
         return;
     }
@@ -512,15 +503,15 @@ RenderObject* SVGUseElement::createRenderer(RenderStyle*)
     return new RenderSVGTransformableContainer(this);
 }
 
-static bool isDirectReference(const Node* node)
+static bool isDirectReference(const Node& node)
 {
-    return node->hasTagName(SVGNames::pathTag)
-           || node->hasTagName(SVGNames::rectTag)
-           || node->hasTagName(SVGNames::circleTag)
-           || node->hasTagName(SVGNames::ellipseTag)
-           || node->hasTagName(SVGNames::polygonTag)
-           || node->hasTagName(SVGNames::polylineTag)
-           || node->hasTagName(SVGNames::textTag);
+    return isSVGPathElement(node)
+        || isSVGRectElement(node)
+        || isSVGCircleElement(node)
+        || isSVGEllipseElement(node)
+        || isSVGPolygonElement(node)
+        || isSVGPolylineElement(node)
+        || isSVGTextElement(node);
 }
 
 void SVGUseElement::toClipPath(Path& path)
@@ -532,9 +523,9 @@ void SVGUseElement::toClipPath(Path& path)
         return;
 
     if (n->isSVGElement() && toSVGElement(n)->isSVGGraphicsElement()) {
-        if (!isDirectReference(n)) {
+        if (!isDirectReference(*n)) {
             // Spec: Indirect references are an error (14.3.5)
-            document().accessSVGExtensions()->reportError("Not allowed to use indirect reference in <clip-path>");
+            document().accessSVGExtensions().reportError("Not allowed to use indirect reference in <clip-path>");
         } else {
             toSVGGraphicsElement(n)->toClipPath(path);
             // FIXME: Avoid manual resolution of x/y here. Its potentially harmful.
@@ -551,7 +542,7 @@ RenderObject* SVGUseElement::rendererClipChild() const
     if (!n)
         return 0;
 
-    if (n->isSVGElement() && isDirectReference(n))
+    if (n->isSVGElement() && isDirectReference(*n))
         return toSVGElement(n)->renderer();
 
     return 0;
@@ -564,9 +555,9 @@ void SVGUseElement::buildInstanceTree(SVGElement* target, SVGElementInstance* ta
 
     // Spec: If the referenced object is itself a 'use', or if there are 'use' subelements within the referenced
     // object, the instance tree will contain recursive expansion of the indirect references to form a complete tree.
-    bool targetHasUseTag = target->hasTagName(SVGNames::useTag);
+    bool targetIsUseElement = isSVGUseElement(*target);
     SVGElement* newTarget = 0;
-    if (targetHasUseTag) {
+    if (targetIsUseElement) {
         foundProblem = hasCycleUseReferencing(toSVGUseElement(target), targetInstance, newTarget);
         if (foundProblem)
             return;
@@ -574,7 +565,7 @@ void SVGUseElement::buildInstanceTree(SVGElement* target, SVGElementInstance* ta
         // We only need to track first degree <use> dependencies. Indirect references are handled
         // as the invalidation bubbles up the dependency chain.
         if (!foundUse) {
-            document().accessSVGExtensions()->addElementReferencingTarget(this, target);
+            document().accessSVGExtensions().addElementReferencingTarget(this, target);
             foundUse = true;
         }
     } else if (isDisallowedElement(target)) {
@@ -609,7 +600,7 @@ void SVGUseElement::buildInstanceTree(SVGElement* target, SVGElementInstance* ta
             return;
     }
 
-    if (!targetHasUseTag || !newTarget)
+    if (!targetIsUseElement || !newTarget)
         return;
 
     RefPtr<SVGElementInstance> newInstance = SVGElementInstance::create(this, toSVGUseElement(target), newTarget);
@@ -683,6 +674,7 @@ void SVGUseElement::buildShadowTree(SVGElement* target, SVGElementInstance* targ
 
 void SVGUseElement::expandUseElementsInShadowTree(Node* element)
 {
+    ASSERT(element);
     // Why expand the <use> elements in the shadow tree here, and not just
     // do this directly in buildShadowTree, if we encounter a <use> element?
     //
@@ -690,7 +682,7 @@ void SVGUseElement::expandUseElementsInShadowTree(Node* element)
     // contains <use> tags, we'd miss them. So once we're done with settin' up the
     // actual shadow tree (after the special case modification for svg/symbol) we have
     // to walk it completely and expand all <use> elements.
-    if (element->hasTagName(SVGNames::useTag)) {
+    if (isSVGUseElement(*element)) {
         SVGUseElement* use = toSVGUseElement(element);
         ASSERT(!use->resourceIsStillLoading());
 
@@ -742,7 +734,8 @@ void SVGUseElement::expandUseElementsInShadowTree(Node* element)
 
 void SVGUseElement::expandSymbolElementsInShadowTree(Node* element)
 {
-    if (element->hasTagName(SVGNames::symbolTag)) {
+    ASSERT(element);
+    if (isSVGSymbolElement(*element)) {
         // Spec: The referenced 'symbol' and its contents are deep-cloned into the generated tree,
         // with the exception that the 'symbol' is replaced by an 'svg'. This generated 'svg' will
         // always have explicit values for attributes width and height. If attributes width and/or
@@ -808,11 +801,11 @@ void SVGUseElement::associateInstancesWithShadowTreeElements(Node* target, SVGEl
         return;
 
     SVGElement* originalElement = targetInstance->correspondingElement();
-
-    if (originalElement->hasTagName(SVGNames::useTag)) {
+    ASSERT(originalElement);
+    if (isSVGUseElement(*originalElement)) {
         // <use> gets replaced by <g>
         ASSERT(AtomicString(target->nodeName()) == SVGNames::gTag);
-    } else if (originalElement->hasTagName(SVGNames::symbolTag)) {
+    } else if (isSVGSymbolElement(*originalElement)) {
         // <symbol> gets replaced by <svg>
         ASSERT(AtomicString(target->nodeName()) == SVGNames::svgTag);
     } else {
@@ -959,7 +952,7 @@ bool SVGUseElement::instanceTreeIsLoading(SVGElementInstance* targetElementInsta
             if (use->resourceIsStillLoading())
                 return true;
         }
-        if (instance->hasChildNodes())
+        if (instance->hasChildren())
             instanceTreeIsLoading(instance);
     }
     return false;

@@ -1017,7 +1017,8 @@ static PassRefPtrWillBeRawPtr<CSSValue> createTimingFunctionValue(const TimingFu
         {
             const StepsTimingFunction* stepsTimingFunction = toStepsTimingFunction(timingFunction);
             if (stepsTimingFunction->subType() == StepsTimingFunction::Custom)
-                return CSSStepsTimingFunctionValue::create(stepsTimingFunction->numberOfSteps(), stepsTimingFunction->stepAtStart());
+                return CSSStepsTimingFunctionValue::create(stepsTimingFunction->numberOfSteps(), stepsTimingFunction->stepAtPosition());
+
             CSSValueID valueId;
             switch (stepsTimingFunction->subType()) {
             case StepsTimingFunction::Start:
@@ -1392,14 +1393,14 @@ static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontSize(RenderStyle& s
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontStyle(RenderStyle& style)
 {
-    if (style.fontDescription().italic())
+    if (style.fontDescription().style() == FontStyleItalic)
         return cssValuePool().createIdentifierValue(CSSValueItalic);
     return cssValuePool().createIdentifierValue(CSSValueNormal);
 }
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontVariant(RenderStyle& style)
 {
-    if (style.fontDescription().smallCaps())
+    if (style.fontDescription().variant() == FontVariantSmallCaps)
         return cssValuePool().createIdentifierValue(CSSValueSmallCaps);
     return cssValuePool().createIdentifierValue(CSSValueNormal);
 }
@@ -1430,6 +1431,29 @@ static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontWeight(RenderStyle&
     return cssValuePool().createIdentifierValue(CSSValueNormal);
 }
 
+static PassRefPtrWillBeRawPtr<CSSValue> valueForShape(const RenderStyle& style, ShapeValue* shapeValue)
+{
+    if (!shapeValue)
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+    if (shapeValue->type() == ShapeValue::Outside)
+        return cssValuePool().createIdentifierValue(CSSValueOutsideShape);
+    if (shapeValue->type() == ShapeValue::Box)
+        return cssValuePool().createValue(shapeValue->layoutBox());
+    if (shapeValue->type() == ShapeValue::Image) {
+        if (shapeValue->image())
+            return shapeValue->image()->cssValue();
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+    }
+
+    ASSERT(shapeValue->type() == ShapeValue::Shape);
+
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    list->append(valueForBasicShape(style, shapeValue->shape()));
+    if (shapeValue->layoutBox() != BoxMissing)
+        list->append(cssValuePool().createValue(shapeValue->layoutBox()));
+    return list.release();
+}
+
 static PassRefPtrWillBeRawPtr<CSSValue> touchActionFlagsToCSSValue(TouchAction touchAction)
 {
     RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
@@ -1439,11 +1463,14 @@ static PassRefPtrWillBeRawPtr<CSSValue> touchActionFlagsToCSSValue(TouchAction t
         ASSERT(touchAction == TouchActionNone);
         list->append(cssValuePool().createIdentifierValue(CSSValueNone));
     }
-    if (touchAction & TouchActionPanX)
-        list->append(cssValuePool().createIdentifierValue(CSSValuePanX));
-    if (touchAction & TouchActionPanY)
-        list->append(cssValuePool().createIdentifierValue(CSSValuePanY));
-
+    if (touchAction == (TouchActionPanX | TouchActionPanY | TouchActionPinchZoom)) {
+        list->append(cssValuePool().createIdentifierValue(CSSValueManipulation));
+    } else {
+        if (touchAction & TouchActionPanX)
+            list->append(cssValuePool().createIdentifierValue(CSSValuePanX));
+        if (touchAction & TouchActionPanY)
+            list->append(cssValuePool().createIdentifierValue(CSSValuePanY));
+    }
     ASSERT(list->length());
     return list.release();
 }
@@ -1532,10 +1559,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
     if (updateLayout) {
         Document& document = styledNode->document();
 
-        // If a compositor animation is running or animations have been updated
-        // via the api we may need to service animations in order to generate
-        // an up to date value.
-        DocumentAnimations::serviceBeforeGetComputedStyle(*styledNode, propertyID);
+        // A timing update may be required if a compositor animation is running or animations
+        // have been updated via the api.
+        DocumentAnimations::updateAnimationTimingForGetComputedStyle(*styledNode, propertyID);
 
         document.updateStyleForNodeIfNeeded(styledNode);
 
@@ -2205,7 +2231,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyTextShadow:
             return valueForShadowList(style->textShadow(), *style, false);
         case CSSPropertyTextRendering:
-            return cssValuePool().createValue(style->fontDescription().textRenderingMode());
+            return cssValuePool().createValue(style->fontDescription().textRendering());
         case CSSPropertyTextOverflow:
             if (style->textOverflow())
                 return cssValuePool().createIdentifierValue(CSSValueEllipsis);
@@ -2288,8 +2314,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
             FontDescription::LigaturesState commonLigaturesState = style->fontDescription().commonLigaturesState();
             FontDescription::LigaturesState discretionaryLigaturesState = style->fontDescription().discretionaryLigaturesState();
             FontDescription::LigaturesState historicalLigaturesState = style->fontDescription().historicalLigaturesState();
+            FontDescription::LigaturesState contextualLigaturesState = style->fontDescription().contextualLigaturesState();
             if (commonLigaturesState == FontDescription::NormalLigaturesState && discretionaryLigaturesState == FontDescription::NormalLigaturesState
-                && historicalLigaturesState == FontDescription::NormalLigaturesState)
+                && historicalLigaturesState == FontDescription::NormalLigaturesState && contextualLigaturesState == FontDescription::NormalLigaturesState)
                 return cssValuePool().createIdentifierValue(CSSValueNormal);
 
             RefPtrWillBeRawPtr<CSSValueList> valueList = CSSValueList::createSpaceSeparated();
@@ -2299,6 +2326,8 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
                 valueList->append(cssValuePool().createIdentifierValue(discretionaryLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoDiscretionaryLigatures : CSSValueDiscretionaryLigatures));
             if (historicalLigaturesState != FontDescription::NormalLigaturesState)
                 valueList->append(cssValuePool().createIdentifierValue(historicalLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoHistoricalLigatures : CSSValueHistoricalLigatures));
+            if (contextualLigaturesState != FontDescription::NormalLigaturesState)
+                valueList->append(cssValuePool().createIdentifierValue(contextualLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoContextual : CSSValueContextual));
             return valueList;
         }
         case CSSPropertyZIndex:
@@ -2618,31 +2647,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyShapeImageThreshold:
             return cssValuePool().createValue(style->shapeImageThreshold(), CSSPrimitiveValue::CSS_NUMBER);
         case CSSPropertyShapeInside:
-            if (!style->shapeInside())
-                return cssValuePool().createIdentifierValue(CSSValueNone);
-            if (style->shapeInside()->type() == ShapeValue::Box)
-                return cssValuePool().createValue(style->shapeInside()->layoutBox());
-            if (style->shapeInside()->type() == ShapeValue::Outside)
-                return cssValuePool().createIdentifierValue(CSSValueOutsideShape);
-            if (style->shapeInside()->type() == ShapeValue::Image) {
-                if (style->shapeInside()->image())
-                    return style->shapeInside()->image()->cssValue();
-                return cssValuePool().createIdentifierValue(CSSValueNone);
-            }
-            ASSERT(style->shapeInside()->type() == ShapeValue::Shape);
-            return valueForBasicShape(*style, style->shapeInside()->shape());
+            return valueForShape(*style, style->shapeInside());
         case CSSPropertyShapeOutside:
-            if (!style->shapeOutside())
-                return cssValuePool().createIdentifierValue(CSSValueNone);
-            if (style->shapeOutside()->type() == ShapeValue::Box)
-                return cssValuePool().createValue(style->shapeOutside()->layoutBox());
-            if (style->shapeOutside()->type() == ShapeValue::Image) {
-                if (style->shapeOutside()->image())
-                    return style->shapeOutside()->image()->cssValue();
-                return cssValuePool().createIdentifierValue(CSSValueNone);
-            }
-            ASSERT(style->shapeOutside()->type() == ShapeValue::Shape);
-            return valueForBasicShape(*style, style->shapeOutside()->shape());
+            return valueForShape(*style, style->shapeOutside());
         case CSSPropertyWebkitWrapThrough:
             return cssValuePool().createValue(style->wrapThrough());
         case CSSPropertyWebkitFilter:
@@ -2953,7 +2960,7 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSComputedStyleDeclaration::valuesForGridS
 
 PassRefPtr<MutableStylePropertySet> CSSComputedStyleDeclaration::copyPropertiesInSet(const Vector<CSSPropertyID>& properties) const
 {
-    Vector<CSSProperty, 256> list;
+    WillBeHeapVector<CSSProperty, 256> list;
     list.reserveInitialCapacity(properties.size());
     for (unsigned i = 0; i < properties.size(); ++i) {
         RefPtrWillBeRawPtr<CSSValue> value = getPropertyCSSValue(properties[i]);

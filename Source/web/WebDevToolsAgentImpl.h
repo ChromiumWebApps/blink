@@ -40,10 +40,11 @@
 #include "public/platform/WebThread.h"
 #include "wtf/Forward.h"
 #include "wtf/OwnPtr.h"
+#include "wtf/Vector.h"
 
 namespace WebCore {
 class Document;
-class Frame;
+class LocalFrame;
 class FrameView;
 class GraphicsContext;
 class InspectorClient;
@@ -102,7 +103,8 @@ public:
     virtual void highlight() OVERRIDE;
     virtual void hideHighlight() OVERRIDE;
     virtual void updateInspectorStateCookie(const WTF::String&) OVERRIDE;
-    virtual bool sendMessageToFrontend(const WTF::String&) OVERRIDE;
+    virtual void sendMessageToFrontend(PassRefPtr<WebCore::JSONObject> message) OVERRIDE;
+    virtual void flush() OVERRIDE;
 
     virtual void clearBrowserCache() OVERRIDE;
     virtual void clearBrowserCookies() OVERRIDE;
@@ -111,7 +113,8 @@ public:
 
     virtual void getAllocatedObjects(HashSet<const void*>&) OVERRIDE;
     virtual void dumpUncountedAllocatedObjects(const HashMap<const void*, size_t>&) OVERRIDE;
-    virtual void setTraceEventCallback(TraceEventCallback) OVERRIDE;
+    virtual void setTraceEventCallback(const WTF::String& categoryFilter, TraceEventCallback) OVERRIDE;
+    virtual void resetTraceEventCallback() OVERRIDE;
     virtual void startGPUEventsRecording() OVERRIDE;
     virtual void stopGPUEventsRecording() OVERRIDE;
 
@@ -130,7 +133,7 @@ private:
     void disableViewportEmulation();
 
     WebCore::InspectorController* inspectorController();
-    WebCore::Frame* mainFrame();
+    WebCore::LocalFrame* mainFrame();
 
     int m_hostId;
     WebDevToolsAgentClient* m_client;
@@ -141,6 +144,8 @@ private:
     bool m_emulateViewportEnabled;
     bool m_originalViewportEnabled;
     bool m_isOverlayScrollbarsEnabled;
+    typedef Vector<RefPtr<WebCore::JSONObject> > FrontendMessageQueue;
+    FrontendMessageQueue m_frontendMessageQueue;
 };
 
 } // namespace blink

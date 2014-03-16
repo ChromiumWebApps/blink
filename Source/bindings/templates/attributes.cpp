@@ -20,7 +20,7 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     v8::Handle<v8::Object> holder = info.Holder();
     {% else %}{# perform lookup first #}
     {# FIXME: can we remove this lookup? #}
-    v8::Handle<v8::Object> holder = info.This()->FindInstanceInPrototypeChain({{v8_class}}::domTemplate(info.GetIsolate(), worldType(info.GetIsolate())));
+    v8::Handle<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
     if (holder.IsEmpty())
         return;
     {% endif %}{# Window #}
@@ -29,7 +29,7 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     v8::Handle<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "{{attribute.name}}");
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     if (!imp->{{attribute.cached_attribute_validation_method}}()) {
-        v8::Handle<v8::Value> jsValue = getHiddenValue(info.GetIsolate(), info.Holder(), propertyName);
+        v8::Handle<v8::Value> jsValue = V8HiddenValue::getHiddenValue(info.GetIsolate(), info.Holder(), propertyName);
         if (!jsValue.IsEmpty()) {
             v8SetReturnValue(info, jsValue);
             return;
@@ -37,6 +37,9 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     }
     {% elif not (attribute.is_static or attribute.is_unforgeable) %}
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
+    {% endif %}
+    {% if attribute.is_implemented_by and not attribute.is_static %}
+    ASSERT(imp);
     {% endif %}
     {% if interface_name == 'Window' and attribute.idl_type == 'EventHandler' %}
     if (!imp->document())
@@ -59,6 +62,10 @@ const v8::PropertyCallbackInfo<v8::Value>& info
           attribute.is_nullable or
           attribute.reflect_only or
           attribute.idl_type == 'EventHandler' %}
+    {# FIXME: Remove this duplicate #}
+    {% if attribute.is_implemented_by and not attribute.is_static %}
+    ASSERT(imp);
+    {% endif %}
     {{attribute.cpp_type}} {{attribute.cpp_value}} = {{attribute.cpp_value_original}};
     {% endif %}
     {# Checks #}
@@ -86,17 +93,17 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     }
     {% endif %}
     {% if attribute.cached_attribute_validation_method %}
-    setHiddenValue(info.GetIsolate(), info.Holder(), propertyName, {{attribute.cpp_value}}.v8Value());
+    V8HiddenValue::setHiddenValue(info.GetIsolate(), info.Holder(), propertyName, {{attribute.cpp_value}}.v8Value());
     {% endif %}
     {# v8SetReturnValue #}
     {% if attribute.is_keep_alive_for_gc %}
     {# FIXME: merge local variable assignment with above #}
-    {{attribute.cpp_type}} result = {{attribute.cpp_value}};
+    {{attribute.cpp_type}} result({{attribute.cpp_value}});
     if (result && DOMDataStore::setReturnValueFromWrapper{{world_suffix}}<{{attribute.v8_type}}>(info.GetReturnValue(), result.get()))
         return;
     v8::Handle<v8::Value> wrapper = toV8(result.get(), info.Holder(), info.GetIsolate());
     if (!wrapper.IsEmpty()) {
-        setHiddenValue(info.GetIsolate(), info.Holder(), "{{attribute.name}}", wrapper);
+        V8HiddenValue::setHiddenValue(info.GetIsolate(), info.Holder(), v8AtomicString(info.GetIsolate(), "{{attribute.name}}"), wrapper);
         {{attribute.v8_set_return_value}};
     }
     {% elif world_suffix %}
@@ -177,6 +184,25 @@ v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info
 
 
 {##############################################################################}
+{% macro constructor_getter_callback(attribute, world_suffix) %}
+{% filter conditional(attribute.conditional_string) %}
+static void {{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    {% if attribute.deprecate_as %}
+    UseCounter::countDeprecation(callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.deprecate_as}});
+    {% endif %}
+    {% if attribute.measure_as %}
+    UseCounter::count(callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as}});
+    {% endif %}
+    {{cpp_class}}V8Internal::{{cpp_class}}ConstructorGetter{{world_suffix}}(property, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+{% endfilter %}
+{% endmacro %}
+
+
+{##############################################################################}
 {% macro attribute_setter(attribute, world_suffix) %}
 {% filter conditional(attribute.conditional_string) %}
 static void {{attribute.name}}AttributeSetter{{world_suffix}}(
@@ -206,12 +232,13 @@ v8::Local<v8::Value> jsValue, const v8::PropertyCallbackInfo<void>& info
     {% endif %}
     {% if attribute.put_forwards %}
     {{cpp_class}}* proxyImp = {{v8_class}}::toNative(info.Holder());
-    {{attribute.idl_type}}* imp = proxyImp->{{attribute.name}}();
+    RefPtr<{{attribute.idl_type}}> imp = WTF::getPtr(proxyImp->{{attribute.name}}());
     if (!imp)
         return;
     {% elif not attribute.is_static %}
     {{cpp_class}}* imp = {{v8_class}}::toNative(info.Holder());
     {% endif %}{# imp #}
+    {# FIXME: move ASSERT(imp) here. #}
     {% if attribute.idl_type == 'EventHandler' and interface_name == 'Window' %}
     if (!imp->document())
         return;
@@ -219,6 +246,10 @@ v8::Local<v8::Value> jsValue, const v8::PropertyCallbackInfo<void>& info
     {% if attribute.idl_type != 'EventHandler' %}
     {{attribute.v8_value_to_local_cpp_value}};
     {% elif not is_node %}{# EventHandler hack #}
+    {# FIXME: duplicate of below; remove #}
+    {% if attribute.is_implemented_by and not attribute.is_static %}
+    ASSERT(imp);
+    {% endif %}
     moveEventListenerToNewWrapper(info.Holder(), {{attribute.event_handler_getter_expression}}, jsValue, {{v8_class}}::eventListenerCacheIndex, info.GetIsolate());
     {% endif %}
     {% if attribute.enum_validation_expression %}
@@ -233,6 +264,9 @@ v8::Local<v8::Value> jsValue, const v8::PropertyCallbackInfo<void>& info
     {# Skip on compact node DOMString getters #}
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
     {% endif %}
+    {% if attribute.is_implemented_by and not attribute.is_static %}
+    ASSERT(imp);
+    {% endif %}
     {% if attribute.is_call_with_execution_context or
           attribute.is_setter_call_with_execution_context %}
     ExecutionContext* scriptContext = currentExecutionContext(info.GetIsolate());
@@ -242,7 +276,7 @@ v8::Local<v8::Value> jsValue, const v8::PropertyCallbackInfo<void>& info
     exceptionState.throwIfNeeded();
     {% endif %}
     {% if attribute.cached_attribute_validation_method %}
-    deleteHiddenValue(info.GetIsolate(), info.Holder(), "{{attribute.name}}"); // Invalidate the cached value.
+    V8HiddenValue::deleteHiddenValue(info.GetIsolate(), info.Holder(), v8AtomicString(info.GetIsolate(), "{{attribute.name}}")); // Invalidate the cached value.
     {% endif %}
 }
 {% endfilter %}

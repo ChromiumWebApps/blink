@@ -43,12 +43,11 @@ class WebKitSourceBuffer;
 class GenericEventQueue;
 
 class WebKitSourceBufferList FINAL : public RefCountedWillBeRefCountedGarbageCollected<WebKitSourceBufferList>, public ScriptWrappable, public EventTargetWithInlineData {
-    DECLARE_GC_INFO;
     DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<WebKitSourceBufferList>);
 public:
     static PassRefPtrWillBeRawPtr<WebKitSourceBufferList> create(ExecutionContext* context, GenericEventQueue* asyncEventQueue)
     {
-        return adoptRefCountedWillBeRefCountedGarbageCollected(new WebKitSourceBufferList(context, asyncEventQueue));
+        return adoptRefWillBeRefCountedGarbageCollected(new WebKitSourceBufferList(context, asyncEventQueue));
     }
     virtual ~WebKitSourceBufferList() { }
 

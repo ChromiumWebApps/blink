@@ -97,6 +97,7 @@ namespace WebCore {
 Keyframe::Keyframe()
     : m_offset(nullValue())
     , m_composite(AnimationEffect::CompositeReplace)
+    , m_easing(LinearTimingFunction::preset())
 { }
 
 Keyframe::Keyframe(const Keyframe& copyFrom)
@@ -104,8 +105,15 @@ Keyframe::Keyframe(const Keyframe& copyFrom)
     , m_composite(copyFrom.m_composite)
     , m_easing(copyFrom.m_easing)
 {
+    ASSERT(m_easing);
     for (PropertyValueMap::const_iterator iter = copyFrom.m_propertyValues.begin(); iter != copyFrom.m_propertyValues.end(); ++iter)
         setPropertyValue(iter->key, iter->value.get());
+}
+
+void Keyframe::setEasing(PassRefPtr<TimingFunction> easing)
+{
+    ASSERT(easing);
+    m_easing = easing;
 }
 
 void Keyframe::setPropertyValue(CSSPropertyID property, const AnimatableValue* value)
@@ -134,9 +142,9 @@ PropertySet Keyframe::properties() const
     return properties;
 }
 
-PassRefPtr<Keyframe> Keyframe::cloneWithOffset(double offset) const
+PassRefPtrWillBeRawPtr<Keyframe> Keyframe::cloneWithOffset(double offset) const
 {
-    RefPtr<Keyframe> theClone = clone();
+    RefPtrWillBeRawPtr<Keyframe> theClone = clone();
     theClone->setOffset(offset);
     return theClone.release();
 }
@@ -387,6 +395,11 @@ PassRefPtr<AnimationEffect::CompositableValue> KeyframeEffectModel::PropertySpec
     if (const TimingFunction* timingFunction = (*before)->easing())
         fraction = timingFunction->evaluate(fraction, accuracyForKeyframeEasing);
     return BlendedCompositableValue::create((*before)->value(), (*after)->value(), fraction);
+}
+
+void KeyframeEffectModel::trace(Visitor* visitor)
+{
+    visitor->trace(m_keyframes);
 }
 
 } // namespace

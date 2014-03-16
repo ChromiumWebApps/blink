@@ -36,20 +36,18 @@
 
 namespace WebCore {
 
-DEFINE_GC_INFO(StyleRuleBase);
-
 struct SameSizeAsStyleRuleBase : public RefCountedWillBeRefCountedGarbageCollected<SameSizeAsStyleRuleBase> {
     unsigned bitfields;
 };
 
 COMPILE_ASSERT(sizeof(StyleRuleBase) <= sizeof(SameSizeAsStyleRuleBase), StyleRuleBase_should_stay_small);
 
-PassRefPtr<CSSRule> StyleRuleBase::createCSSOMWrapper(CSSStyleSheet* parentSheet) const
+PassRefPtrWillBeRawPtr<CSSRule> StyleRuleBase::createCSSOMWrapper(CSSStyleSheet* parentSheet) const
 {
     return createCSSOMWrapper(parentSheet, 0);
 }
 
-PassRefPtr<CSSRule> StyleRuleBase::createCSSOMWrapper(CSSRule* parentRule) const
+PassRefPtrWillBeRawPtr<CSSRule> StyleRuleBase::createCSSOMWrapper(CSSRule* parentRule) const
 {
     return createCSSOMWrapper(0, parentRule);
 }
@@ -171,7 +169,7 @@ void StyleRuleBase::destroy()
     ASSERT_NOT_REACHED();
 }
 
-PassRefPtr<StyleRuleBase> StyleRuleBase::copy() const
+PassRefPtrWillBeRawPtr<StyleRuleBase> StyleRuleBase::copy() const
 {
     switch (type()) {
     case Style:
@@ -204,9 +202,9 @@ PassRefPtr<StyleRuleBase> StyleRuleBase::copy() const
     return nullptr;
 }
 
-PassRefPtr<CSSRule> StyleRuleBase::createCSSOMWrapper(CSSStyleSheet* parentSheet, CSSRule* parentRule) const
+PassRefPtrWillBeRawPtr<CSSRule> StyleRuleBase::createCSSOMWrapper(CSSStyleSheet* parentSheet, CSSRule* parentRule) const
 {
-    RefPtr<CSSRule> rule;
+    RefPtrWillBeRawPtr<CSSRule> rule;
     StyleRuleBase* self = const_cast<StyleRuleBase*>(this);
     switch (type()) {
     case Style:
@@ -268,11 +266,11 @@ StyleRule::~StyleRule()
 {
 }
 
-MutableStylePropertySet* StyleRule::mutableProperties()
+MutableStylePropertySet& StyleRule::mutableProperties()
 {
     if (!m_properties->isMutable())
         m_properties = m_properties->mutableCopy();
-    return toMutableStylePropertySet(m_properties);
+    return *toMutableStylePropertySet(m_properties);
 }
 
 void StyleRule::setProperties(PassRefPtr<StylePropertySet> properties)
@@ -296,11 +294,11 @@ StyleRulePage::~StyleRulePage()
 {
 }
 
-MutableStylePropertySet* StyleRulePage::mutableProperties()
+MutableStylePropertySet& StyleRulePage::mutableProperties()
 {
     if (!m_properties->isMutable())
         m_properties = m_properties->mutableCopy();
-    return toMutableStylePropertySet(m_properties);
+    return *toMutableStylePropertySet(m_properties);
 }
 
 void StyleRulePage::setProperties(PassRefPtr<StylePropertySet> properties)
@@ -323,11 +321,11 @@ StyleRuleFontFace::~StyleRuleFontFace()
 {
 }
 
-MutableStylePropertySet* StyleRuleFontFace::mutableProperties()
+MutableStylePropertySet& StyleRuleFontFace::mutableProperties()
 {
     if (!m_properties->isMutable())
         m_properties = m_properties->mutableCopy();
-    return toMutableStylePropertySet(m_properties);
+    return *toMutableStylePropertySet(m_properties);
 }
 
 void StyleRuleFontFace::setProperties(PassRefPtr<StylePropertySet> properties)
@@ -335,7 +333,7 @@ void StyleRuleFontFace::setProperties(PassRefPtr<StylePropertySet> properties)
     m_properties = properties;
 }
 
-StyleRuleGroup::StyleRuleGroup(Type type, Vector<RefPtr<StyleRuleBase> >& adoptRule)
+StyleRuleGroup::StyleRuleGroup(Type type, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRule)
     : StyleRuleBase(type)
 {
     m_childRules.swap(adoptRule);
@@ -349,7 +347,7 @@ StyleRuleGroup::StyleRuleGroup(const StyleRuleGroup& o)
         m_childRules[i] = o.m_childRules[i]->copy();
 }
 
-void StyleRuleGroup::wrapperInsertRule(unsigned index, PassRefPtr<StyleRuleBase> rule)
+void StyleRuleGroup::wrapperInsertRule(unsigned index, PassRefPtrWillBeRawPtr<StyleRuleBase> rule)
 {
     m_childRules.insert(index, rule);
 }
@@ -359,7 +357,13 @@ void StyleRuleGroup::wrapperRemoveRule(unsigned index)
     m_childRules.remove(index);
 }
 
-StyleRuleMedia::StyleRuleMedia(PassRefPtr<MediaQuerySet> media, Vector<RefPtr<StyleRuleBase> >& adoptRules)
+void StyleRuleGroup::traceAfterDispatch(Visitor* visitor)
+{
+    visitor->trace(m_childRules);
+    StyleRuleBase::traceAfterDispatch(visitor);
+}
+
+StyleRuleMedia::StyleRuleMedia(PassRefPtrWillBeRawPtr<MediaQuerySet> media, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRules)
     : StyleRuleGroup(Media, adoptRules)
     , m_mediaQueries(media)
 {
@@ -372,7 +376,13 @@ StyleRuleMedia::StyleRuleMedia(const StyleRuleMedia& o)
         m_mediaQueries = o.m_mediaQueries->copy();
 }
 
-StyleRuleSupports::StyleRuleSupports(const String& conditionText, bool conditionIsSupported, Vector<RefPtr<StyleRuleBase> >& adoptRules)
+void StyleRuleMedia::traceAfterDispatch(Visitor* visitor)
+{
+    visitor->trace(m_mediaQueries);
+    StyleRuleGroup::traceAfterDispatch(visitor);
+}
+
+StyleRuleSupports::StyleRuleSupports(const String& conditionText, bool conditionIsSupported, WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase> >& adoptRules)
     : StyleRuleGroup(Supports, adoptRules)
     , m_conditionText(conditionText)
     , m_conditionIsSupported(conditionIsSupported)
@@ -401,11 +411,11 @@ StyleRuleViewport::~StyleRuleViewport()
 {
 }
 
-MutableStylePropertySet* StyleRuleViewport::mutableProperties()
+MutableStylePropertySet& StyleRuleViewport::mutableProperties()
 {
     if (!m_properties->isMutable())
         m_properties = m_properties->mutableCopy();
-    return toMutableStylePropertySet(m_properties);
+    return *toMutableStylePropertySet(m_properties);
 }
 
 void StyleRuleViewport::setProperties(PassRefPtr<StylePropertySet> properties)
@@ -430,11 +440,11 @@ StyleRuleFilter::~StyleRuleFilter()
 {
 }
 
-MutableStylePropertySet* StyleRuleFilter::mutableProperties()
+MutableStylePropertySet& StyleRuleFilter::mutableProperties()
 {
     if (!m_properties->isMutable())
         m_properties = m_properties->mutableCopy();
-    return toMutableStylePropertySet(m_properties);
+    return *toMutableStylePropertySet(m_properties);
 }
 
 void StyleRuleFilter::setProperties(PassRefPtr<StylePropertySet> properties)

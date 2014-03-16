@@ -38,9 +38,10 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeTraversal.h"
-#include "core/page/EventHandler.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
+#include "core/html/HTMLHtmlElement.h"
+#include "core/page/EventHandler.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderBlock.h"
 
@@ -87,7 +88,7 @@ struct TouchTargetData {
     float score;
 };
 
-void findGoodTouchTargets(const IntRect& touchBox, Frame* mainFrame, Vector<IntRect>& goodTargets, Vector<Node*>& highlightNodes)
+void findGoodTouchTargets(const IntRect& touchBox, LocalFrame* mainFrame, Vector<IntRect>& goodTargets, Vector<Node*>& highlightNodes)
 {
     goodTargets.clear();
 
@@ -125,7 +126,7 @@ void findGoodTouchTargets(const IntRect& touchBox, Frame* mainFrame, Vector<IntR
         for (Node* node = it->get(); node; node = node->parentNode()) {
             if (blackList.contains(node))
                 continue;
-            if (node->isDocumentNode() || node->hasTagName(HTMLNames::htmlTag) || node->hasTagName(HTMLNames::bodyTag))
+            if (node->isDocumentNode() || isHTMLHtmlElement(*node) || isHTMLBodyElement(*node))
                 break;
             if (node->willRespondToMouseClickEvents()) {
                 TouchTargetData& targetData = touchTargets.add(node, TouchTargetData()).storedValue->value;

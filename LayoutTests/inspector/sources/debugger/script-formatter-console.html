@@ -13,7 +13,7 @@ function f1()
 
 var test = function()
 {
-    var panel = WebInspector.showPanel("sources");
+    var panel = WebInspector.inspectorView.showPanel("sources");
     var worker = new Worker("ScriptFormatterWorker.js");
     var sourceFrame;
     var scriptFormatter = InspectorTest.scriptFormatter();
@@ -55,7 +55,7 @@ var test = function()
     {
         var messages = WebInspector.console.messages;
         for (var i = 0; i < messages.length; ++i) {
-            var element = messages[i].toMessageElement();
+            var element = InspectorTest.toViewMessage(messages[i]).toMessageElement();
             var anchor = element.querySelector(".console-message-url");
             InspectorTest.addResult(anchor.textContent);
         }

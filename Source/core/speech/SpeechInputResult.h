@@ -29,6 +29,7 @@
 #if ENABLE(INPUT_SPEECH)
 
 #include "bindings/v8/ScriptWrappable.h"
+#include "heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
@@ -37,13 +38,15 @@ namespace WebCore {
 
 // This class holds one speech recognition result including the text and other related
 // fields, as received from the embedder.
-class SpeechInputResult : public RefCounted<SpeechInputResult>, public ScriptWrappable {
+class SpeechInputResult : public RefCountedWillBeGarbageCollectedFinalized<SpeechInputResult>, public ScriptWrappable {
 public:
-    static PassRefPtr<SpeechInputResult> create(const SpeechInputResult& source);
-    static PassRefPtr<SpeechInputResult> create(const String& utterance, double confidence);
+    static PassRefPtrWillBeRawPtr<SpeechInputResult> create(const SpeechInputResult& source);
+    static PassRefPtrWillBeRawPtr<SpeechInputResult> create(const String& utterance, double confidence);
 
     double confidence() const;
     const String& utterance() const;
+
+    void trace(Visitor *) { }
 
 private:
     SpeechInputResult(const String& utterance, double confidence);
@@ -52,7 +55,8 @@ private:
     double m_confidence;
 };
 
-typedef Vector<RefPtr<SpeechInputResult> > SpeechInputResultArray;
+typedef WillBeHeapVector<RefPtrWillBeMember<SpeechInputResult> > SpeechInputResultArray;
+typedef WillBePersistentHeapVector<RefPtrWillBeMember<SpeechInputResult> > WillBePersistentSpeechInputResultArray;
 
 } // namespace WebCore
 

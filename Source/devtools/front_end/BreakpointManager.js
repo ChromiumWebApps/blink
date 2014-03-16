@@ -92,6 +92,12 @@ WebInspector.BreakpointManager.prototype = {
         return result;
     },
 
+    removeProvisionalBreakpointsForTest: function()
+    {
+        for (var debuggerId in this._breakpointForDebuggerId)
+            this._debuggerModel.removeBreakpoint(debuggerId);
+    },
+
     /**
      * @param {!WebInspector.UISourceCode} uiSourceCode
      */
@@ -147,6 +153,9 @@ WebInspector.BreakpointManager.prototype = {
     _uiSourceCodeMappingChanged: function(event)
     {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.target);
+        var isIdentity = /** @type {boolean} */ (event.data.isIdentity);
+        if (isIdentity)
+            return;
         var breakpoints = this._breakpointsForPrimaryUISourceCode.get(uiSourceCode) || [];
         for (var i = 0; i < breakpoints.length; ++i)
             breakpoints[i]._updateInDebugger();
@@ -315,12 +324,6 @@ WebInspector.BreakpointManager.prototype = {
             breakpoints[i].remove();
     },
 
-    removeProvisionalBreakpoints: function()
-    {
-        for (var debuggerId in this._breakpointForDebuggerId)
-            this._debuggerModel.removeBreakpoint(debuggerId);
-    },
-
     _projectWillReset: function(event)
     {
         var project = /** @type {!WebInspector.Project} */ (event.data);
@@ -350,7 +353,6 @@ WebInspector.BreakpointManager.prototype = {
         var index = breakpoints.indexOf(breakpoint);
         if (index > -1)
             breakpoints.splice(index, 1);
-        console.assert(!breakpoint._debuggerId)
         if (removeFromStorage)
             this._storage._removeBreakpoint(breakpoint);
     },
@@ -558,7 +560,7 @@ WebInspector.BreakpointManager.Breakpoint.prototype = {
     _updateInDebugger: function()
     {
         var uiSourceCode = this.uiSourceCode();
-        if (!uiSourceCode || !uiSourceCode.hasSourceMapping())
+        if (!uiSourceCode)
             return;
         var scriptFile = uiSourceCode && uiSourceCode.scriptFile();
         if (this._enabled && !(scriptFile && scriptFile.hasDivergedFromVM()))
@@ -630,7 +632,11 @@ WebInspector.BreakpointManager.Breakpoint.prototype = {
     {
         if (!this._debuggerId)
             return;
-        this._breakpointManager._debuggerModel.removeBreakpoint(this._debuggerId);
+        this._breakpointManager._debuggerModel.removeBreakpoint(this._debuggerId, this._didRemoveFromDebugger.bind(this));
+    },
+
+    _didRemoveFromDebugger: function()
+    {
         delete this._breakpointManager._breakpointForDebuggerId[this._debuggerId];
         delete this._debuggerId;
     },

@@ -39,9 +39,6 @@ class SVGScriptElement FINAL
 public:
     static PassRefPtr<SVGScriptElement> create(Document&, bool wasInsertedByParser);
 
-    String type() const;
-    void setType(const String&);
-
     ScriptLoader* loader() const { return m_loader.get(); }
 
 #ifndef NDEBUG
@@ -81,14 +78,10 @@ private:
 
     virtual Timer<SVGElement>* svgLoadEventTimer() OVERRIDE { return &m_svgLoadEventTimer; }
 
-    BEGIN_DECLARE_ANIMATED_PROPERTIES(SVGScriptElement)
-    END_DECLARE_ANIMATED_PROPERTIES
 
     Timer<SVGElement> m_svgLoadEventTimer;
     OwnPtr<ScriptLoader> m_loader;
 };
-
-DEFINE_NODE_TYPE_CASTS(SVGScriptElement, hasTagName(SVGNames::scriptTag));
 
 } // namespace WebCore
 

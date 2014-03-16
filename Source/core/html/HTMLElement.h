@@ -87,6 +87,9 @@ public:
 
     static const AtomicString& eventNameForAttributeName(const QualifiedName& attrName);
 
+    virtual bool matchesReadOnlyPseudoClass() const OVERRIDE;
+    virtual bool matchesReadWritePseudoClass() const OVERRIDE;
+
 protected:
     HTMLElement(const QualifiedName& tagName, Document&, ConstructionType);
 
@@ -122,7 +125,10 @@ private:
     bool supportsSpatialNavigationFocus() const;
 };
 
-DEFINE_NODE_TYPE_CASTS(HTMLElement, isHTMLElement());
+DEFINE_ELEMENT_TYPE_CASTS(HTMLElement, isHTMLElement());
+
+template <typename T> bool isElementOfType(const HTMLElement&);
+template <> inline bool isElementOfType<HTMLElement>(const HTMLElement&) { return true; }
 
 inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document& document, ConstructionType type = CreateHTMLElement)
     : Element(tagName, &document, type)
@@ -132,5 +138,7 @@ inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document& document
 }
 
 } // namespace WebCore
+
+#include "HTMLElementTypeHelpers.h"
 
 #endif // HTMLElement_h

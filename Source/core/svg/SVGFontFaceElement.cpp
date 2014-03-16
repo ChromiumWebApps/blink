@@ -28,12 +28,14 @@
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
 #include "core/css/CSSFontFaceSrcValue.h"
+#include "core/css/CSSFontSelector.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
+#include "core/dom/StyleEngine.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGFontElement.h"
 #include "core/svg/SVGFontFaceSrcElement.h"
@@ -111,7 +113,7 @@ void SVGFontFaceElement::parseAttribute(const QualifiedName& name, const AtomicS
 {
     CSSPropertyID propId = cssPropertyIdForFontFaceAttributeName(name);
     if (propId > 0) {
-        m_fontFaceRule->mutableProperties()->setProperty(propId, value, false);
+        m_fontFaceRule->mutableProperties().setProperty(propId, value, false);
         rebuildFontFace();
         return;
     }
@@ -256,13 +258,13 @@ int SVGFontFaceElement::descent() const
 
 String SVGFontFaceElement::fontFamily() const
 {
-    return m_fontFaceRule->properties()->getPropertyValue(CSSPropertyFontFamily);
+    return m_fontFaceRule->properties().getPropertyValue(CSSPropertyFontFamily);
 }
 
 SVGFontElement* SVGFontFaceElement::associatedFontElement() const
 {
     ASSERT(parentNode() == m_fontElement);
-    ASSERT(!parentNode() || parentNode()->hasTagName(SVGNames::fontTag));
+    ASSERT(!parentNode() || isSVGFontElement(*parentNode()));
     return m_fontElement;
 }
 
@@ -273,7 +275,7 @@ void SVGFontFaceElement::rebuildFontFace()
         return;
     }
 
-    bool describesParentFont = parentNode()->hasTagName(SVGNames::fontTag);
+    bool describesParentFont = isSVGFontElement(*parentNode());
     RefPtrWillBeRawPtr<CSSValueList> list;
 
     if (describesParentFont) {
@@ -284,23 +286,19 @@ void SVGFontFaceElement::rebuildFontFace()
     } else {
         m_fontElement = 0;
         // we currently ignore all but the last src element, alternatively we could concat them
-        for (Node* child = lastChild(); child && !list; child = child->previousSibling()) {
-            if (child->hasTagName(font_face_srcTag)) {
-                list = toSVGFontFaceSrcElement(child)->srcValue();
-                break;
-            }
-        }
+        if (SVGFontFaceSrcElement* element = Traversal<SVGFontFaceSrcElement>::lastChild(*this))
+            list = element->srcValue();
     }
 
     if (!list || !list->length())
         return;
 
     // Parse in-memory CSS rules
-    m_fontFaceRule->mutableProperties()->addParsedProperty(CSSProperty(CSSPropertySrc, list));
+    m_fontFaceRule->mutableProperties().addParsedProperty(CSSProperty(CSSPropertySrc, list));
 
     if (describesParentFont) {
         // Traverse parsed CSS values and associate CSSFontFaceSrcValue elements with ourselves.
-        RefPtrWillBeRawPtr<CSSValue> src = m_fontFaceRule->properties()->getPropertyCSSValue(CSSPropertySrc);
+        RefPtrWillBeRawPtr<CSSValue> src = m_fontFaceRule->properties().getPropertyCSSValue(CSSPropertySrc);
         CSSValueList* srcList = toCSSValueList(src.get());
 
         unsigned srcLength = srcList ? srcList->length() : 0;
@@ -320,7 +318,7 @@ Node::InsertionNotificationRequest SVGFontFaceElement::insertedInto(ContainerNod
         ASSERT(!m_fontElement);
         return InsertionDone;
     }
-    document().accessSVGExtensions()->registerSVGFontFaceElement(this);
+    document().accessSVGExtensions().registerSVGFontFaceElement(this);
 
     rebuildFontFace();
     return InsertionDone;
@@ -332,8 +330,13 @@ void SVGFontFaceElement::removedFrom(ContainerNode* rootParent)
 
     if (rootParent->inDocument()) {
         m_fontElement = 0;
-        document().accessSVGExtensions()->unregisterSVGFontFaceElement(this);
-        m_fontFaceRule->mutableProperties()->clear();
+        document().accessSVGExtensions().unregisterSVGFontFaceElement(this);
+        // FIXME: HTMLTemplateElement's document or imported  document can be active?
+        // If so, we also need to check whether fontSelector() is nullptr or not.
+        // Otherwise, we will use just document().isActive() here.
+        if (document().isActive() && document().styleEngine()->fontSelector())
+            document().styleEngine()->fontSelector()->fontFaceCache()->remove(m_fontFaceRule.get());
+        m_fontFaceRule->mutableProperties().clear();
 
         document().styleResolverChanged(RecalcStyleDeferred);
     } else

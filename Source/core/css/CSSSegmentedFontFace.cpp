@@ -36,9 +36,9 @@
 
 namespace WebCore {
 
-CSSSegmentedFontFace::CSSSegmentedFontFace(CSSFontSelector* fontSelector, FontTraitsMask traitsMask)
+CSSSegmentedFontFace::CSSSegmentedFontFace(CSSFontSelector* fontSelector, FontTraits traits)
     : m_fontSelector(fontSelector)
-    , m_traitsMask(traitsMask)
+    , m_traits(traits)
     , m_firstNonCssConnectedFace(m_fontFaces.end())
 {
 }
@@ -71,8 +71,6 @@ bool CSSSegmentedFontFace::isValid() const
 
 void CSSSegmentedFontFace::fontLoaded(CSSFontFace*)
 {
-    m_fontSelector->fontLoaded();
-
     pruneTable();
 
     if (RuntimeEnabledFeatures::fontLoadEventsEnabled() && !isLoading()) {
@@ -85,6 +83,12 @@ void CSSSegmentedFontFace::fontLoaded(CSSFontFace*)
                 callbacks[index]->notifyError(this);
         }
     }
+}
+
+void CSSSegmentedFontFace::fontLoadWaitLimitExceeded(CSSFontFace*)
+{
+    m_fontSelector->fontLoaded();
+    pruneTable();
 }
 
 void CSSSegmentedFontFace::addFontFace(PassRefPtr<FontFace> prpFontFace, bool cssConnected)
@@ -135,9 +139,9 @@ PassRefPtr<FontData> CSSSegmentedFontFace::getFontData(const FontDescription& fo
     if (!isValid())
         return nullptr;
 
-    FontTraitsMask desiredTraitsMask = fontDescription.traitsMask();
+    FontTraits desiredTraits = fontDescription.traits();
     AtomicString emptyFontFamily = "";
-    FontCacheKey key = fontDescription.cacheKey(emptyFontFamily, desiredTraitsMask);
+    FontCacheKey key = fontDescription.cacheKey(emptyFontFamily, desiredTraits);
 
     RefPtr<SegmentedFontData>& fontData = m_fontDataTable.add(key.hash(), nullptr).storedValue->value;
     if (fontData && fontData->numRanges())
@@ -147,9 +151,9 @@ PassRefPtr<FontData> CSSSegmentedFontFace::getFontData(const FontDescription& fo
         fontData = SegmentedFontData::create();
 
     FontDescription requestedFontDescription(fontDescription);
-    requestedFontDescription.setTraitsMask(m_traitsMask);
-    requestedFontDescription.setSyntheticBold(!(m_traitsMask & (FontWeight600Mask | FontWeight700Mask | FontWeight800Mask | FontWeight900Mask)) && (desiredTraitsMask & (FontWeight600Mask | FontWeight700Mask | FontWeight800Mask | FontWeight900Mask)));
-    requestedFontDescription.setSyntheticItalic(!(m_traitsMask & FontStyleItalicMask) && (desiredTraitsMask & FontStyleItalicMask));
+    requestedFontDescription.setTraits(m_traits);
+    requestedFontDescription.setSyntheticBold(m_traits.weight() < FontWeight600 && desiredTraits.weight() >= FontWeight600);
+    requestedFontDescription.setSyntheticItalic(m_traits.style() == FontStyleNormal && desiredTraits.style() == FontStyleItalic);
 
     for (FontFaceList::reverse_iterator it = m_fontFaces.rbegin(); it != m_fontFaces.rend(); ++it) {
         if (!(*it)->cssFontFace()->isValid())
@@ -159,7 +163,7 @@ PassRefPtr<FontData> CSSSegmentedFontFace::getFontData(const FontDescription& fo
 #if ENABLE(SVG_FONTS)
             // For SVG Fonts that specify that they only support the "normal" variant, we will assume they are incapable
             // of small-caps synthesis and just ignore the font face.
-            if (faceFontData->isSVGFont() && (desiredTraitsMask & FontVariantSmallCapsMask) && !(m_traitsMask & FontVariantSmallCapsMask))
+            if (faceFontData->isSVGFont() && desiredTraits.variant() == FontVariantSmallCaps && m_traits.variant() == FontVariantNormal)
                 continue;
 #endif
             appendFontData(fontData.get(), faceFontData.release(), (*it)->cssFontFace()->ranges());

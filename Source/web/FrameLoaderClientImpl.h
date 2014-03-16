@@ -58,9 +58,6 @@ public:
     virtual void dispatchDidClearWindowObjectInWorld(WebCore::DOMWrapperWorld*) OVERRIDE;
     virtual void documentElementAvailable() OVERRIDE;
 
-    // Script in the page tried to allocate too much memory.
-    virtual void didExhaustMemoryAvailableForScript();
-
     virtual void didCreateScriptContext(v8::Handle<v8::Context>, int extensionGroup, int worldId) OVERRIDE;
     virtual void willReleaseScriptContext(v8::Handle<v8::Context>, int worldId) OVERRIDE;
 
@@ -69,6 +66,8 @@ public:
     virtual bool allowScriptExtension(const String& extensionName, int extensionGroup, int worldId) OVERRIDE;
 
     virtual bool hasWebView() const OVERRIDE;
+    virtual WebCore::Frame* opener() const OVERRIDE;
+    virtual void setOpener(WebCore::Frame*) OVERRIDE;
     virtual WebCore::Frame* parent() const OVERRIDE;
     virtual WebCore::Frame* top() const OVERRIDE;
     virtual WebCore::Frame* previousSibling() const OVERRIDE;
@@ -89,7 +88,7 @@ public:
     virtual void dispatchDidStartProvisionalLoad() OVERRIDE;
     virtual void dispatchDidReceiveTitle(const String&) OVERRIDE;
     virtual void dispatchDidChangeIcons(WebCore::IconType) OVERRIDE;
-    virtual void dispatchDidCommitLoad(WebCore::Frame*, WebCore::HistoryItem*, WebCore::HistoryCommitType) OVERRIDE;
+    virtual void dispatchDidCommitLoad(WebCore::LocalFrame*, WebCore::HistoryItem*, WebCore::HistoryCommitType) OVERRIDE;
     virtual void dispatchDidFailProvisionalLoad(const WebCore::ResourceError&) OVERRIDE;
     virtual void dispatchDidFailLoad(const WebCore::ResourceError&) OVERRIDE;
     virtual void dispatchDidFinishDocumentLoad() OVERRIDE;
@@ -97,31 +96,29 @@ public:
     virtual void dispatchDidFirstVisuallyNonEmptyLayout() OVERRIDE;
     virtual WebCore::NavigationPolicy decidePolicyForNavigation(const WebCore::ResourceRequest&, WebCore::DocumentLoader*, WebCore::NavigationPolicy) OVERRIDE;
     virtual void dispatchWillRequestResource(WebCore::FetchRequest*) OVERRIDE;
-    virtual void dispatchWillSendSubmitEvent(PassRefPtr<WebCore::FormState>) OVERRIDE;
-    virtual void dispatchWillSubmitForm(PassRefPtr<WebCore::FormState>) OVERRIDE;
+    virtual void dispatchWillSendSubmitEvent(WebCore::HTMLFormElement*) OVERRIDE;
+    virtual void dispatchWillSubmitForm(WebCore::HTMLFormElement*) OVERRIDE;
     virtual void postProgressStartedNotification(WebCore::LoadStartType) OVERRIDE;
     virtual void postProgressEstimateChangedNotification() OVERRIDE;
     virtual void postProgressFinishedNotification() OVERRIDE;
     virtual void loadURLExternally(const WebCore::ResourceRequest&, WebCore::NavigationPolicy, const String& suggestedName = String()) OVERRIDE;
     virtual bool navigateBackForward(int offset) const OVERRIDE;
     virtual void didAccessInitialDocument() OVERRIDE;
-    virtual void didDisownOpener() OVERRIDE;
     virtual void didDisplayInsecureContent() OVERRIDE;
     virtual void didRunInsecureContent(WebCore::SecurityOrigin*, const WebCore::KURL& insecureURL) OVERRIDE;
     virtual void didDetectXSS(const WebCore::KURL&, bool didBlockEntirePage) OVERRIDE;
     virtual void didDispatchPingLoader(const WebCore::KURL&) OVERRIDE;
     virtual void selectorMatchChanged(const Vector<String>& addedSelectors, const Vector<String>& removedSelectors) OVERRIDE;
-    virtual PassRefPtr<WebCore::DocumentLoader> createDocumentLoader(WebCore::Frame*, const WebCore::ResourceRequest&, const WebCore::SubstituteData&) OVERRIDE;
+    virtual PassRefPtr<WebCore::DocumentLoader> createDocumentLoader(WebCore::LocalFrame*, const WebCore::ResourceRequest&, const WebCore::SubstituteData&) OVERRIDE;
     virtual WTF::String userAgent(const WebCore::KURL&) OVERRIDE;
     virtual WTF::String doNotTrackValue() OVERRIDE;
     virtual void transitionToCommittedForNewPage() OVERRIDE;
-    virtual PassRefPtr<WebCore::Frame> createFrame(const WebCore::KURL&, const WTF::AtomicString& name, const WebCore::Referrer&, WebCore::HTMLFrameOwnerElement*) OVERRIDE;
+    virtual PassRefPtr<WebCore::LocalFrame> createFrame(const WebCore::KURL&, const WTF::AtomicString& name, const WebCore::Referrer&, WebCore::HTMLFrameOwnerElement*) OVERRIDE;
     virtual PassRefPtr<WebCore::Widget> createPlugin(
-        const WebCore::IntSize&, WebCore::HTMLPlugInElement*, const WebCore::KURL&,
+        WebCore::HTMLPlugInElement*, const WebCore::KURL&,
         const Vector<WTF::String>&, const Vector<WTF::String>&,
-        const WTF::String&, bool loadManually) OVERRIDE;
+        const WTF::String&, bool loadManually, DetachedPluginPolicy) OVERRIDE;
     virtual PassRefPtr<WebCore::Widget> createJavaAppletWidget(
-        const WebCore::IntSize&,
         WebCore::HTMLAppletElement*,
         const WebCore::KURL& /* base_url */,
         const Vector<WTF::String>& paramNames,
@@ -129,6 +126,7 @@ public:
     virtual WebCore::ObjectContentType objectContentType(
         const WebCore::KURL&, const WTF::String& mimeType, bool shouldPreferPlugInsForImages) OVERRIDE;
     virtual void didChangeScrollOffset() OVERRIDE;
+    virtual void didUpdateCurrentHistoryItem() OVERRIDE;
     virtual bool allowScript(bool enabledPerSettings) OVERRIDE;
     virtual bool allowScriptFromSource(bool enabledPerSettings, const WebCore::KURL& scriptURL) OVERRIDE;
     virtual bool allowPlugins(bool enabledPerSettings) OVERRIDE;
@@ -146,14 +144,14 @@ public:
 
     virtual void dispatchWillStartUsingPeerConnectionHandler(blink::WebRTCPeerConnectionHandler*) OVERRIDE;
 
-    virtual void didRequestAutocomplete(PassRefPtr<WebCore::FormState>) OVERRIDE;
+    virtual void didRequestAutocomplete(WebCore::HTMLFormElement*) OVERRIDE;
 
     virtual bool allowWebGL(bool enabledPerSettings) OVERRIDE;
     virtual void didLoseWebGLContext(int arbRobustnessContextLostReason) OVERRIDE;
 
     virtual void dispatchWillInsertBody() OVERRIDE;
 
-    virtual PassOwnPtr<WebServiceWorkerProvider> createServiceWorkerProvider(PassOwnPtr<WebServiceWorkerProviderClient>) OVERRIDE;
+    virtual PassOwnPtr<WebServiceWorkerProvider> createServiceWorkerProvider() OVERRIDE;
     virtual WebCore::SharedWorkerRepositoryClient* sharedWorkerRepositoryClient() OVERRIDE;
 
     virtual PassOwnPtr<WebApplicationCacheHost> createApplicationCacheHost(WebApplicationCacheHostClient*) OVERRIDE;

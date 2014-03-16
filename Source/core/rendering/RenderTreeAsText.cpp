@@ -30,11 +30,10 @@
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/editing/FrameSelection.h"
-#include "core/html/HTMLElement.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
+#include "core/html/HTMLElement.h"
 #include "core/page/PrintContext.h"
-#include "core/rendering/CompositedLayerMapping.h"
 #include "core/rendering/FlowThreadController.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderBR.h"
@@ -49,6 +48,7 @@
 #include "core/rendering/RenderTableCell.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/RenderWidget.h"
+#include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/svg/RenderSVGContainer.h"
 #include "core/rendering/svg/RenderSVGGradientStop.h"
 #include "core/rendering/svg/RenderSVGImage.h"
@@ -121,7 +121,7 @@ static bool isEmptyOrUnstyledAppleStyleSpan(const Node* node)
     if (elem->getAttribute(classAttr) != "Apple-style-span")
         return false;
 
-    if (!node->hasChildNodes())
+    if (!node->hasChildren())
         return true;
 
     const StylePropertySet* inlineStyleDecl = elem->inlineStyle();
@@ -671,7 +671,7 @@ static void writeSelection(TextStream& ts, const RenderObject* o)
         return;
 
     Document* doc = toDocument(n);
-    Frame* frame = doc->frame();
+    LocalFrame* frame = doc->frame();
     if (!frame)
         return;
 
@@ -698,7 +698,7 @@ static String externalRepresentation(RenderBox* renderer, RenderAsTextBehavior b
     return ts.release();
 }
 
-String externalRepresentation(Frame* frame, RenderAsTextBehavior behavior)
+String externalRepresentation(LocalFrame* frame, RenderAsTextBehavior behavior)
 {
     if (!(behavior & RenderAsTextDontUpdateLayout))
         frame->document()->updateLayout();
@@ -709,7 +709,7 @@ String externalRepresentation(Frame* frame, RenderAsTextBehavior behavior)
 
     PrintContext printContext(frame);
     if (behavior & RenderAsTextPrintingMode)
-        printContext.begin(toRenderBox(renderer)->width());
+        printContext.begin(toRenderBox(renderer)->width().toFloat());
 
     return externalRepresentation(toRenderBox(renderer), behavior);
 }

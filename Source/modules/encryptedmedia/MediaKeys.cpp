@@ -32,14 +32,24 @@
 #include "core/events/ThreadLocalEventNames.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/encryptedmedia/MediaKeyMessageEvent.h"
+#include "platform/ContentType.h"
 #include "platform/Logging.h"
+#include "platform/MIMETypeRegistry.h"
 #include "platform/UUID.h"
-#include "platform/drm/ContentDecryptionModule.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebContentDecryptionModule.h"
 #include "wtf/HashSet.h"
 
 namespace WebCore {
 
-DEFINE_GC_INFO(MediaKeys);
+static bool isKeySystemSupportedWithContentType(const String& keySystem, const String& contentType)
+{
+    ASSERT(!keySystem.isEmpty());
+
+    ContentType type(contentType);
+    String codecs = type.parameter("codecs");
+    return MIMETypeRegistry::isSupportedEncryptedMediaMIMEType(keySystem, type.type(), codecs);
+}
 
 PassRefPtrWillBeRawPtr<MediaKeys> MediaKeys::create(ExecutionContext* context, const String& keySystem, ExceptionState& exceptionState)
 {
@@ -53,14 +63,14 @@ PassRefPtrWillBeRawPtr<MediaKeys> MediaKeys::create(ExecutionContext* context, c
     }
 
     // 2. If keySystem is not one of the user agent's supported Key Systems, throw a NotSupportedError and abort these steps.
-    if (!ContentDecryptionModule::supportsKeySystem(keySystem)) {
+    if (!isKeySystemSupportedWithContentType(keySystem, "")) {
         exceptionState.throwDOMException(NotSupportedError, "The '" + keySystem + "' key system is not supported.");
         return nullptr;
     }
 
     // 3. Let cdm be the content decryption module corresponding to keySystem.
     // 4. Load cdm if necessary.
-    OwnPtr<ContentDecryptionModule> cdm = ContentDecryptionModule::create(keySystem);
+    OwnPtr<blink::WebContentDecryptionModule> cdm = adoptPtr(blink::Platform::current()->createContentDecryptionModule(keySystem));
     if (!cdm) {
         exceptionState.throwDOMException(NotSupportedError, "A content decryption module could not be loaded for the '" + keySystem + "' key system.");
         return nullptr;
@@ -72,7 +82,7 @@ PassRefPtrWillBeRawPtr<MediaKeys> MediaKeys::create(ExecutionContext* context, c
     return adoptRefWillBeNoop(new MediaKeys(context, keySystem, cdm.release()));
 }
 
-MediaKeys::MediaKeys(ExecutionContext* context, const String& keySystem, PassOwnPtr<ContentDecryptionModule> cdm)
+MediaKeys::MediaKeys(ExecutionContext* context, const String& keySystem, PassOwnPtr<blink::WebContentDecryptionModule> cdm)
     : ContextLifecycleObserver(context)
     , m_mediaElement(0)
     , m_keySystem(keySystem)
@@ -108,7 +118,7 @@ PassRefPtrWillBeRawPtr<MediaKeySession> MediaKeys::createSession(ExecutionContex
 
     // 1. If type contains a MIME type that is not supported or is not supported by the keySystem,
     // throw a NOT_SUPPORTED_ERR exception and abort these steps.
-    if (!m_cdm->supportsMIMEType(contentType)) {
+    if (!isKeySystemSupportedWithContentType(m_keySystem, contentType)) {
         exceptionState.throwDOMException(NotSupportedError, "The type provided ('" + contentType + "') is unsupported.");
         return nullptr;
     }
@@ -125,10 +135,32 @@ PassRefPtrWillBeRawPtr<MediaKeySession> MediaKeys::createSession(ExecutionContex
     m_pendingInitializeNewSessionData.append(InitializeNewSessionData(session, contentType, initData));
 
     if (!m_initializeNewSessionTimer.isActive())
-        m_initializeNewSessionTimer.startOneShot(0);
+        m_initializeNewSessionTimer.startOneShot(0, FROM_HERE);
 
     // 5. Return the new object to the caller.
     return session;
+}
+
+bool MediaKeys::isTypeSupported(const String& keySystem, const String& contentType)
+{
+    WTF_LOG(Media, "MediaKeys::isTypeSupported(%s, %s)", keySystem.ascii().data(), contentType.ascii().data());
+
+    // 1. If keySystem is null or an empty string, return false and abort these steps.
+    if (keySystem.isEmpty())
+        return false;
+
+    // 2. If keySystem contains an unrecognized or unsupported Key System, return false and abort
+    // these steps. Key system string comparison is case-sensitive.
+    if (!isKeySystemSupportedWithContentType(keySystem, ""))
+        return false;
+
+    // 3. If contentType is null or an empty string, return true and abort these steps.
+    if (contentType.isEmpty())
+        return true;
+
+    // 4. If the Key System specified by keySystem does not support decrypting the container and/or
+    // codec specified by contentType, return false and abort these steps.
+    return isKeySystemSupportedWithContentType(keySystem, contentType);
 }
 
 void MediaKeys::setMediaElement(HTMLMediaElement* element)
@@ -141,7 +173,7 @@ void MediaKeys::setMediaElement(HTMLMediaElement* element)
 
 blink::WebContentDecryptionModule* MediaKeys::contentDecryptionModule()
 {
-    return m_cdm ? m_cdm->contentDecryptionModule() : 0;
+    return m_cdm.get();
 }
 
 void MediaKeys::initializeNewSessionTimerFired(Timer<MediaKeys>*)

@@ -200,20 +200,9 @@ WebInspector.ScriptSnippetModel.prototype = {
         var evaluationIndex = this._nextEvaluationIndex(snippetId);
         uiSourceCode._evaluationIndex = evaluationIndex;
         var evaluationUrl = this._evaluationSourceURL(uiSourceCode);
-
         var expression = uiSourceCode.workingCopy();
         
-        // In order to stop on the breakpoints during the snippet evaluation we need to compile and run it separately.
-        // If separate compilation and execution is not supported by the port we fall back to evaluation in console.
-        // In case we don't need that since debugger is already paused.
-        // We do the same when we are stopped on the call frame  since debugger is already paused and can not stop on breakpoint anymore.
-        if (WebInspector.debuggerModel.selectedCallFrame()) {
-            expression = uiSourceCode.workingCopy() + "\n//# sourceURL=" + evaluationUrl + "\n";
-            WebInspector.evaluateInConsole(expression, true);
-            return;
-        }
-        
-        WebInspector.showConsole();
+        WebInspector.console.show();
         DebuggerAgent.compileScript(expression, evaluationUrl, compileCallback.bind(this));
 
         /**
@@ -233,7 +222,7 @@ WebInspector.ScriptSnippetModel.prototype = {
             }
 
             if (!scriptId) {
-                var consoleMessage = WebInspector.ConsoleMessage.create(
+                var consoleMessage = new WebInspector.ConsoleMessage(
                         WebInspector.ConsoleMessage.MessageSource.JS,
                         WebInspector.ConsoleMessage.MessageLevel.Error,
                         syntaxErrorMessage || "");
@@ -280,8 +269,18 @@ WebInspector.ScriptSnippetModel.prototype = {
     _printRunScriptResult: function(result, wasThrown)
     {
         var level = (wasThrown ? WebInspector.ConsoleMessage.MessageLevel.Error : WebInspector.ConsoleMessage.MessageLevel.Log);
-        var message = WebInspector.ConsoleMessage.create(WebInspector.ConsoleMessage.MessageSource.JS, level, "", undefined, undefined, undefined, undefined, undefined, [result]);
-        WebInspector.console.addMessage(message)
+        var message = new WebInspector.ConsoleMessage(
+            WebInspector.ConsoleMessage.MessageSource.JS,
+            level,
+            "",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            [result]);
+        WebInspector.console.addMessage(message);
     },
 
     /**
@@ -537,7 +536,15 @@ WebInspector.SnippetScriptMapping.prototype = {
     addScript: function(script)
     {
         this._scriptSnippetModel._addScript(script);
-    }
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isIdentity: function()
+    {
+        return false;
+    },
 }
 
 /**

@@ -66,8 +66,8 @@
 #include "core/events/ThreadLocalEventNames.h"
 #include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
@@ -80,6 +80,7 @@
 #include "core/page/Page.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderImage.h"
+#include "core/svg/SVGImageElement.h"
 #include "platform/KillRing.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/unicode/CharacterNames.h"
@@ -224,9 +225,7 @@ static HTMLImageElement* imageElementFromImageDocument(Document* document)
         return 0;
 
     Node* node = body->firstChild();
-    if (!node)
-        return 0;
-    if (!node->hasTagName(imgTag))
+    if (!isHTMLImageElement(node))
         return 0;
     return toHTMLImageElement(node);
 }
@@ -440,11 +439,11 @@ static void writeImageNodeToPasteboard(Pasteboard* pasteboard, Node* node, const
 
     // FIXME: This should probably be reconciled with HitTestResult::absoluteImageURL.
     AtomicString urlString;
-    if (node->hasTagName(imgTag) || node->hasTagName(inputTag))
+    if (isHTMLImageElement(*node) || isHTMLInputElement(*node))
         urlString = toElement(node)->getAttribute(srcAttr);
-    else if (node->hasTagName(SVGNames::imageTag))
+    else if (isSVGImageElement(*node))
         urlString = toElement(node)->getAttribute(XLinkNames::hrefAttr);
-    else if (node->hasTagName(embedTag) || node->hasTagName(objectTag))
+    else if (isHTMLEmbedElement(*node) || isHTMLObjectElement(*node))
         urlString = toElement(node)->imageSourceURL();
     KURL url = urlString.isEmpty() ? KURL() : node->document().completeURL(stripLeadingAndTrailingHTMLSpaces(urlString));
 
@@ -459,7 +458,7 @@ bool Editor::dispatchCPPEvent(const AtomicString &eventType, ClipboardAccessPoli
     if (!target)
         return true;
 
-    RefPtr<Clipboard> clipboard = Clipboard::create(
+    RefPtrWillBeRawPtr<Clipboard> clipboard = Clipboard::create(
         Clipboard::CopyAndPaste,
         policy,
         policy == ClipboardWritable
@@ -470,7 +469,7 @@ bool Editor::dispatchCPPEvent(const AtomicString &eventType, ClipboardAccessPoli
     target->dispatchEvent(evt, IGNORE_EXCEPTION);
     bool noDefaultProcessing = evt->defaultPrevented();
     if (noDefaultProcessing && policy == ClipboardWritable) {
-        RefPtr<DataObject> dataObject = clipboard->dataObject();
+        RefPtrWillBeRawPtr<DataObject> dataObject = clipboard->dataObject();
         Pasteboard::generalPasteboard()->writeDataObject(dataObject.release());
     }
 
@@ -744,12 +743,12 @@ void Editor::reappliedEditing(PassRefPtr<EditCommandComposition> cmd)
     respondToChangedContents(newSelection);
 }
 
-PassOwnPtr<Editor> Editor::create(Frame& frame)
+PassOwnPtr<Editor> Editor::create(LocalFrame& frame)
 {
     return adoptPtr(new Editor(frame));
 }
 
-Editor::Editor(Frame& frame)
+Editor::Editor(LocalFrame& frame)
     : m_frame(frame)
     , m_preventRevealSelection(0)
     , m_shouldStartNewKillRingSequence(false)
@@ -805,7 +804,7 @@ bool Editor::insertTextWithoutSendingTextEvent(const String& text, bool selectIn
             TypingCommand::insertText(*document.get(), text, selection, options, triggeringEvent && triggeringEvent->isComposition() ? TypingCommand::TextCompositionConfirm : TypingCommand::TextCompositionNone);
 
             // Reveal the current selection
-            if (Frame* editedFrame = document->frame()) {
+            if (LocalFrame* editedFrame = document->frame()) {
                 if (Page* page = editedFrame->page())
                     page->focusController().focusedOrMainFrame()->selection().revealSelection(ScrollAlignment::alignCenterIfNeeded);
             }
@@ -1160,7 +1159,7 @@ PassRefPtr<Range> Editor::rangeOfString(const String& target, Range* referenceRa
     RefPtr<Node> shadowTreeRoot = referenceRange && referenceRange->startContainer() ? referenceRange->startContainer()->nonBoundaryShadowTreeRootNode() : 0;
     if (shadowTreeRoot) {
         if (forward)
-            searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->childNodeCount());
+            searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->countChildren());
         else
             searchRange->setStart(shadowTreeRoot.get(), 0);
     }
@@ -1178,7 +1177,7 @@ PassRefPtr<Range> Editor::rangeOfString(const String& target, Range* referenceRa
 
         if (shadowTreeRoot) {
             if (forward)
-                searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->childNodeCount());
+                searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->countChildren());
             else
                 searchRange->setStart(shadowTreeRoot.get(), 0);
         }
@@ -1216,7 +1215,7 @@ void Editor::setMarkedTextMatchesAreHighlighted(bool flag)
         return;
 
     m_areMarkedTextMatchesHighlighted = flag;
-    m_frame.document()->markers()->repaintMarkers(DocumentMarker::TextMatch);
+    m_frame.document()->markers().repaintMarkers(DocumentMarker::TextMatch);
 }
 
 void Editor::respondToChangedSelection(const VisibleSelection& oldSelection, FrameSelection::SetSelectionOptions options)

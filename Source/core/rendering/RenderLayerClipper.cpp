@@ -55,10 +55,8 @@ void RenderLayerClipper::updateClipRects(const ClipRectsContext& clipRectsContex
     ASSERT(clipRectsType < NumCachedClipRectsTypes);
     if (m_clipRectsCache && m_clipRectsCache->getClipRects(clipRectsType, clipRectsContext.respectOverflowClip)) {
         // FIXME: these asserts trigger for squashing. Need to update this code to support squashing as appropriate.
-        // These ASSERTs also are triggering ASSERTs on some ChromeOS tests:
-        // https://code.google.com/p/chromium/issues/detail?id=342478
-        // ASSERT(clipRectsContext.rootLayer == m_clipRectsCache->m_clipRectsRoot[clipRectsType]);
-        // ASSERT(m_clipRectsCache->m_scrollbarRelevancy[clipRectsType] == clipRectsContext.overlayScrollbarSizeRelevancy);
+        ASSERT(clipRectsContext.rootLayer == m_clipRectsCache->m_clipRectsRoot[clipRectsType]);
+        ASSERT(m_clipRectsCache->m_scrollbarRelevancy[clipRectsType] == clipRectsContext.overlayScrollbarSizeRelevancy);
 
 #ifdef CHECK_CACHED_CLIP_RECTS
         // This code is useful to check cached clip rects, but is too expensive to leave enabled in debug builds by default.
@@ -110,7 +108,11 @@ void RenderLayerClipper::clearClipRects(ClipRectsType typeToClear)
 {
     if (typeToClear == AllClipRectTypes) {
         m_clipRectsCache = nullptr;
+        m_compositingClipRectsDirty = false;
     } else {
+        if (typeToClear == CompositingClipRects)
+            m_compositingClipRectsDirty = false;
+
         ASSERT(typeToClear < NumCachedClipRectsTypes);
         RefPtr<ClipRects> dummy;
         m_clipRectsCache->setClipRects(typeToClear, RespectOverflowClip, dummy);
@@ -169,6 +171,7 @@ void RenderLayerClipper::calculateRects(const ClipRectsContext& clipRectsContext
 {
     if (clipRectsContext.rootLayer != m_renderer->layer() && m_renderer->layer()->parent()) {
         backgroundRect = backgroundClipRect(clipRectsContext);
+        backgroundRect.move(roundedIntSize(clipRectsContext.subPixelAccumulation));
         backgroundRect.intersect(paintDirtyRect);
     } else {
         backgroundRect = paintDirtyRect;
@@ -307,9 +310,17 @@ static inline ClipRect backgroundClipRectForPosition(const ClipRects& parentRect
     return parentRects.overflowClipRect();
 }
 
+void RenderLayerClipper::setCompositingClipRectsDirty()
+{
+    m_compositingClipRectsDirty = true;
+}
+
 ClipRect RenderLayerClipper::backgroundClipRect(const ClipRectsContext& clipRectsContext) const
 {
     ASSERT(m_renderer->layer()->parent());
+
+    if (clipRectsContext.clipRectsType == CompositingClipRects)
+        const_cast<RenderLayerClipper*>(this)->clearClipRectsIncludingDescendants(CompositingClipRects);
 
     ClipRects parentRects;
 

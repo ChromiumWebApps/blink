@@ -37,14 +37,14 @@ var InspectorFrontendAPI = {
     showConsole: function()
     {
         InspectorFrontendAPI._runOnceLoaded(function() {
-            WebInspector.showPanel("console");
+            WebInspector.inspectorView.showPanel("console");
         });
     },
 
     enterInspectElementMode: function()
     {
         InspectorFrontendAPI._runOnceLoaded(function() {
-            WebInspector.showPanel("elements");
+            WebInspector.inspectorView.showPanel("elements");
             if (WebInspector.inspectElementModeController)
                 WebInspector.inspectElementModeController.toggleSearch();
         });
@@ -96,7 +96,7 @@ var InspectorFrontendAPI = {
     loadTimelineFromURL: function(url)
     {
         InspectorFrontendAPI._runOnceLoaded(function() {
-            /** @type {!WebInspector.TimelinePanel} */ (WebInspector.showPanel("timeline")).loadFromURL(url);
+            /** @type {!WebInspector.TimelinePanel} */ (WebInspector.inspectorView.showPanel("timeline")).loadFromURL(url);
         });
     },
 
@@ -212,12 +212,12 @@ var InspectorFrontendAPI = {
     },
 
     /**
-     * @param {!Object} queryParamsObject
+     * @param {?string} dispatchParameter
      */
-    dispatchQueryParameters: function(queryParamsObject)
+    dispatchQueryParameters: function(dispatchParameter)
     {
-        if ("dispatch" in queryParamsObject)
-            InspectorFrontendAPI._dispatch(JSON.parse(window.decodeURI(queryParamsObject["dispatch"])));
+        if (dispatchParameter)
+            InspectorFrontendAPI._dispatch(JSON.parse(window.decodeURI(dispatchParameter)));
     },
 
     // Testing harness support

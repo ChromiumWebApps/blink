@@ -32,10 +32,9 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/events/ThreadLocalEventNames.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/page/Page.h"
-#include "core/page/PageGroup.h"
 #include "core/page/StorageClient.h"
 #include "core/storage/Storage.h"
 #include "core/storage/StorageEvent.h"
@@ -59,7 +58,7 @@ StorageArea::~StorageArea()
 {
 }
 
-unsigned StorageArea::length(ExceptionState& exceptionState, Frame* frame)
+unsigned StorageArea::length(ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -68,7 +67,7 @@ unsigned StorageArea::length(ExceptionState& exceptionState, Frame* frame)
     return m_storageArea->length();
 }
 
-String StorageArea::key(unsigned index, ExceptionState& exceptionState, Frame* frame)
+String StorageArea::key(unsigned index, ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -77,7 +76,7 @@ String StorageArea::key(unsigned index, ExceptionState& exceptionState, Frame* f
     return m_storageArea->key(index);
 }
 
-String StorageArea::getItem(const String& key, ExceptionState& exceptionState, Frame* frame)
+String StorageArea::getItem(const String& key, ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -86,7 +85,7 @@ String StorageArea::getItem(const String& key, ExceptionState& exceptionState, F
     return m_storageArea->getItem(key);
 }
 
-void StorageArea::setItem(const String& key, const String& value, ExceptionState& exceptionState, Frame* frame)
+void StorageArea::setItem(const String& key, const String& value, ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -98,7 +97,7 @@ void StorageArea::setItem(const String& key, const String& value, ExceptionState
         exceptionState.throwDOMException(QuotaExceededError, "Setting the value of '" + key + "' exceeded the quota.");
 }
 
-void StorageArea::removeItem(const String& key, ExceptionState& exceptionState, Frame* frame)
+void StorageArea::removeItem(const String& key, ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -107,7 +106,7 @@ void StorageArea::removeItem(const String& key, ExceptionState& exceptionState, 
     m_storageArea->removeItem(key, frame->document()->url());
 }
 
-void StorageArea::clear(ExceptionState& exceptionState, Frame* frame)
+void StorageArea::clear(ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -116,7 +115,7 @@ void StorageArea::clear(ExceptionState& exceptionState, Frame* frame)
     m_storageArea->clear(frame->document()->url());
 }
 
-bool StorageArea::contains(const String& key, ExceptionState& exceptionState, Frame* frame)
+bool StorageArea::contains(const String& key, ExceptionState& exceptionState, LocalFrame* frame)
 {
     if (!canAccessStorage(frame)) {
         exceptionState.throwSecurityError("access is denied for this document.");
@@ -125,7 +124,7 @@ bool StorageArea::contains(const String& key, ExceptionState& exceptionState, Fr
     return !getItem(key, exceptionState, frame).isNull();
 }
 
-bool StorageArea::canAccessStorage(Frame* frame)
+bool StorageArea::canAccessStorage(LocalFrame* frame)
 {
     if (!frame || !frame->page())
         return false;
@@ -145,9 +144,9 @@ size_t StorageArea::memoryBytesUsedByCache()
 void StorageArea::dispatchLocalStorageEvent(const String& key, const String& oldValue, const String& newValue, SecurityOrigin* securityOrigin, const KURL& pageURL, blink::WebStorageArea* sourceAreaInstance, bool originatedInProcess)
 {
     // FIXME: This looks suspicious. Why doesn't this use allPages instead?
-    const HashSet<Page*>& pages = PageGroup::sharedGroup()->pages();
+    const HashSet<Page*>& pages = Page::ordinaryPages();
     for (HashSet<Page*>::const_iterator it = pages.begin(); it != pages.end(); ++it) {
-        for (Frame* frame = (*it)->mainFrame(); frame; frame = frame->tree().traverseNext()) {
+        for (LocalFrame* frame = (*it)->mainFrame(); frame; frame = frame->tree().traverseNext()) {
             Storage* storage = frame->domWindow()->optionalLocalStorage();
             if (storage && frame->document()->securityOrigin()->canAccess(securityOrigin) && !isEventSource(storage, sourceAreaInstance))
                 frame->domWindow()->enqueueWindowEvent(StorageEvent::create(EventTypeNames::storage, key, oldValue, newValue, pageURL, storage));
@@ -159,7 +158,7 @@ void StorageArea::dispatchLocalStorageEvent(const String& key, const String& old
 static Page* findPageWithSessionStorageNamespace(const blink::WebStorageNamespace& sessionNamespace)
 {
     // FIXME: This looks suspicious. Why doesn't this use allPages instead?
-    const HashSet<Page*>& pages = PageGroup::sharedGroup()->pages();
+    const HashSet<Page*>& pages = Page::ordinaryPages();
     for (HashSet<Page*>::const_iterator it = pages.begin(); it != pages.end(); ++it) {
         const bool dontCreateIfMissing = false;
         StorageNamespace* storageNamespace = (*it)->sessionStorage(dontCreateIfMissing);
@@ -175,7 +174,7 @@ void StorageArea::dispatchSessionStorageEvent(const String& key, const String& o
     if (!page)
         return;
 
-    for (Frame* frame = page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
+    for (LocalFrame* frame = page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         Storage* storage = frame->domWindow()->optionalSessionStorage();
         if (storage && frame->document()->securityOrigin()->canAccess(securityOrigin) && !isEventSource(storage, sourceAreaInstance))
             frame->domWindow()->enqueueWindowEvent(StorageEvent::create(EventTypeNames::storage, key, oldValue, newValue, pageURL, storage));

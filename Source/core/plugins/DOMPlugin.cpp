@@ -24,9 +24,7 @@
 
 namespace WebCore {
 
-DEFINE_GC_INFO(DOMPlugin);
-
-DOMPlugin::DOMPlugin(PluginData* pluginData, Frame* frame, unsigned index)
+DOMPlugin::DOMPlugin(PluginData* pluginData, LocalFrame* frame, unsigned index)
     : FrameDestructionObserver(frame)
     , m_pluginData(pluginData)
     , m_index(index)

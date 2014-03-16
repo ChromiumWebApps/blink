@@ -32,13 +32,13 @@
 #include "WebKit.h"
 #include "WebViewImpl.h"
 #include "core/dom/Node.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
-#include "core/rendering/CompositedLayerMapping.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderLayerModelObject.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/style/ShadowData.h"
 #include "platform/graphics/Color.h"
 #include "public/platform/Platform.h"
@@ -309,11 +309,11 @@ void LinkHighlight::clearGraphicsLayerLinkHighlightPointer()
     }
 }
 
-void LinkHighlight::notifyAnimationStarted(double, double, blink::WebAnimation::TargetProperty)
+void LinkHighlight::notifyAnimationStarted(double, blink::WebAnimation::TargetProperty)
 {
 }
 
-void LinkHighlight::notifyAnimationFinished(double, double, blink::WebAnimation::TargetProperty)
+void LinkHighlight::notifyAnimationFinished(double, blink::WebAnimation::TargetProperty)
 {
     // Since WebViewImpl may hang on to us for a while, make sure we
     // release resources as soon as possible.

@@ -75,7 +75,7 @@ static bool isInfiniteOrNonNumberOrNonPercentage(double value, const char* metho
         return true;
     }
     if (value < 0 || value > 100) {
-        exceptionState.throwDOMException(IndexSizeError, "The value provided (" + String::number(value) + ") is not between 0 and 100.");
+        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexOutsideRange("value", value, 0.0, ExceptionMessages::InclusiveBound, 100.0, ExceptionMessages::InclusiveBound));
         return true;
     }
     return false;
@@ -339,7 +339,7 @@ void VTTRegion::willRemoveVTTCueBox(VTTCueBox* box)
 
     double boxHeight = box->getBoundingClientRect()->bottom() - box->getBoundingClientRect()->top();
 
-    m_cueContainer->classList()->remove(textTrackCueContainerScrollingClass(), ASSERT_NO_EXCEPTION);
+    m_cueContainer->classList().remove(textTrackCueContainerScrollingClass(), ASSERT_NO_EXCEPTION);
 
     m_currentTop += boxHeight;
     m_cueContainer->setInlineStyleProperty(CSSPropertyTop, m_currentTop, CSSPrimitiveValue::CSS_PX);
@@ -370,7 +370,7 @@ void VTTRegion::displayLastVTTCueBox()
 
     // If it's a scrolling region, add the scrolling class.
     if (isScrollingRegion())
-        m_cueContainer->classList()->add(textTrackCueContainerScrollingClass(), ASSERT_NO_EXCEPTION);
+        m_cueContainer->classList().add(textTrackCueContainerScrollingClass(), ASSERT_NO_EXCEPTION);
 
     float regionBottom = m_regionDisplayTree->getBoundingClientRect()->bottom();
 
@@ -452,7 +452,7 @@ void VTTRegion::startTimer()
         return;
 
     double duration = isScrollingRegion() ? scrollTime : 0;
-    m_scrollTimer.startOneShot(duration);
+    m_scrollTimer.startOneShot(duration, FROM_HERE);
 }
 
 void VTTRegion::stopTimer()

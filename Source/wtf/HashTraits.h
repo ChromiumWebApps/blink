@@ -59,7 +59,10 @@ namespace WTF {
         static const unsigned minimumTableSize = 8;
 #endif
 
-        static const bool needsTracing = NeedsTracing<T>::value;
+        template<typename U = void>
+        struct NeedsTracingLazily {
+            static const bool value = NeedsTracing<T>::value;
+        };
         static const bool isWeak = IsWeak<T>::value;
     };
 
@@ -83,7 +86,6 @@ namespace WTF {
         typedef const T* IteratorConstGetType;
         typedef T& IteratorReferenceType;
         typedef const T& IteratorConstReferenceType;
-        static IteratorConstGetType getToConstGetConversion(const T* x) { return x; }
         static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
         static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
         // Type for functions that take ownership, such as add.
@@ -94,13 +96,13 @@ namespace WTF {
 
         // Type for return value of functions that transfer ownership, such as take.
         typedef T PassOutType;
-        static PassOutType passOut(const T& value) { return value; }
+        static const T& passOut(const T& value) { return value; }
 
         // Type for return value of functions that do not transfer ownership, such as get.
         // FIXME: We could change this type to const T& for better performance if we figured out
         // a way to handle the return value from emptyValue, which is a temporary.
         typedef T PeekOutType;
-        static PeekOutType peek(const T& value) { return value; }
+        static const T& peek(const T& value) { return value; }
     };
 
     template<typename T> struct HashTraits : GenericHashTraits<T> { };
@@ -142,13 +144,6 @@ namespace WTF {
 
         static EmptyValueType emptyValue() { return nullptr; }
 
-        typedef const OwnPtr<P>& PeekInType;
-        typedef typename OwnPtr<P>::PtrType IteratorGetType;
-        typedef const IteratorGetType IteratorConstGetType;
-        typedef typename OwnPtr<P>::ValueType& IteratorReferenceType;
-        typedef const IteratorReferenceType IteratorConstReferenceType;
-        static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
-        static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
         typedef PassOwnPtr<P> PassInType;
         static void store(PassOwnPtr<P> value, OwnPtr<P>& storage) { storage = value; }
 
@@ -162,7 +157,13 @@ namespace WTF {
     };
 
     template<typename P> struct HashTraits<RefPtr<P> > : SimpleClassHashTraits<RefPtr<P> > {
-        typedef const RefPtr<P>& PeekInType;
+        typedef std::nullptr_t EmptyValueType;
+        static EmptyValueType emptyValue() { return nullptr; }
+
+        static const bool hasIsEmptyValueFunction = true;
+        static bool isEmptyValue(const RefPtr<P>& value) { return !value; }
+
+        typedef RefPtrValuePeeker<P> PeekInType;
         typedef RefPtr<P>* IteratorGetType;
         typedef const RefPtr<P>* IteratorConstGetType;
         typedef RefPtr<P>& IteratorReferenceType;
@@ -170,18 +171,45 @@ namespace WTF {
         static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
         static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
 
-        static P* emptyValue() { return 0; }
-
         typedef PassRefPtr<P> PassInType;
         static void store(PassRefPtr<P> value, RefPtr<P>& storage) { storage = value; }
 
         typedef PassRefPtr<P> PassOutType;
-        static PassRefPtr<P> passOut(RefPtr<P>& value) { return value.release(); }
-        static PassRefPtr<P> passOut(P* value) { return value; }
+        static PassOutType passOut(RefPtr<P>& value) { return value.release(); }
+        static PassOutType passOut(std::nullptr_t) { return nullptr; }
 
         typedef P* PeekOutType;
         static PeekOutType peek(const RefPtr<P>& value) { return value.get(); }
-        static PeekOutType peek(P* value) { return value; }
+        static PeekOutType peek(std::nullptr_t) { return 0; }
+    };
+
+    template<typename T> struct HashTraits<RawPtr<T> > : SimpleClassHashTraits<RawPtr<T> > {
+        typedef std::nullptr_t EmptyValueType;
+        static EmptyValueType emptyValue() { return nullptr; }
+
+        static const bool hasIsEmptyValueFunction = true;
+        static bool isEmptyValue(const RawPtr<T>& value) { return !value; }
+
+        static const bool needsDestruction = false;
+        typedef T* PeekInType;
+        typedef T* PassInType;
+        typedef RawPtr<T>* IteratorGetType;
+        typedef const RawPtr<T>* IteratorConstGetType;
+        typedef RawPtr<T>& IteratorReferenceType;
+        typedef T* const IteratorConstReferenceType;
+        static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
+        static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return x->get(); }
+        typedef T* PeekOutType;
+        typedef T* PassOutType;
+
+        template<typename U>
+        static void store(const U& value, RawPtr<T>& storage) { storage = value; }
+
+        static PeekOutType peek(const RawPtr<T>& value) { return value; }
+        static PeekOutType peek(std::nullptr_t) { return 0; }
+
+        static PassOutType passOut(const RawPtr<T>& value) { return value; }
+        static PassOutType passOut(std::nullptr_t) { return 0; }
     };
 
     template<> struct HashTraits<String> : SimpleClassHashTraits<String> {
@@ -260,7 +288,10 @@ namespace WTF {
         static EmptyValueType emptyValue() { return KeyValuePair<typename KeyTraits::EmptyValueType, typename ValueTraits::EmptyValueType>(KeyTraits::emptyValue(), ValueTraits::emptyValue()); }
 
         static const bool needsDestruction = KeyTraits::needsDestruction || ValueTraits::needsDestruction;
-        static const bool needsTracing = KeyTraits::needsTracing || ValueTraits::needsTracing;
+        template<typename U = void>
+        struct NeedsTracingLazily {
+            static const bool value = ShouldBeTraced<KeyTraits>::value || ShouldBeTraced<ValueTraits>::value;
+        };
         static const bool isWeak = KeyTraits::isWeak || ValueTraits::isWeak;
 
         static const unsigned minimumTableSize = KeyTraits::minimumTableSize;

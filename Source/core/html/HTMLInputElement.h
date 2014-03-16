@@ -173,6 +173,7 @@ public:
     virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE FINAL;
     virtual RenderObject* createRenderer(RenderStyle*) OVERRIDE;
     virtual void detach(const AttachContext& = AttachContext()) OVERRIDE FINAL;
+    virtual void updateFocusAppearance(bool restorePreviousSelection) OVERRIDE FINAL;
 
     // FIXME: For isActivatedSubmit and setActivatedSubmit, we should use the NVI-idiom here by making
     // it private virtual in all classes and expose a public method in HTMLFormControlElement to call
@@ -202,7 +203,7 @@ public:
     bool multiple() const;
 
     FileList* files();
-    void setFiles(PassRefPtr<FileList>);
+    void setFiles(PassRefPtrWillBeRawPtr<FileList>);
 
     // Returns true if the given DragData has more than one dropped files.
     bool receiveDroppedFiles(const DragData*);
@@ -231,6 +232,7 @@ public:
     // Functions for InputType classes.
     void setValueInternal(const String&, TextFieldEventBehavior);
     bool valueAttributeWasUpdatedAfterParsing() const { return m_valueAttributeWasUpdatedAfterParsing; }
+    void updateView();
 
     void cacheSelectionInResponseToSetValue(int caretOffset) { cacheSelection(caretOffset, caretOffset, SelectionHasNoDirection); }
 
@@ -299,7 +301,6 @@ private:
     virtual bool isEnumeratable() const OVERRIDE FINAL;
     virtual bool isInteractiveContent() const OVERRIDE FINAL;
     virtual bool supportLabels() const OVERRIDE FINAL;
-    virtual void updateFocusAppearance(bool restorePreviousSelection) OVERRIDE FINAL;
     virtual bool shouldUseInputMethod() OVERRIDE FINAL;
 
     virtual bool isTextFormControl() const OVERRIDE FINAL { return isTextField(); }
@@ -398,8 +399,6 @@ private:
     OwnPtr<HTMLImageLoader> m_imageLoader;
     OwnPtr<ListAttributeTargetObserver> m_listAttributeTargetObserver;
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLInputElement, hasTagName(HTMLNames::inputTag));
 
 } //namespace
 #endif

@@ -32,11 +32,11 @@
 #include "core/dom/PostAttachCallbacks.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
-#include "core/frame/ContentSecurityPolicy.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/PluginDocument.h"
-#include "core/html/shadow/HTMLContentElement.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
@@ -157,7 +157,7 @@ void HTMLPlugInElement::detach(const AttachContext& context)
     resetInstance();
 
     if (m_isCapturingMouseEvents) {
-        if (Frame* frame = document().frame())
+        if (LocalFrame* frame = document().frame())
             frame->eventHandler().setCapturingMouseEventsNode(nullptr);
         m_isCapturingMouseEvents = false;
     }
@@ -212,7 +212,7 @@ void HTMLPlugInElement::resetInstance()
 
 SharedPersistent<v8::Object>* HTMLPlugInElement::pluginWrapper()
 {
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     if (!frame)
         return 0;
 
@@ -279,18 +279,16 @@ void HTMLPlugInElement::collectStyleForPresentationAttribute(const QualifiedName
     }
 }
 
-void HTMLPlugInElement::defaultEventHandler(Event* event)
+void HTMLPlugInElement::handleLocalEvents(Event* event)
 {
+    HTMLFrameOwnerElement::handleLocalEvents(event);
+
     // Firefox seems to use a fake event listener to dispatch events to plug-in
     // (tested with mouse events only). This is observable via different order
     // of events - in Firefox, event listeners specified in HTML attributes
     // fires first, then an event gets dispatched to plug-in, and only then
     // other event listeners fire. Hopefully, this difference does not matter in
     // practice.
-
-    // FIXME: Mouse down and scroll events are passed down to plug-in via custom
-    // code in EventHandler; these code paths should be united.
-
     RenderObject* r = renderer();
     if (!r || !r->isWidget())
         return;
@@ -304,9 +302,6 @@ void HTMLPlugInElement::defaultEventHandler(Event* event)
     if (!widget)
         return;
     widget->handleEvent(event);
-    if (event->defaultHandled())
-        return;
-    HTMLFrameOwnerElement::defaultEventHandler(event);
 }
 
 RenderWidget* HTMLPlugInElement::renderWidgetForJSBindings() const
@@ -358,7 +353,7 @@ bool HTMLPlugInElement::isImageType()
     if (m_serviceType.isEmpty() && protocolIs(m_url, "data"))
         m_serviceType = mimeTypeFromDataURL(m_url);
 
-    if (Frame* frame = document().frame()) {
+    if (LocalFrame* frame = document().frame()) {
         KURL completedURL = document().completeURL(m_url);
         return frame->loader().client()->objectContentType(completedURL, m_serviceType, shouldPreferPlugInsForImages()) == ObjectContentImage;
     }
@@ -433,7 +428,7 @@ bool HTMLPlugInElement::requestObject(const String& url, const String& mimeType,
 
 bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, const Vector<String>& paramNames, const Vector<String>& paramValues, bool useFallback)
 {
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
 
     if (!frame->loader().allowPlugins(AboutToInstantiatePlugin))
         return false;
@@ -447,9 +442,8 @@ bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, cons
     WTF_LOG(Plugins, "   Loaded URL: %s", url.string().utf8().data());
     m_loadedUrl = url;
 
-    IntSize contentSize = roundedIntSize(LayoutSize(renderer->contentWidth(), renderer->contentHeight()));
     bool loadManually = document().isPluginDocument() && !document().containsPlugins() && toPluginDocument(document()).shouldLoadPluginManually();
-    RefPtr<Widget> widget = frame->loader().client()->createPlugin(contentSize, this, url, paramNames, paramValues, mimeType, loadManually);
+    RefPtr<Widget> widget = frame->loader().client()->createPlugin(this, url, paramNames, paramValues, mimeType, loadManually, FrameLoaderClient::FailOnDetachedPlugin);
 
     if (!widget) {
         if (!renderer->showsUnavailablePluginIndicator())
@@ -493,7 +487,7 @@ void HTMLPlugInElement::dispatchErrorEvent()
 
 bool HTMLPlugInElement::pluginIsLoadable(const KURL& url, const String& mimeType)
 {
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     Settings* settings = frame->settings();
     if (!settings)
         return false;

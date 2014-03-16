@@ -23,6 +23,8 @@
 #ifndef CSSRule_h
 #define CSSRule_h
 
+#include "heap/Handle.h"
+#include "heap/Visitor.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
@@ -32,7 +34,7 @@ class CSSParserContext;
 class CSSStyleSheet;
 class StyleRuleBase;
 
-class CSSRule : public RefCounted<CSSRule> {
+class CSSRule : public RefCountedWillBeGarbageCollectedFinalized<CSSRule> {
 public:
     virtual ~CSSRule() { }
 
@@ -72,6 +74,8 @@ public:
         m_parentRule = rule;
     }
 
+    virtual void trace(Visitor*);
+
     CSSStyleSheet* parentStyleSheet() const
     {
         if (m_parentIsRule)
@@ -101,6 +105,7 @@ private:
     mutable unsigned char m_hasCachedSelectorText : 1;
     unsigned char m_parentIsRule : 1;
 
+    // These should be Members, but no Members in unions.
     union {
         CSSRule* m_parentRule;
         CSSStyleSheet* m_parentStyleSheet;

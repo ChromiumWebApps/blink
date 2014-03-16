@@ -32,6 +32,7 @@
 #include "bindings/v8/ScriptPromise.h"
 
 #include "bindings/v8/DOMWrapperWorld.h"
+#include "bindings/v8/ScriptPromiseResolver.h"
 #include "bindings/v8/ScriptValue.h"
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/custom/V8PromiseCustom.h"
@@ -43,27 +44,20 @@ namespace WebCore {
 
 namespace {
 
+void callback(const v8::FunctionCallbackInfo<v8::Value>& info) { }
+
 class ScriptPromiseTest : public testing::Test {
 public:
     ScriptPromiseTest()
         : m_isolate(v8::Isolate::GetCurrent())
-        , m_handleScope(m_isolate)
-        , m_context(m_isolate, v8::Context::New(m_isolate))
-        , m_contextScope(m_context.newLocal(m_isolate))
     {
+        m_scope = V8ExecutionScope::create(m_isolate);
     }
 
-    void SetUp()
+    ~ScriptPromiseTest()
     {
-        v8::Handle<v8::Context> context(m_context.newLocal(m_isolate));
-        V8PerContextDataHolder::install(context, DOMWrapperWorld::current(m_isolate));
-        m_perContextData = V8PerContextData::create(context);
-        m_perContextData->init();
-    }
-
-    void TearDown()
-    {
-        m_perContextData.clear();
+        // FIXME: We put this statement here to clear an exception from the isolate.
+        createClosure(callback, v8::Undefined(m_isolate), m_isolate);
     }
 
     V8PromiseCustom::PromiseState state(ScriptPromise promise)
@@ -73,16 +67,23 @@ public:
 
 protected:
     v8::Isolate* m_isolate;
-    v8::HandleScope m_handleScope;
-    ScopedPersistent<v8::Context> m_context;
-    v8::Context::Scope m_contextScope;
-    OwnPtr<V8PerContextData> m_perContextData;
+
+private:
+    OwnPtr<V8ExecutionScope> m_scope;
 };
+
+TEST_F(ScriptPromiseTest, constructFromNonPromise)
+{
+    v8::TryCatch trycatch;
+    ScriptPromise promise(v8::Undefined(m_isolate), m_isolate);
+    ASSERT_TRUE(trycatch.HasCaught());
+    ASSERT_TRUE(promise.hasNoValue());
+}
 
 TEST_F(ScriptPromiseTest, castPromise)
 {
-    ScriptPromise promise = ScriptPromise::createPending();
-    ScriptPromise newPromise(ScriptValue(promise.v8Value(), m_isolate));
+    ScriptPromise promise = ScriptPromiseResolver::create(m_isolate)->promise();
+    ScriptPromise newPromise = ScriptPromise::cast(ScriptValue(promise.v8Value(), m_isolate));
 
     ASSERT_FALSE(promise.hasNoValue());
     EXPECT_EQ(V8PromiseCustom::Pending, state(promise));
@@ -92,8 +93,8 @@ TEST_F(ScriptPromiseTest, castPromise)
 TEST_F(ScriptPromiseTest, castNonPromise)
 {
     ScriptValue value = ScriptValue(v8String(m_isolate, "hello"), m_isolate);
-    ScriptPromise promise1(ScriptValue(value.v8Value(), m_isolate));
-    ScriptPromise promise2(ScriptValue(value.v8Value(), m_isolate));
+    ScriptPromise promise1 = ScriptPromise::cast(ScriptValue(value.v8Value(), m_isolate));
+    ScriptPromise promise2 = ScriptPromise::cast(ScriptValue(value.v8Value(), m_isolate));
 
     ASSERT_FALSE(promise1.hasNoValue());
     ASSERT_FALSE(promise2.hasNoValue());

@@ -35,7 +35,6 @@
 #include "core/fetch/ResourcePtr.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/Logging.h"
-#include "platform/PurgeableBuffer.h"
 #include "platform/SharedBuffer.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
@@ -109,7 +108,6 @@ Resource::Resource(const ResourceRequest& request, Type type)
     , m_protectorCount(0)
     , m_preloadResult(PreloadNotReferenced)
     , m_cacheLiveResourcePriority(CacheLiveResourcePriorityLow)
-    , m_inLiveDecodedResourcesList(false)
     , m_requestedFromNetworkingLayer(false)
     , m_inCache(false)
     , m_loading(false)
@@ -120,12 +118,7 @@ Resource::Resource(const ResourceRequest& request, Type type)
     , m_needsSynchronousCacheHit(false)
 #ifndef NDEBUG
     , m_deleted(false)
-    , m_lruIndex(0)
 #endif
-    , m_nextInAllResourcesList(0)
-    , m_prevInAllResourcesList(0)
-    , m_nextInLiveResourcesList(0)
-    , m_prevInLiveResourcesList(0)
     , m_resourceToRevalidate(0)
     , m_proxyResource(0)
 {
@@ -147,7 +140,8 @@ Resource::~Resource()
 {
     ASSERT(!m_resourceToRevalidate); // Should be true because canDelete() checks this.
     ASSERT(canDelete());
-    ASSERT(!inCache());
+    RELEASE_ASSERT(!inCache());
+    RELEASE_ASSERT(!ResourceCallback::callbackHandler()->isScheduled(this));
     ASSERT(!m_deleted);
     ASSERT(url().isNull() || memoryCache()->resourceForURL(KURL(ParsedURLString, url())) != this);
 
@@ -215,7 +209,7 @@ void Resource::appendData(const char* data, int length)
     if (m_data)
         m_data->append(data, length);
     else
-        m_data = SharedBuffer::create(data, length);
+        m_data = SharedBuffer::createPurgeable(data, length);
     setEncodedSize(m_data->size());
 }
 
@@ -275,7 +269,7 @@ bool Resource::passesAccessControlCheck(SecurityOrigin* securityOrigin)
 
 bool Resource::passesAccessControlCheck(SecurityOrigin* securityOrigin, String& errorDescription)
 {
-    return WebCore::passesAccessControlCheck(m_response, resourceRequest().allowCookies() ? AllowStoredCredentials : DoNotAllowStoredCredentials, securityOrigin, errorDescription);
+    return WebCore::passesAccessControlCheck(m_response, resourceRequest().allowStoredCredentials() ? AllowStoredCredentials : DoNotAllowStoredCredentials, securityOrigin, errorDescription);
 }
 
 static double currentAge(const ResourceResponse& response, double responseTimestamp)
@@ -350,27 +344,16 @@ void Resource::willSendRequest(ResourceRequest& request, const ResourceResponse&
 
 bool Resource::unlock()
 {
-    if (hasClients() || m_proxyResource || m_resourceToRevalidate || !m_loadFinishTime || !isSafeToUnlock())
-        return false;
-
-    if (m_purgeableData) {
-        ASSERT(!m_data);
-        return true;
-    }
     if (!m_data)
         return false;
 
-    // Should not make buffer purgeable if it has refs other than this since we don't want two copies.
-    if (!m_data->hasOneRef())
+    if (!m_data->isLocked())
+        return true;
+
+    if (!inCache() || hasClients() || m_handleCount > 1 || m_proxyResource || m_resourceToRevalidate || !m_loadFinishTime || !isSafeToUnlock())
         return false;
 
-    m_data->createPurgeableBuffer();
-    if (!m_data->hasPurgeableBuffer())
-        return false;
-
-    m_purgeableData = m_data->releasePurgeableBuffer();
-    m_purgeableData->unlock();
-    m_data.clear();
+    m_data->unlock();
     return true;
 }
 
@@ -422,7 +405,7 @@ CachedMetadata* Resource::cachedMetadata(unsigned dataTypeID) const
 
 void Resource::setCacheLiveResourcePriority(CacheLiveResourcePriority priority)
 {
-    if (inCache() && m_inLiveDecodedResourcesList && cacheLiveResourcePriority() != static_cast<unsigned>(priority)) {
+    if (inCache() && memoryCache()->isInLiveDecodedResourcesList(this) && cacheLiveResourcePriority() != static_cast<unsigned>(priority)) {
         memoryCache()->removeFromLiveDecodedResourcesList(this);
         m_cacheLiveResourcePriority = priority;
         memoryCache()->insertInLiveDecodedResourcesList(this);
@@ -535,7 +518,9 @@ void Resource::allClientsRemoved()
     if (m_type == MainResource || m_type == Raw)
         cancelTimerFired(&m_cancelTimer);
     else if (!m_cancelTimer.isActive())
-        m_cancelTimer.startOneShot(0);
+        m_cancelTimer.startOneShot(0, FROM_HERE);
+
+    unlock();
 }
 
 void Resource::cancelTimerFired(Timer<Resource>* timer)
@@ -585,9 +570,9 @@ void Resource::setDecodedSize(size_t size)
         // violation of the invariant that the list is to be kept sorted
         // by access time. The weakening of the invariant does not pose
         // a problem. For more details please see: https://bugs.webkit.org/show_bug.cgi?id=30209
-        if (m_decodedSize && !m_inLiveDecodedResourcesList && hasClients())
+        if (m_decodedSize && !memoryCache()->isInLiveDecodedResourcesList(this) && hasClients())
             memoryCache()->insertInLiveDecodedResourcesList(this);
-        else if (!m_decodedSize && m_inLiveDecodedResourcesList)
+        else if (!m_decodedSize && memoryCache()->isInLiveDecodedResourcesList(this))
             memoryCache()->removeFromLiveDecodedResourcesList(this);
 
         // Update the cache's size totals.
@@ -623,7 +608,7 @@ void Resource::didAccessDecodedData(double timeStamp)
 {
     m_lastDecodedAccessTime = timeStamp;
     if (inCache()) {
-        if (m_inLiveDecodedResourcesList) {
+        if (memoryCache()->isInLiveDecodedResourcesList(this)) {
             memoryCache()->removeFromLiveDecodedResourcesList(this);
             memoryCache()->insertInLiveDecodedResourcesList(this);
         }
@@ -812,8 +797,13 @@ void Resource::unregisterHandle(ResourcePtrBase* h)
     if (m_resourceToRevalidate)
         m_handlesToRevalidate.remove(h);
 
-    if (!m_handleCount)
-        deleteIfPossible();
+    if (!m_handleCount) {
+        if (deleteIfPossible())
+            return;
+        unlock();
+    } else if (m_handleCount == 1 && inCache()) {
+        unlock();
+    }
 }
 
 bool Resource::canReuseRedirectChain() const
@@ -842,7 +832,7 @@ bool Resource::canUseCacheValidator() const
 
 bool Resource::isPurgeable() const
 {
-    return m_purgeableData && !m_purgeableData->isLocked();
+    return m_data && !m_data->isLocked();
 }
 
 bool Resource::wasPurged() const
@@ -852,18 +842,17 @@ bool Resource::wasPurged() const
 
 bool Resource::lock()
 {
-    if (!m_purgeableData)
+    if (!m_data)
+        return true;
+    if (m_data->isLocked())
         return true;
 
-    ASSERT(!m_data);
     ASSERT(!hasClients());
 
-    if (!m_purgeableData->lock()) {
+    if (!m_data->lock()) {
         m_wasPurged = true;
         return false;
     }
-
-    m_data = SharedBuffer::adoptPurgeableBuffer(m_purgeableData.release());
     return true;
 }
 
@@ -893,7 +882,7 @@ Resource::ResourceCallback::ResourceCallback()
 void Resource::ResourceCallback::schedule(Resource* resource)
 {
     if (!m_callbackTimer.isActive())
-        m_callbackTimer.startOneShot(0);
+        m_callbackTimer.startOneShot(0, FROM_HERE);
     m_resourcesWithPendingClients.add(resource);
 }
 
@@ -902,6 +891,11 @@ void Resource::ResourceCallback::cancel(Resource* resource)
     m_resourcesWithPendingClients.remove(resource);
     if (m_callbackTimer.isActive() && m_resourcesWithPendingClients.isEmpty())
         m_callbackTimer.stop();
+}
+
+bool Resource::ResourceCallback::isScheduled(Resource* resource) const
+{
+    return m_resourcesWithPendingClients.contains(resource);
 }
 
 void Resource::ResourceCallback::timerFired(Timer<ResourceCallback>*)

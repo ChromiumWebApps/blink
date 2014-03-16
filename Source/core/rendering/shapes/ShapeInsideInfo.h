@@ -62,9 +62,8 @@ typedef Vector<LineSegmentRange> SegmentRangeList;
 
 class ShapeInsideInfo FINAL : public ShapeInfo<RenderBlock> {
 public:
-    static PassOwnPtr<ShapeInsideInfo> createInfo(const RenderBlock* renderer) { return adoptPtr(new ShapeInsideInfo(renderer)); }
-
-    static bool isEnabledFor(const RenderBlock* renderer);
+    static PassOwnPtr<ShapeInsideInfo> createInfo(const RenderBlock& renderer) { return adoptPtr(new ShapeInsideInfo(renderer)); }
+    static bool isEnabledFor(const RenderBlock& renderer);
 
     bool updateSegmentsForLine(LayoutSize lineOffset, LayoutUnit lineHeight);
     bool updateSegmentsForLine(LayoutUnit lineTop, LayoutUnit lineHeight);
@@ -96,25 +95,27 @@ public:
 
     virtual bool lineOverlapsShapeBounds() const OVERRIDE
     {
-        return computedShape()->lineOverlapsShapePaddingBounds(m_shapeLineTop, m_lineHeight);
+        return computedShape().lineOverlapsShapePaddingBounds(m_referenceBoxLineTop, m_lineHeight);
     }
 
 protected:
-    virtual LayoutBox resolvedLayoutBox() const OVERRIDE
+    virtual LayoutBox referenceBox() const OVERRIDE
     {
         if (shapeValue()->layoutBox() == BoxMissing)
             return ContentBox;
         return shapeValue()->layoutBox();
     }
-    virtual LayoutRect computedShapeLogicalBoundingBox() const OVERRIDE { return computedShape()->shapePaddingLogicalBoundingBox(); }
+    virtual LayoutRect computedShapeLogicalBoundingBox() const OVERRIDE { return computedShape().shapePaddingLogicalBoundingBox(); }
     virtual ShapeValue* shapeValue() const OVERRIDE;
     virtual void getIntervals(LayoutUnit lineTop, LayoutUnit lineHeight, SegmentList& segments) const OVERRIDE
     {
-        return computedShape()->getIncludedIntervals(lineTop, lineHeight, segments);
+        return computedShape().getIncludedIntervals(lineTop, lineHeight, segments);
     }
 
+    virtual const RenderStyle* styleForWritingMode() const OVERRIDE;
+
 private:
-    ShapeInsideInfo(const RenderBlock* renderer)
+    ShapeInsideInfo(const RenderBlock& renderer)
     : ShapeInfo<RenderBlock> (renderer)
     , m_needsLayout(false)
     { }

@@ -21,8 +21,8 @@
 
 #include "core/rendering/svg/RenderSVGResourceSolidColor.h"
 
-#include "core/frame/Frame.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/svg/RenderSVGShape.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
@@ -56,9 +56,9 @@ bool RenderSVGResourceSolidColor::applyResource(RenderObject* object, RenderStyl
 
     if (resourceMode & ApplyToFillMode) {
         if (!isRenderingMask && svgStyle)
-            context->setAlpha(svgStyle->fillOpacity());
+            context->setAlphaAsFloat(svgStyle->fillOpacity());
         else
-            context->setAlpha(1);
+            context->setAlphaAsFloat(1);
         context->setFillColor(m_color);
         if (!isRenderingMask)
             context->setFillRule(svgStyle ? svgStyle->fillRule() : RULE_NONZERO);
@@ -68,7 +68,7 @@ bool RenderSVGResourceSolidColor::applyResource(RenderObject* object, RenderStyl
     } else if (resourceMode & ApplyToStrokeMode) {
         // When rendering the mask for a RenderSVGResourceClipper, the stroke code path is never hit.
         ASSERT(!isRenderingMask);
-        context->setAlpha(svgStyle ? svgStyle->strokeOpacity() : 1);
+        context->setAlphaAsFloat(svgStyle ? svgStyle->strokeOpacity() : 1);
         context->setStrokeColor(m_color);
 
         if (style)

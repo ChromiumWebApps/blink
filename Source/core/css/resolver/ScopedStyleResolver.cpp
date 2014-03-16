@@ -50,17 +50,17 @@ ContainerNode* ScopedStyleResolver::scopingNodeFor(Document& document, const CSS
     if (!sheetDocument)
         return 0;
     Node* ownerNode = sheet->ownerNode();
-    if (!ownerNode || !ownerNode->hasTagName(HTMLNames::styleTag))
+    if (!isHTMLStyleElement(ownerNode))
         return &document;
 
-    HTMLStyleElement* styleElement = toHTMLStyleElement(ownerNode);
-    if (!styleElement->scoped()) {
-        if (styleElement->isInShadowTree())
-            return styleElement->containingShadowRoot();
+    HTMLStyleElement& styleElement = toHTMLStyleElement(*ownerNode);
+    if (!styleElement.scoped()) {
+        if (styleElement.isInShadowTree())
+            return styleElement.containingShadowRoot();
         return &document;
     }
 
-    ContainerNode* parent = styleElement->parentNode();
+    ContainerNode* parent = styleElement.parentNode();
     if (!parent)
         return 0;
 
@@ -78,10 +78,13 @@ void ScopedStyleResolver::addRulesFromSheet(CSSStyleSheet* cssSheet, const Media
     resolver->processScopedRules(ruleSet, sheet->baseURL(), &m_scopingNode);
 }
 
-void ScopedStyleResolver::collectFeaturesTo(RuleFeatureSet& features)
+void ScopedStyleResolver::collectFeaturesTo(RuleFeatureSet& features, HashSet<const StyleSheetContents*>& visitedSharedStyleSheetContents)
 {
-    for (size_t i = 0; i < m_authorStyleSheets.size(); ++i)
-        features.add(m_authorStyleSheets[i]->contents()->ruleSet().features());
+    for (size_t i = 0; i < m_authorStyleSheets.size(); ++i) {
+        StyleSheetContents* contents = m_authorStyleSheets[i]->contents();
+        if (contents->hasOneClient() || visitedSharedStyleSheetContents.add(contents).isNewEntry)
+            features.add(contents->ruleSet().features());
+    }
 }
 
 void ScopedStyleResolver::resetAuthorStyle()
@@ -102,7 +105,7 @@ const StyleRuleKeyframes* ScopedStyleResolver::keyframeStylesForAnimation(const 
     return it->value.get();
 }
 
-void ScopedStyleResolver::addKeyframeStyle(PassRefPtr<StyleRuleKeyframes> rule)
+void ScopedStyleResolver::addKeyframeStyle(PassRefPtrWillBeRawPtr<StyleRuleKeyframes> rule)
 {
     AtomicString s(rule->name());
     if (rule->isVendorPrefixed()) {

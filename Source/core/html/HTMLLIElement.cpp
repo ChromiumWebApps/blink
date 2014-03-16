@@ -26,6 +26,7 @@
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
 #include "HTMLNames.h"
+#include "core/dom/NodeRenderingTraversal.h"
 #include "core/rendering/RenderListItem.h"
 
 namespace WebCore {
@@ -85,14 +86,16 @@ void HTMLLIElement::attach(const AttachContext& context)
     if (renderer() && renderer()->isListItem()) {
         RenderListItem* listItemRenderer = toRenderListItem(renderer());
 
+        ASSERT(!document().childNeedsDistributionRecalc());
+
         // Find the enclosing list node.
         Element* listNode = 0;
         Element* current = this;
         while (!listNode) {
-            current = current->parentElement();
+            current = NodeRenderingTraversal::parentElement(current);
             if (!current)
                 break;
-            if (current->hasTagName(ulTag) || current->hasTagName(olTag))
+            if (isHTMLUListElement(*current) || isHTMLOListElement(*current))
                 listNode = current;
         }
 

@@ -30,14 +30,8 @@
 #include "core/dom/ScriptLoader.h"
 #include "core/events/ThreadLocalEventNames.h"
 #include "core/svg/SVGElementInstance.h"
-#include "core/svg/properties/SVGAnimatedStaticPropertyTearOff.h"
 
 namespace WebCore {
-
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGScriptElement)
-END_REGISTER_ANIMATED_PROPERTIES
 
 inline SVGScriptElement::SVGScriptElement(Document& document, bool wasInsertedByParser, bool alreadyStarted)
     : SVGElement(SVGNames::scriptTag, document)
@@ -46,7 +40,6 @@ inline SVGScriptElement::SVGScriptElement(Document& document, bool wasInsertedBy
     , m_loader(ScriptLoader::create(this, wasInsertedByParser, alreadyStarted))
 {
     ScriptWrappable::init(this);
-    registerAnimatedPropertiesForSVGScriptElement();
 }
 
 PassRefPtr<SVGScriptElement> SVGScriptElement::create(Document& document, bool insertedByParser)

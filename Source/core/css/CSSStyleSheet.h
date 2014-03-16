@@ -49,10 +49,10 @@ enum StyleSheetUpdateType {
 
 class CSSStyleSheet FINAL : public StyleSheet {
 public:
-    static PassRefPtr<CSSStyleSheet> create(PassRefPtrWillBeRawPtr<StyleSheetContents>, CSSImportRule* ownerRule = 0);
-    static PassRefPtr<CSSStyleSheet> create(PassRefPtrWillBeRawPtr<StyleSheetContents>, Node* ownerNode);
-    static PassRefPtr<CSSStyleSheet> createInline(Node*, const KURL&, const TextPosition& startPosition = TextPosition::minimumPosition(), const String& encoding = String());
-    static PassRefPtr<CSSStyleSheet> createInline(PassRefPtrWillBeRawPtr<StyleSheetContents>, Node* ownerNode, const TextPosition& startPosition = TextPosition::minimumPosition());
+    static PassRefPtrWillBeRawPtr<CSSStyleSheet> create(PassRefPtrWillBeRawPtr<StyleSheetContents>, CSSImportRule* ownerRule = 0);
+    static PassRefPtrWillBeRawPtr<CSSStyleSheet> create(PassRefPtrWillBeRawPtr<StyleSheetContents>, Node* ownerNode);
+    static PassRefPtrWillBeRawPtr<CSSStyleSheet> createInline(Node*, const KURL&, const TextPosition& startPosition = TextPosition::minimumPosition(), const String& encoding = String());
+    static PassRefPtrWillBeRawPtr<CSSStyleSheet> createInline(PassRefPtrWillBeRawPtr<StyleSheetContents>, Node* ownerNode, const TextPosition& startPosition = TextPosition::minimumPosition());
 
     virtual ~CSSStyleSheet();
 
@@ -64,13 +64,13 @@ public:
     virtual bool disabled() const OVERRIDE { return m_isDisabled; }
     virtual void setDisabled(bool) OVERRIDE;
 
-    PassRefPtr<CSSRuleList> cssRules();
+    PassRefPtrWillBeRawPtr<CSSRuleList> cssRules();
     unsigned insertRule(const String& rule, unsigned index, ExceptionState&);
     unsigned insertRule(const String& rule, ExceptionState&); // Deprecated.
     void deleteRule(unsigned index, ExceptionState&);
 
     // IE Extensions
-    PassRefPtr<CSSRuleList> rules();
+    PassRefPtrWillBeRawPtr<CSSRuleList> rules();
     int addRule(const String& selector, const String& style, int index, ExceptionState&);
     int addRule(const String& selector, const String& style, ExceptionState&);
     void removeRule(unsigned index, ExceptionState& exceptionState) { deleteRule(index, exceptionState); }
@@ -84,10 +84,10 @@ public:
     virtual KURL baseURL() const OVERRIDE;
     virtual bool isLoading() const OVERRIDE;
 
-    void clearOwnerRule() { m_ownerRule = 0; }
+    void clearOwnerRule() { m_ownerRule = nullptr; }
     Document* ownerDocument() const;
     MediaQuerySet* mediaQueries() const { return m_mediaQueries.get(); }
-    void setMediaQueries(PassRefPtr<MediaQuerySet>);
+    void setMediaQueries(PassRefPtrWillBeRawPtr<MediaQuerySet>);
     void setTitle(const String& title) { m_title = title; }
 
     class RuleMutationScope {
@@ -116,6 +116,8 @@ public:
     bool loadCompleted() const { return m_loadCompleted; }
     void startLoadingDynamicSheet();
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     CSSStyleSheet(PassRefPtrWillBeRawPtr<StyleSheetContents>, CSSImportRule* ownerRule);
     CSSStyleSheet(PassRefPtrWillBeRawPtr<StyleSheetContents>, Node* ownerNode, bool isInlineStylesheet, const TextPosition& startPosition);
@@ -127,21 +129,22 @@ private:
 
     bool canAccessRules() const;
 
-    RefPtrWillBePersistent<StyleSheetContents> m_contents;
+    void setLoadCompleted(bool);
+
+    RefPtrWillBeMember<StyleSheetContents> m_contents;
     bool m_isInlineStylesheet;
     bool m_isDisabled;
     String m_title;
-    RefPtr<MediaQuerySet> m_mediaQueries;
+    RefPtrWillBeMember<MediaQuerySet> m_mediaQueries;
 
     Node* m_ownerNode;
-    CSSRule* m_ownerRule;
+    RawPtrWillBeMember<CSSRule> m_ownerRule;
 
     TextPosition m_startPosition;
     bool m_loadCompleted;
-
-    mutable RefPtr<MediaList> m_mediaCSSOMWrapper;
-    mutable Vector<RefPtr<CSSRule> > m_childRuleCSSOMWrappers;
-    mutable OwnPtr<CSSRuleList> m_ruleListCSSOMWrapper;
+    mutable RefPtrWillBeMember<MediaList> m_mediaCSSOMWrapper;
+    mutable WillBeHeapVector<RefPtrWillBeMember<CSSRule> > m_childRuleCSSOMWrappers;
+    mutable OwnPtrWillBeMember<CSSRuleList> m_ruleListCSSOMWrapper;
 };
 
 inline CSSStyleSheet::RuleMutationScope::RuleMutationScope(CSSStyleSheet* sheet)

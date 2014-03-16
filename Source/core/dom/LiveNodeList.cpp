@@ -23,39 +23,36 @@
 #include "config.h"
 #include "core/dom/LiveNodeList.h"
 
-#include "core/dom/Element.h"
-#include "core/html/HTMLCollection.h"
-
 namespace WebCore {
 
-ContainerNode& LiveNodeListBase::rootNode() const
+static inline bool isMatchingElement(const LiveNodeList& nodeList, const Element& element)
 {
-    if (isRootedAtDocument() && m_ownerNode->inDocument())
-        return m_ownerNode->document();
-    return *m_ownerNode;
-}
-
-void LiveNodeListBase::didMoveToDocument(Document& oldDocument, Document& newDocument)
-{
-    invalidateCache(&oldDocument);
-    oldDocument.unregisterNodeList(this);
-    newDocument.registerNodeList(this);
-}
-
-void LiveNodeListBase::invalidateIdNameCacheMaps() const
-{
-    ASSERT(hasIdNameCache());
-    static_cast<const HTMLCollection*>(this)->invalidateIdNameCacheMaps();
+    return nodeList.elementMatches(element);
 }
 
 Node* LiveNodeList::virtualOwnerNode() const
 {
-    return ownerNode();
+    return &ownerNode();
 }
 
 void LiveNodeList::invalidateCache(Document*) const
 {
     m_collectionIndexCache.invalidate();
+}
+
+Element* LiveNodeList::itemBefore(const Element* previous) const
+{
+    return LiveNodeListBase::itemBefore(*this, previous);
+}
+
+Element* LiveNodeList::traverseToFirstElement(const ContainerNode& root) const
+{
+    return firstMatchingElement(*this, root);
+}
+
+Element* LiveNodeList::traverseForwardToOffset(unsigned offset, Element& currentNode, unsigned& currentOffset, const ContainerNode& root) const
+{
+    return traverseMatchingElementsForwardToOffset(*this, offset, currentNode, currentOffset, root);
 }
 
 } // namespace WebCore

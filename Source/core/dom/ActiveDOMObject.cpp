@@ -79,8 +79,29 @@ void ActiveDOMObject::resume()
 {
 }
 
+void ActiveDOMObject::willStop()
+{
+}
+
 void ActiveDOMObject::stop()
 {
+}
+
+void ActiveDOMObject::didMoveToNewExecutionContext(ExecutionContext* context)
+{
+    observeContext(context);
+
+    if (context->activeDOMObjectsAreStopped()) {
+        stop();
+        return;
+    }
+
+    if (context->activeDOMObjectsAreSuspended()) {
+        suspend();
+        return;
+    }
+
+    resume();
 }
 
 } // namespace WebCore

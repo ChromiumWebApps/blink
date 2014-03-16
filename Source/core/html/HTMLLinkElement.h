@@ -136,6 +136,8 @@ public:
     // the icon size string as parsed from the HTML attribute
     const AtomicString& iconSizes() const;
 
+    bool async() const;
+
     CSSStyleSheet* sheet() const { return linkStyle() ? linkStyle()->sheet() : 0; }
     Document* import() const;
 
@@ -203,8 +205,6 @@ private:
     bool m_isInShadowTree;
     int m_beforeLoadRecurseCount;
 };
-
-DEFINE_NODE_TYPE_CASTS(HTMLLinkElement, hasTagName(HTMLNames::linkTag));
 
 } //namespace
 

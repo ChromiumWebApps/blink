@@ -34,11 +34,16 @@ InspectorTest.timelinePresentationModel = function()
     return WebInspector.panels.timeline._currentViews[0]._presentationModel;
 }
 
+InspectorTest.timelineModel = function()
+{
+    return WebInspector.panels.timeline._model;
+}
+
 InspectorTest.startTimeline = function(callback)
 {
     InspectorTest._timelineRecords = [];
-    WebInspector.panel("timeline").toggleTimelineButton.toggled = true;
-    WebInspector.panel("timeline")._model._collectionEnabled = true;
+    WebInspector.inspectorView.panel("timeline").toggleTimelineButton.toggled = true;
+    WebInspector.inspectorView.panel("timeline")._model._collectionEnabled = true;
     TimelineAgent.start(5, false, true, false, callback);
     function addRecord(record)
     {
@@ -79,8 +84,8 @@ InspectorTest.stopTimeline = function(callback)
     function didStop()
     {
         WebInspector.timelineManager.removeEventListener(WebInspector.TimelineManager.EventTypes.TimelineEventRecorded, InspectorTest._addTimelineEvent);
-        WebInspector.panel("timeline").toggleTimelineButton.toggled = false;
-        WebInspector.panel("timeline")._model._collectionEnabled = false;
+        WebInspector.inspectorView.panel("timeline").toggleTimelineButton.toggled = false;
+        WebInspector.inspectorView.panel("timeline")._model._collectionEnabled = false;
         callback(InspectorTest._timelineRecords);
     }
     TimelineAgent.stop(didStop);
@@ -102,7 +107,7 @@ InspectorTest.evaluateWithTimeline = function(actions, doneCallback)
 
 InspectorTest.loadTimelineRecords = function(records)
 {
-    var model = WebInspector.showPanel("timeline")._model;
+    var model = WebInspector.inspectorView.showPanel("timeline")._model;
     model.reset();
     records.forEach(model._addRecord, model);
 }
@@ -128,7 +133,7 @@ InspectorTest.printTimelineRecords = function(typeName, formatter)
 
 InspectorTest.printTimestampRecords = function(typeName, formatter)
 {
-    InspectorTest.innerPrintTimelineRecords(InspectorTest.timelinePresentationModel().eventDividerRecords().select("_record"), typeName, formatter);
+    InspectorTest.innerPrintTimelineRecords(InspectorTest.timelineModel().eventDividerRecords(), typeName, formatter);
 };
 
 InspectorTest.innerPrintTimelineRecords = function(records, typeName, formatter)
@@ -142,7 +147,7 @@ InspectorTest.innerPrintTimelineRecords = function(records, typeName, formatter)
 };
 
 // Dump just the record name, indenting output on separate lines for subrecords
-InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level)
+InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level, filterTypes)
 {
     if (typeof level !== "number")
         level = 0;
@@ -152,11 +157,8 @@ InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level)
         prefix = "----" + prefix;
     if (level > 0)
         prefix = prefix + "> ";
-    if (record.coalesced) {
-        suffix = " x " + record.children.length;
-    } else if (record.type === WebInspector.TimelineModel.RecordType.TimeStamp
-        || record.type === WebInspector.TimelineModel.RecordType.Time
-        || record.type === WebInspector.TimelineModel.RecordType.TimeEnd) {
+    if (record.type === WebInspector.TimelineModel.RecordType.TimeStamp
+        || record.type === WebInspector.TimelineModel.RecordType.ConsoleTime) {
         suffix = " : " + record.data.message;
     }
     if (detailsCallback)
@@ -164,8 +166,41 @@ InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level)
     InspectorTest.addResult(prefix + InspectorTest._timelineAgentTypeToString(record.type) + suffix);
 
     var numChildren = record.children ? record.children.length : 0;
-    for (var i = 0; i < numChildren; ++i)
-        InspectorTest.dumpTimelineRecord(record.children[i], detailsCallback, level + 1);
+    for (var i = 0; i < numChildren; ++i) {
+        if (filterTypes && filterTypes.indexOf(record.children[i].type) == -1)
+            continue;
+        InspectorTest.dumpTimelineRecord(record.children[i], detailsCallback, level + 1, filterTypes);
+    }
+}
+
+// Dump just the record name, indenting output on separate lines for subrecords
+InspectorTest.dumpPresentationRecord = function(presentationRecord, detailsCallback, level, filterTypes)
+{
+    var record = presentationRecord.record();
+    if (typeof level !== "number")
+        level = 0;
+    var prefix = "";
+    var suffix = "";
+    for (var i = 0; i < level ; ++i)
+        prefix = "----" + prefix;
+    if (level > 0)
+        prefix = prefix + "> ";
+    if (presentationRecord.coalesced()) {
+        suffix = " x " + presentationRecord.presentationChildren().length;
+    } else if (record.type === WebInspector.TimelineModel.RecordType.TimeStamp
+        || record.type === WebInspector.TimelineModel.RecordType.ConsoleTime) {
+        suffix = " : " + record.data.message;
+    }
+    if (detailsCallback)
+        suffix += " " + detailsCallback(record);
+    InspectorTest.addResult(prefix + InspectorTest._timelineAgentTypeToString(record.type) + suffix);
+
+    var numChildren = presentationRecord.presentationChildren() ? presentationRecord.presentationChildren().length : 0;
+    for (var i = 0; i < numChildren; ++i) {
+        if (filterTypes && filterTypes.indexOf(presentationRecord.presentationChildren()[i].record().type) == -1)
+            continue;
+        InspectorTest.dumpPresentationRecord(presentationRecord.presentationChildren()[i], detailsCallback, level + 1, filterTypes);
+    }
 }
 
 InspectorTest.dumpTimelineRecords = function(timelineRecords)
@@ -178,6 +213,8 @@ InspectorTest.printTimelineRecordProperties = function(record)
 {
     InspectorTest.addResult(InspectorTest._timelineAgentTypeToString(record.type) + " Properties:");
     // Use this recursive routine to print the properties
+    if (record instanceof WebInspector.TimelineModel.Record)
+        record = record._record;
     InspectorTest.addObject(record, InspectorTest.timelinePropertyFormatters);
 };
 
@@ -200,8 +237,7 @@ InspectorTest.findPresentationRecord = function(type)
         result = record;
         return true;
     }
-    var records = WebInspector.panel("timeline")._currentViews[0]._rootRecord().children;
-    WebInspector.TimelinePresentationModel.forAllRecords(records, findByType);
+    WebInspector.inspectorView.panel("timeline")._model.forAllRecords(findByType);
     return result;
 }
 

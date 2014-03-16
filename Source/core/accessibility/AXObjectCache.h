@@ -79,7 +79,7 @@ enum PostType { PostSynchronously, PostAsynchronously };
 class AXObjectCache {
     WTF_MAKE_NONCOPYABLE(AXObjectCache); WTF_MAKE_FAST_ALLOCATED;
 public:
-    explicit AXObjectCache(const Document*);
+    explicit AXObjectCache(Document&);
     ~AXObjectCache();
 
     static AXObject* focusedUIElementForPage(const Page*);
@@ -128,7 +128,13 @@ public:
     void handleFocusedUIElementChanged(Node* oldFocusedNode, Node* newFocusedNode);
     void handleScrolledToAnchor(const Node* anchorNode);
     void handleAriaExpandedChange(Node*);
+
+    // Called when scroll bars are added / removed (as the view resizes).
     void handleScrollbarUpdate(ScrollView*);
+
+    // Called when the scroll offset changes.
+    void handleScrollPositionChanged(ScrollView*);
+    void handleScrollPositionChanged(RenderObject*);
 
     void handleAttributeChanged(const QualifiedName& attrName, Element*);
     void recomputeIsIgnored(RenderObject* renderer);
@@ -172,6 +178,7 @@ public:
         AXRowCollapsed,
         AXRowCountChanged,
         AXRowExpanded,
+        AXScrollPositionChanged,
         AXScrolledToAnchor,
         AXSelectedChildrenChanged,
         AXSelectedTextChanged,
@@ -204,7 +211,7 @@ protected:
     bool isNodeInUse(Node* n) { return m_textMarkerNodes.contains(n); }
 
 private:
-    Document* m_document;
+    Document& m_document;
     HashMap<AXID, RefPtr<AXObject> > m_objects;
     HashMap<RenderObject*, AXID> m_renderObjectMapping;
     HashMap<Widget*, AXID> m_widgetObjectMapping;

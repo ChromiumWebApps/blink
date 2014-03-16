@@ -137,11 +137,19 @@ WebInspector.CompilerScriptMapping.prototype = {
                     this._bindUISourceCode(uiSourceCode);
                     uiSourceCode.isContentScript = script.isContentScript;
                 } else {
-                    WebInspector.showErrorMessage(WebInspector.UIString("Failed to locate workspace file mapped to URL %s from source map %s", sourceURL, sourceMap.url()));
+                    WebInspector.console.showErrorMessage(WebInspector.UIString("Failed to locate workspace file mapped to URL %s from source map %s", sourceURL, sourceMap.url()));
                 }
             }
             script.updateLocations();
         }
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isIdentity: function()
+    {
+        return false;
     },
 
     /**
@@ -183,7 +191,7 @@ WebInspector.CompilerScriptMapping.prototype = {
             callback(null);
             return;
         }
-        var scriptURL = WebInspector.ParsedURL.completeURL(WebInspector.inspectedPageURL, script.sourceURL);
+        var scriptURL = WebInspector.ParsedURL.completeURL(WebInspector.resourceTreeModel.inspectedPageURL(), script.sourceURL);
         if (!scriptURL) {
             callback(null);
             return;

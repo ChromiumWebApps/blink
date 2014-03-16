@@ -59,7 +59,7 @@ class DocumentLoader;
 class Event;
 class ExecutionContext;
 class FloatQuad;
-class Frame;
+class LocalFrame;
 class FrameHost;
 class GraphicsContext;
 class GraphicsLayer;
@@ -68,6 +68,7 @@ class InspectorDOMAgent;
 class InspectorFrontend;
 class InspectorOverlay;
 class InspectorPageAgent;
+class InspectorLayerTreeAgent;
 class InstrumentingAgents;
 class KURL;
 class Node;
@@ -124,9 +125,10 @@ public:
         size_t usedGPUMemoryBytes;
     };
 
-    static PassOwnPtr<InspectorTimelineAgent> create(InspectorPageAgent* pageAgent, InspectorDOMAgent* domAgent, InspectorOverlay* overlay, InspectorType type, InspectorClient* client)
+    static PassOwnPtr<InspectorTimelineAgent> create(InspectorPageAgent* pageAgent, InspectorDOMAgent* domAgent, InspectorLayerTreeAgent* layerTreeAgent,
+        InspectorOverlay* overlay, InspectorType type, InspectorClient* client)
     {
-        return adoptPtr(new InspectorTimelineAgent(pageAgent, domAgent, overlay, type, client));
+        return adoptPtr(new InspectorTimelineAgent(pageAgent, domAgent, layerTreeAgent, overlay, type, client));
     }
 
     virtual ~InspectorTimelineAgent();
@@ -157,9 +159,11 @@ public:
     void didBeginFrame(int frameId);
     void didCancelFrame();
 
-    void didInvalidateLayout(Frame*);
-    bool willLayout(Frame*);
+    void didInvalidateLayout(LocalFrame*);
+    bool willLayout(LocalFrame*);
     void didLayout(RenderObject*);
+
+    void layerTreeDidChange();
 
     void willAutosizeText(RenderObject*);
     void didAutosizeText(RenderObject*);
@@ -194,12 +198,12 @@ public:
     bool willDispatchXHRLoadEvent(ExecutionContext*, XMLHttpRequest*);
     void didDispatchXHRLoadEvent();
 
-    bool willEvaluateScript(Frame*, const String&, int);
+    bool willEvaluateScript(LocalFrame*, const String&, int);
     void didEvaluateScript();
 
     void consoleTimeStamp(ExecutionContext*, const String& title);
-    void domContentLoadedEventFired(Frame*);
-    void loadEventFired(Frame*);
+    void domContentLoadedEventFired(LocalFrame*);
+    void loadEventFired(LocalFrame*);
 
     void consoleTime(ExecutionContext*, const String&);
     void consoleTimeEnd(ExecutionContext*, const String&, ScriptState*);
@@ -208,10 +212,10 @@ public:
 
     void didScheduleResourceRequest(Document*, const String& url);
     void willSendRequest(unsigned long, DocumentLoader*, const ResourceRequest&, const ResourceResponse&, const FetchInitiatorInfo&);
-    void didReceiveResourceResponse(Frame*, unsigned long, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
+    void didReceiveResourceResponse(LocalFrame*, unsigned long, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
     void didFinishLoading(unsigned long, DocumentLoader*, double monotonicFinishTime, int64_t);
     void didFailLoading(unsigned long identifier, const ResourceError&);
-    bool willReceiveResourceData(Frame*, unsigned long identifier, int length);
+    bool willReceiveResourceData(LocalFrame*, unsigned long identifier, int length);
     void didReceiveResourceData();
 
     void didRequestAnimationFrame(Document*, int callbackId);
@@ -242,7 +246,7 @@ private:
 
     friend class TimelineRecordStack;
 
-    InspectorTimelineAgent(InspectorPageAgent*, InspectorDOMAgent*, InspectorOverlay*, InspectorType, InspectorClient*);
+    InspectorTimelineAgent(InspectorPageAgent*, InspectorDOMAgent*, InspectorLayerTreeAgent*, InspectorOverlay*, InspectorType, InspectorClient*);
 
     // Trace event handlers
     void onBeginImplSideFrame(const TraceEventDispatcher::TraceEvent&);
@@ -260,16 +264,18 @@ private:
     void onActivateLayerTree(const TraceEventDispatcher::TraceEvent&);
     void onDrawFrame(const TraceEventDispatcher::TraceEvent&);
     void onLazyPixelRefDeleted(const TraceEventDispatcher::TraceEvent&);
+    void onEmbedderCallbackBegin(const TraceEventDispatcher::TraceEvent&);
+    void onEmbedderCallbackEnd(const TraceEventDispatcher::TraceEvent&);
 
     void didFinishLoadingResource(unsigned long, bool didFail, double finishTime);
 
     void sendEvent(PassRefPtr<TypeBuilder::Timeline::TimelineEvent>);
-    void appendRecord(PassRefPtr<JSONObject> data, const String& type, bool captureCallStack, Frame*);
-    void pushCurrentRecord(PassRefPtr<JSONObject> data, const String& type, bool captureCallStack, Frame*, bool hasLowLevelDetails = false);
+    void appendRecord(PassRefPtr<JSONObject> data, const String& type, bool captureCallStack, LocalFrame*);
+    void pushCurrentRecord(PassRefPtr<JSONObject> data, const String& type, bool captureCallStack, LocalFrame*, bool hasLowLevelDetails = false);
     TimelineThreadState& threadState(ThreadIdentifier);
 
     void setCounters(TypeBuilder::Timeline::TimelineEvent*);
-    void setFrameIdentifier(TypeBuilder::Timeline::TimelineEvent* record, Frame*);
+    void setFrameIdentifier(TypeBuilder::Timeline::TimelineEvent* record, LocalFrame*);
     void populateImageDetails(JSONObject* data, const RenderImage&);
 
     void pushGCEventRecords();
@@ -299,6 +305,7 @@ private:
 
     InspectorPageAgent* m_pageAgent;
     InspectorDOMAgent* m_domAgent;
+    InspectorLayerTreeAgent* m_layerTreeAgent;
     InspectorFrontend::Timeline* m_frontend;
     InspectorClient* m_client;
     InspectorOverlay* m_overlay;

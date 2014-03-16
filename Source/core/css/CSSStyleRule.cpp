@@ -113,7 +113,7 @@ String CSSStyleRule::cssText() const
     StringBuilder result;
     result.append(selectorText());
     result.appendLiteral(" { ");
-    String decls = m_styleRule->properties()->asText();
+    String decls = m_styleRule->properties().asText();
     result.append(decls);
     if (!decls.isEmpty())
         result.append(' ');
@@ -127,6 +127,12 @@ void CSSStyleRule::reattach(StyleRuleBase* rule)
     m_styleRule = toStyleRule(rule);
     if (m_propertiesCSSOMWrapper)
         m_propertiesCSSOMWrapper->reattach(m_styleRule->mutableProperties());
+}
+
+void CSSStyleRule::trace(Visitor* visitor)
+{
+    visitor->trace(m_styleRule);
+    CSSRule::trace(visitor);
 }
 
 } // namespace WebCore

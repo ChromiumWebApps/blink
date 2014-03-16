@@ -51,9 +51,9 @@
 #include "core/events/ThreadLocalEventNames.h"
 #include "core/events/TouchEvent.h"
 #include "core/fileapi/FileList.h"
-#include "core/frame/Frame.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDataListElement.h"
@@ -166,7 +166,7 @@ HTMLInputElement::~HTMLInputElement()
     // setForm(0) may register this to a document-level radio button group.
     // We should unregister it to avoid accessing a deleted object.
     if (isRadioButton())
-        document().formController()->radioButtonGroupScope().removeButton(this);
+        document().formController().radioButtonGroupScope().removeButton(this);
     if (m_hasTouchEventHandler)
         document().didRemoveTouchEventHandler(this);
 }
@@ -371,7 +371,7 @@ void HTMLInputElement::endEditing()
     if (!isTextField())
         return;
 
-    Frame* frame = document().frame();
+    LocalFrame* frame = document().frame();
     frame->spellChecker().didEndEditingOnTextField(this);
     frame->host()->chrome().client().didEndEditingOnTextField(*this);
 }
@@ -1031,6 +1031,11 @@ void HTMLInputElement::setValueInternal(const String& sanitizedValue, TextFieldE
     setNeedsValidityCheck();
 }
 
+void HTMLInputElement::updateView()
+{
+    m_inputTypeView->updateView();
+}
+
 double HTMLInputElement::valueAsDate() const
 {
     return m_inputType->valueAsDate();
@@ -1311,7 +1316,7 @@ FileList* HTMLInputElement::files()
     return m_inputType->files();
 }
 
-void HTMLInputElement::setFiles(PassRefPtr<FileList> files)
+void HTMLInputElement::setFiles(PassRefPtrWillBeRawPtr<FileList> files)
 {
     m_inputType->setFiles(files);
 }
@@ -1428,7 +1433,7 @@ void HTMLInputElement::didMoveToNewDocument(Document& oldDocument)
         imageLoader()->elementDidMoveToNewDocument();
 
     if (isRadioButton())
-        oldDocument.formController()->radioButtonGroupScope().removeButton(this);
+        oldDocument.formController().radioButtonGroupScope().removeButton(this);
     if (m_hasTouchEventHandler)
         oldDocument.didRemoveTouchEventHandler(this);
 
@@ -1480,7 +1485,7 @@ HTMLDataListElement* HTMLInputElement::dataList() const
     Element* element = treeScope().getElementById(fastGetAttribute(listAttr));
     if (!element)
         return 0;
-    if (!element->hasTagName(datalistTag))
+    if (!isHTMLDataListElement(*element))
         return 0;
 
     return toHTMLDataListElement(element);
@@ -1721,7 +1726,7 @@ RadioButtonGroupScope* HTMLInputElement::radioButtonGroupScope() const
     if (HTMLFormElement* formElement = form())
         return &formElement->radioButtonGroupScope();
     if (inDocument())
-        return &document().formController()->radioButtonGroupScope();
+        return &document().formController().radioButtonGroupScope();
     return 0;
 }
 

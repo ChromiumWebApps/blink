@@ -148,7 +148,7 @@ if (!std::isnan({{argument.name}}NativeValue))
 if (exceptionState.throwIfNeeded())
     return;
 {% elif argument.is_variadic_wrapper_type %}
-Vector<{{argument.cpp_type}} > {{argument.name}};
+{{argument.vector_type}}<{{argument.cpp_type}} > {{argument.name}};
 for (int i = {{argument.index}}; i < info.Length(); ++i) {
     if (!V8{{argument.idl_type}}::hasInstance(info[i], info.GetIsolate())) {
         {{throw_type_error(method, '"parameter %s is not of type \'%s\'."' %
@@ -182,6 +182,9 @@ if (!{{argument.name}}.isUndefinedOrNull() && !{{argument.name}}.isObject()) {
 
 {######################################}
 {% macro cpp_method_call(method, v8_set_return_value, cpp_value) %}
+{% if method.is_implemented_by and not method.is_static %}
+ASSERT(imp);
+{% endif %}
 {% if method.is_call_with_script_state %}
 ScriptState* currentState = ScriptState::current();
 if (!currentState)
@@ -314,16 +317,14 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
 {
     {% set signature = 'v8::Local<v8::Signature>()'
                        if method.is_do_not_check_signature else
-                       'v8::Signature::New(info.GetIsolate(), %s::domTemplate(info.GetIsolate(), currentWorldType))' % v8_class %}
+                       'v8::Signature::New(info.GetIsolate(), %s::domTemplate(info.GetIsolate()))' % v8_class %}
     {# FIXME: don't call GetIsolate() so often #}
-    // This is only for getting a unique pointer which we can pass to privateTemplate.
-    static int privateTemplateUniqueKey;
-    WrapperWorldType currentWorldType = worldType(info.GetIsolate());
+    static int domTemplateKey; // This address is used for a key to look up the dom template.
     V8PerIsolateData* data = V8PerIsolateData::from(info.GetIsolate());
     {# FIXME: 1 case of [DoNotCheckSignature] in Window.idl may differ #}
-    v8::Handle<v8::FunctionTemplate> privateTemplate = data->privateTemplate(currentWorldType, &privateTemplateUniqueKey, {{cpp_class}}V8Internal::{{method.name}}MethodCallback{{world_suffix}}, v8Undefined(), {{signature}}, {{method.number_of_required_or_variadic_arguments}});
+    v8::Handle<v8::FunctionTemplate> privateTemplate = data->domTemplate(&domTemplateKey, {{cpp_class}}V8Internal::{{method.name}}MethodCallback{{world_suffix}}, v8Undefined(), {{signature}}, {{method.number_of_required_or_variadic_arguments}});
 
-    v8::Handle<v8::Object> holder = info.This()->FindInstanceInPrototypeChain({{v8_class}}::domTemplate(info.GetIsolate(), currentWorldType));
+    v8::Handle<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
     if (holder.IsEmpty()) {
         // This is only reachable via |object.__proto__.func|, in which case it
         // has already passed the same origin security check
@@ -332,13 +333,13 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
     }
     {{cpp_class}}* imp = {{v8_class}}::toNative(holder);
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), imp->frame(), DoNotReportSecurityError)) {
-        static int sharedTemplateUniqueKey;
-        v8::Handle<v8::FunctionTemplate> sharedTemplate = data->privateTemplate(currentWorldType, &sharedTemplateUniqueKey, {{cpp_class}}V8Internal::{{method.name}}MethodCallback{{world_suffix}}, v8Undefined(), {{signature}}, {{method.number_of_required_or_variadic_arguments}});
+        static int sharedTemplateKey; // This address is used for a key to look up the dom template.
+        v8::Handle<v8::FunctionTemplate> sharedTemplate = data->domTemplate(&sharedTemplateKey, {{cpp_class}}V8Internal::{{method.name}}MethodCallback{{world_suffix}}, v8Undefined(), {{signature}}, {{method.number_of_required_or_variadic_arguments}});
         v8SetReturnValue(info, sharedTemplate->GetFunction());
         return;
     }
 
-    v8::Local<v8::Value> hiddenValue = getHiddenValue(info.GetIsolate(), info.This(), "{{method.name}}");
+    v8::Local<v8::Value> hiddenValue = info.This()->GetHiddenValue(v8AtomicString(info.GetIsolate(), "{{method.name}}"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
         return;
@@ -410,7 +411,7 @@ static void {{v8_class}}ConstructorCallback(const v8::FunctionCallbackInfo<v8::V
         return;
     }
 
-    Document* document = currentDocument(info.GetIsolate());
+    Document* document = currentDOMWindow(info.GetIsolate())->document();
     ASSERT(document);
 
     // Make sure the document is added to the DOM Node map. Otherwise, the {{cpp_class}} instance

@@ -30,7 +30,7 @@
 #include "core/dom/DocumentMarkerController.h"
 #include "core/dom/Node.h"
 #include "core/editing/SpellChecker.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "platform/text/TextCheckerClient.h"
 
@@ -68,7 +68,7 @@ PassRefPtr<SpellCheckRequest> SpellCheckRequest::create(TextCheckingTypeMask tex
     if (!text.length())
         return PassRefPtr<SpellCheckRequest>();
 
-    const Vector<DocumentMarker*>& markers = checkingRange->ownerDocument().markers()->markersInRange(checkingRange.get(), DocumentMarker::SpellCheckClientMarkers());
+    const Vector<DocumentMarker*>& markers = checkingRange->ownerDocument().markers().markersInRange(checkingRange.get(), DocumentMarker::SpellCheckClientMarkers());
     Vector<uint32_t> hashes(markers.size());
     Vector<unsigned> offsets(markers.size());
     for (size_t i = 0; i < markers.size(); i++) {
@@ -115,7 +115,7 @@ void SpellCheckRequest::requesterDestroyed()
     m_requester = 0;
 }
 
-SpellCheckRequester::SpellCheckRequester(Frame& frame)
+SpellCheckRequester::SpellCheckRequester(LocalFrame& frame)
     : m_frame(frame)
     , m_lastRequestSequence(0)
     , m_lastProcessedSequence(0)
@@ -240,7 +240,7 @@ void SpellCheckRequester::didCheck(int sequence, const Vector<TextCheckingResult
 
     m_processingRequest.clear();
     if (!m_requestQueue.isEmpty())
-        m_timerToProcessQueuedRequest.startOneShot(0);
+        m_timerToProcessQueuedRequest.startOneShot(0, FROM_HERE);
 }
 
 void SpellCheckRequester::didCheckSucceed(int sequence, const Vector<TextCheckingResult>& results)
@@ -252,7 +252,7 @@ void SpellCheckRequester::didCheckSucceed(int sequence, const Vector<TextCheckin
             markers.remove(DocumentMarker::Spelling);
         if (!requestData.maskContains(TextCheckingTypeGrammar))
             markers.remove(DocumentMarker::Grammar);
-        m_frame.document()->markers()->removeMarkers(m_processingRequest->checkingRange().get(), markers);
+        m_frame.document()->markers().removeMarkers(m_processingRequest->checkingRange().get(), markers);
     }
     didCheck(sequence, results);
 }

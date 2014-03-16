@@ -32,8 +32,11 @@
 #include "core/frame/FrameView.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/graphics/ImageObserver.h"
+#include "wtf/CurrentTime.h"
 
 namespace WebCore {
+
+static const double animationFrameDelay = 0.025;
 
 SVGImageChromeClient::SVGImageChromeClient(SVGImage* image)
     : m_image(image)
@@ -67,15 +70,22 @@ void SVGImageChromeClient::scheduleAnimation()
     // approach.
     if (m_animationTimer.isActive())
         return;
-    m_animationTimer.startOneShot(0);
+    // Schedule the 'animation' ASAP if the image does not contain any
+    // animations, but prefer a fixed, jittery, frame-delay if there're any
+    // animations. Checking for pending/active animations could be more
+    // stringent.
+    double fireTime = m_image->hasAnimations() ? animationFrameDelay : 0;
+    m_animationTimer.startOneShot(fireTime, FROM_HERE);
 }
 
 void SVGImageChromeClient::animationTimerFired(Timer<SVGImageChromeClient>*)
 {
     // In principle, we should call requestAnimationFrame callbacks here, but
     // we know there aren't any because script is forbidden inside SVGImages.
-    if (m_image)
-        m_image->frameView()->layout();
+    if (m_image) {
+        m_image->frameView()->page()->animator().serviceScriptedAnimations(currentTime());
+        m_image->frameView()->updateLayoutAndStyleIfNeededRecursive();
+    }
 }
 
 }

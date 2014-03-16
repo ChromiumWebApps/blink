@@ -38,10 +38,11 @@
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReader.h"
-#include "core/frame/Frame.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/VoidCallback.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/InspectorState.h"
+#include "heap/Handle.h"
 #include "modules/filesystem/DOMFileSystem.h"
 #include "modules/filesystem/DirectoryEntry.h"
 #include "modules/filesystem/DirectoryReader.h"
@@ -200,7 +201,7 @@ private:
     }
 
     bool didGetEntry(Entry*);
-    bool didReadDirectoryEntries(const EntryVector&);
+    bool didReadDirectoryEntries(const EntryHeapVector&);
 
     void reportResult(FileError::ErrorCode errorCode, PassRefPtr<Array<TypeBuilder::FileSystem::Entry> > entries = nullptr)
     {
@@ -216,7 +217,7 @@ private:
     RefPtr<RequestDirectoryContentCallback> m_requestCallback;
     KURL m_url;
     RefPtr<Array<TypeBuilder::FileSystem::Entry> > m_entries;
-    RefPtr<DirectoryReader> m_directoryReader;
+    RefPtrWillBePersistent<DirectoryReader> m_directoryReader;
 };
 
 void DirectoryContentRequest::start(ExecutionContext* executionContext)
@@ -256,7 +257,7 @@ void DirectoryContentRequest::readDirectoryEntries()
     m_directoryReader->readEntries(successCallback.release(), errorCallback.release());
 }
 
-bool DirectoryContentRequest::didReadDirectoryEntries(const EntryVector& entries)
+bool DirectoryContentRequest::didReadDirectoryEntries(const EntryHeapVector& entries)
 {
     if (entries.isEmpty()) {
         reportResult(static_cast<FileError::ErrorCode>(0), m_entries);
@@ -264,7 +265,7 @@ bool DirectoryContentRequest::didReadDirectoryEntries(const EntryVector& entries
     }
 
     for (size_t i = 0; i < entries.size(); ++i) {
-        RefPtr<Entry> entry = entries[i];
+        RefPtrWillBeRawPtr<Entry> entry = entries[i];
         RefPtr<TypeBuilder::FileSystem::Entry> entryForFrontend = TypeBuilder::FileSystem::Entry::create()
             .setUrl(entry->toURL())
             .setName(entry->name())
@@ -432,7 +433,7 @@ private:
     String m_mimeType;
     String m_charset;
 
-    RefPtr<FileReader> m_reader;
+    RefPtrWillBePersistent<FileReader> m_reader;
 };
 
 void FileContentRequest::start(ExecutionContext* executionContext)
@@ -470,7 +471,7 @@ bool FileContentRequest::didGetEntry(Entry* entry)
 
 bool FileContentRequest::didGetFile(File* file)
 {
-    RefPtr<Blob> blob = file->slice(m_start, m_end);
+    RefPtrWillBeRawPtr<Blob> blob = static_cast<Blob*>(file)->slice(m_start, m_end, IGNORE_EXCEPTION);
     m_reader->setOnload(this);
     m_reader->setOnerror(this);
 
@@ -714,7 +715,7 @@ bool InspectorFileSystemAgent::assertEnabled(ErrorString* error)
 
 ExecutionContext* InspectorFileSystemAgent::assertExecutionContextForOrigin(ErrorString* error, SecurityOrigin* origin)
 {
-    for (Frame* frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
+    for (LocalFrame* frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         if (frame->document() && frame->document()->securityOrigin()->isSameSchemeHostPort(origin))
             return frame->document();
     }

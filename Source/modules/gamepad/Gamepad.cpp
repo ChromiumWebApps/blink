@@ -28,44 +28,31 @@
 
 namespace WebCore {
 
-DEFINE_GC_INFO(Gamepad);
-
 Gamepad::Gamepad()
-    : m_index(0)
-    , m_timestamp(0)
 {
     ScriptWrappable::init(this);
 }
-
-void Gamepad::axes(unsigned count, float* data)
-{
-    m_axes.resize(count);
-    if (count)
-        std::copy(data, data + count, m_axes.begin());
-}
-
-#if defined(ENABLE_NEW_GAMEPAD_API)
-void Gamepad::buttons(unsigned count, blink::WebGamepadButton* data)
-{
-    m_buttons.resize(count);
-    for (unsigned i = 0; i < count; ++i)
-        m_buttons[i] = data[i].value;
-}
-#else
-void Gamepad::buttons(unsigned count, float* data)
-{
-    m_buttons.resize(count);
-    if (count)
-        std::copy(data, data + count, m_buttons.begin());
-}
-#endif
 
 Gamepad::~Gamepad()
 {
 }
 
+void Gamepad::setButtons(unsigned count, const blink::WebGamepadButton* data)
+{
+    if (m_buttons.size() != count) {
+        m_buttons.resize(count);
+        for (unsigned i = 0; i < count; ++i)
+            m_buttons[i] = GamepadButton::create();
+    }
+    for (unsigned i = 0; i < count; ++i) {
+        m_buttons[i]->setValue(data[i].value);
+        m_buttons[i]->setPressed(data[i].pressed);
+    }
+}
+
 void Gamepad::trace(Visitor* visitor)
 {
+    visitor->trace(m_buttons);
 }
 
 } // namespace WebCore

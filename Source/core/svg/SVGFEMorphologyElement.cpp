@@ -40,12 +40,6 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<MorphologyO
     return entries;
 }
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFEMorphologyElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFEMorphologyElement::SVGFEMorphologyElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feMorphologyTag, document)
     , m_radius(SVGAnimatedNumberOptionalNumber::create(this, SVGNames::radiusAttr))
@@ -57,7 +51,6 @@ inline SVGFEMorphologyElement::SVGFEMorphologyElement(Document& document)
     addToPropertyMap(m_radius);
     addToPropertyMap(m_in1);
     addToPropertyMap(m_svgOperator);
-    registerAnimatedPropertiesForSVGFEMorphologyElement();
 }
 
 PassRefPtr<SVGFEMorphologyElement> SVGFEMorphologyElement::create(Document& document)

@@ -77,7 +77,7 @@ WebInspector.ResourcesPanel = function(database)
         this.sidebarTree.appendChild(this.fileSystemListTreeElement);
     }
 
-    var mainView = new WebInspector.View();
+    var mainView = new WebInspector.VBox();
     this.storageViews = mainView.element.createChild("div", "resources-main diff-container");
     var statusBarContainer = mainView.element.createChild("div", "resources-status-bar");
     this.storageViewStatusBarItemsContainer = statusBarContainer.createChild("div", "status-bar");
@@ -171,7 +171,9 @@ WebInspector.ResourcesPanel.prototype = {
             }
         }
 
-        var mainResource = WebInspector.inspectedPageURL && this.resourcesListTreeElement && this.resourcesListTreeElement.expanded && WebInspector.resourceTreeModel.resourceForURL(WebInspector.inspectedPageURL);
+        var mainResource = WebInspector.resourceTreeModel.inspectedPageURL() && this.resourcesListTreeElement && this.resourcesListTreeElement.expanded
+                ? WebInspector.resourceTreeModel.resourceForURL(WebInspector.resourceTreeModel.inspectedPageURL())
+                : null;
         if (mainResource)
             this.showResource(mainResource);
     },
@@ -696,15 +698,6 @@ WebInspector.ResourcesPanel.prototype = {
             this._applicationCacheViews[manifestURL].updateNetworkState(isNowOnline);
     },
 
-    _forAllResourceTreeElements: function(callback)
-    {
-        var stop = false;
-        for (var treeElement = this.resourcesListTreeElement; !stop && treeElement; treeElement = treeElement.traverseNextTreeElement(false, this.resourcesListTreeElement, true)) {
-            if (treeElement instanceof WebInspector.FrameResourceTreeElement)
-                stop = callback(treeElement);
-        }
-    },
-
     _findTreeElementForResource: function(resource)
     {
         function isAncestor(ancestor, object)
@@ -780,7 +773,7 @@ WebInspector.ResourcesPanel.ResourceRevealer.prototype = {
     reveal: function(resource, lineNumber)
     {
         if (resource instanceof WebInspector.Resource)
-            /** @type {!WebInspector.ResourcesPanel} */ (WebInspector.showPanel("resources")).showResource(resource, lineNumber);
+            /** @type {!WebInspector.ResourcesPanel} */ (WebInspector.inspectorView.showPanel("resources")).showResource(resource, lineNumber);
     }
 }
 
@@ -2077,11 +2070,11 @@ WebInspector.FileSystemTreeElement.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.View}
+ * @extends {WebInspector.VBox}
  */
 WebInspector.StorageCategoryView = function()
 {
-    WebInspector.View.call(this);
+    WebInspector.VBox.call(this);
 
     this.element.classList.add("storage-view");
     this._emptyView = new WebInspector.EmptyView("");
@@ -2094,5 +2087,5 @@ WebInspector.StorageCategoryView.prototype = {
         this._emptyView.text = text;
     },
 
-    __proto__: WebInspector.View.prototype
+    __proto__: WebInspector.VBox.prototype
 }

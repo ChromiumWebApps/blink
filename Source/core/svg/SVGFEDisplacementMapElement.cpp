@@ -41,12 +41,6 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<ChannelSele
     return entries;
 }
 
-// Animated property definitions
-
-BEGIN_REGISTER_ANIMATED_PROPERTIES(SVGFEDisplacementMapElement)
-    REGISTER_PARENT_ANIMATED_PROPERTIES(SVGFilterPrimitiveStandardAttributes)
-END_REGISTER_ANIMATED_PROPERTIES
-
 inline SVGFEDisplacementMapElement::SVGFEDisplacementMapElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feDisplacementMapTag, document)
     , m_scale(SVGAnimatedNumber::create(this, SVGNames::scaleAttr, SVGNumber::create(0)))
@@ -62,7 +56,6 @@ inline SVGFEDisplacementMapElement::SVGFEDisplacementMapElement(Document& docume
     addToPropertyMap(m_in2);
     addToPropertyMap(m_xChannelSelector);
     addToPropertyMap(m_yChannelSelector);
-    registerAnimatedPropertiesForSVGFEDisplacementMapElement();
 }
 
 PassRefPtr<SVGFEDisplacementMapElement> SVGFEDisplacementMapElement::create(Document& document)

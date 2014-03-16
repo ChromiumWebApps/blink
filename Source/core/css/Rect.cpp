@@ -7,7 +7,7 @@
 
 namespace WebCore {
 
-DEFINE_GC_INFO(RectBase);
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(RectBase)
 
 void RectBase::trace(Visitor* visitor)
 {
